@@ -7,7 +7,7 @@ services:
       - JWT_SECRET=change-me-in-prod
       - JWT_EXPIRE_MINUTES=240
     ports:
-      - "5172:5172"
+      - "9000:8000"  # ✅ Host:9000 → Container:8000
     volumes:
       - ./backend:/app
 
@@ -15,7 +15,7 @@ services:
     build: ./frontend
     container_name: rolemining-frontend
     environment:
-      - VITE_API_BASE=http://localhost:8000
+      - VITE_API_BASE=http://localhost:9000  # ← CAMBIA 8000 → 9000
     ports:
       - "5173:5173"
     depends_on:
