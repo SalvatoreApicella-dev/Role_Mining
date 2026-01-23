@@ -1043,12 +1043,15 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
-        "https://nk5c8nx5-5173.euw.devtunnels.ms",  # ← senza /:5173
+        "http://localhost:5174",  # dev
+        "http://127.0.0.1:5173",
+        "*",  # ← PER TEST (rimuovi in PROD)
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 
