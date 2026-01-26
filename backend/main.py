@@ -14,13 +14,16 @@ from fastapi import UploadFile, File
 
 import csv, io, re
 try:
-    from ldap3 import ALL, NTLM, SIMPLE, Connection, Server
+    from ldap3 import ALL, NTLM, SIMPLE, Connection, Server, Tls, NONE
+    import ssl
 except Exception:
     Connection = None  # type: ignore
 
 
 APP_TITLE = "Role Mining API"
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
+APP_LOGIN_USER = os.getenv("APP_LOGIN_USER", "admin")
+APP_LOGIN_PASS = os.getenv("APP_LOGIN_PASS", "admin123")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "240"))
 MOCK_AD = os.getenv("MOCK_AD", "0") == "1"
 
@@ -695,31 +698,16 @@ def mock_users() -> List[Dict[str, Any]]:
         {"username": "erin", "displayName": "Erin Gialli", "groups": ["Sales", "AllEmployees", "CRM"]},
         {"username": "frank", "displayName": "Frank Blu", "groups": ["Sales", "AllEmployees", "CRM", "DiscountApproval"]},
     ]
+def _mk_ldap_server(cfg: Dict[str, Any]) -> Server:
+    raw = (cfg.get("server") or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Configura server LDAP")
+    host = raw.replace("ldaps://", "").replace("ldap://", "").split(":")[0]
 
+    # Self-signed Samba: come LDAPTLS_REQCERT=never
+    tls = Tls(validate=ssl.CERT_NONE)
 
-def ldap_authenticate(username: str, password: str) -> bool:
-    # Mock AD credential
-    if MOCK_AD or state["connector"]["server"] == "mock":
-        return username == "admin" and password == "admin123"
-
-    if Connection is None:
-        log("ERROR", "ldap3 non disponibile nel container.")
-        return False
-
-    cfg = state["connector"]
-    server = Server(cfg["server"], get_info=ALL)
-    auth_mode = cfg.get("auth", "SIMPLE").upper()
-
-    try:
-        if auth_mode == "NTLM":
-            conn = Connection(server, user=username, password=password, authentication=NTLM, auto_bind=True)
-        else:
-            conn = Connection(server, user=username, password=password, authentication=SIMPLE, auto_bind=True)
-        conn.unbind()
-        return True
-    except Exception as e:
-        log("WARN", f"LDAP bind fallito: {e}")
-        return False
+    return Server(host, port=636, use_ssl=True, tls=tls, get_info=NONE)
 
 
 def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
@@ -734,7 +722,7 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
     if not cfg["server"] or not cfg["bind_user"] or not cfg["bind_password"]:
         raise HTTPException(status_code=400, detail="Configura server/bind_user/bind_password in Connettori")
 
-    server = Server(cfg["server"], get_info=ALL)
+    server = _mk_ldap_server(cfg)
     auth_mode = cfg.get("auth", "SIMPLE").upper()
     if auth_mode == "NTLM":
         conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=NTLM, auto_bind=True)
@@ -1062,10 +1050,10 @@ def health():
 
 @app.post("/api/auth/login", response_model=TokenResponse)
 def login(body: LoginRequest):
-    if not ldap_authenticate(body.username, body.password):
+    if body.username != APP_LOGIN_USER or body.password != APP_LOGIN_PASS:
         raise HTTPException(status_code=401, detail="Credenziali non valide")
     token = create_access_token(body.username)
-    log("INFO", f"Login OK: {body.username}")
+    log("INFO", f"Login OK {body.username}")
     return TokenResponse(access_token=token, username=body.username)
 
 
