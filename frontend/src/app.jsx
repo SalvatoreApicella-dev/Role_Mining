@@ -1,4 +1,3 @@
-import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import Plot from "react-plotly.js";
 import { AgGridReact } from "ag-grid-react";
@@ -11,6 +10,10 @@ import {importBusinessRolesCsv } from "./api";
 import OverprivilegedPage from "./pages/OverprivilegedPage";
 import AiDetectionPage from "./pages/AiDetectionPage";
 
+import React, { useEffect, useMemo, useRef, useState } from "react";
+
+const SPLIT_KEY = "cluster_assignments_height_v1";
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 
 function Sidebar({ onLogout, roles }) {
@@ -375,6 +378,53 @@ const [roleMetaByRole, setRoleMetaByRole] = useState({});   // { "IT": {color, g
 const [groupRoleMap, setGroupRoleMap] = useState({});       // { "VPN": "IT", "Payroll": "HR", ... }
 const [usersIndex, setUsersIndex] = useState({});
 
+const containerRef = React.useRef(null);
+const SPLIT_KEY = "cluster_assignments_height_v1";
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+const [assignH, setAssignH] = useState(() => {
+  const v = Number(localStorage.getItem(SPLIT_KEY));
+  return Number.isFinite(v) && v > 0 ? v : 260;
+});
+
+useEffect(() => {
+  localStorage.setItem(SPLIT_KEY, String(assignH));
+}, [assignH]);
+
+function hexToRgba(hex, a) {
+  if (!hex || !hex.startsWith("#") || hex.length !== 7) return `rgba(17,26,46,${a})`;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function startDrag(e) {
+  e.preventDefault();
+  const startY = e.clientY;
+  const startH = assignH;
+
+  const onMove = (ev) => {
+    const dy = ev.clientY - startY;
+    const el = containerRef.current;
+    const total = el?.clientHeight || 800;
+
+    const minH = 160;
+    const maxH = Math.floor(total * 0.75);
+
+    // trascini su => aumenti assegnazioni; giù => diminuisci
+    setAssignH(clamp(startH - dy, minH, maxH));
+  };
+
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
 
 function textColorForBg(hex) {
   // hex: "#RRGGBB"
@@ -503,31 +553,41 @@ function textColorForBg(hex) {
     };
   }
 },
-  { field: "clusterId", headerName: "Cluster", pinned: "left", width: 110 }
+  { field: "clusterId", headerName: "Cluster", pinned: "left", width: 110, hide: true }
 ];
 
 
-    groups.forEach(g => {
-  cols.push({
-    field: g,
-    headerName: g,
-    width: 90,
-    sortable: false,
-    filter: false,
-    valueFormatter: () => "",
-    cellStyle: (p) => {
-      const v = Number(p.value || 0);
-      const roleForGroup = groupRoleMap?.[g];                 // es. "IT"
-      const bg = roleMetaByRole?.[roleForGroup]?.color || "#d3ca48";
+  const groupsSorted = [...(groups || [])].sort((a, b) => {
+  const ra = groupRoleMap?.[a] || "Unassigned";
+  const rb = groupRoleMap?.[b] || "Unassigned";
 
-      return {
-        backgroundColor: v ? bg : "rgba(255,255,255,0.03)",
-        borderLeft: "1px solid rgba(255,255,255,0.10)",
-        borderBottom: "1px solid rgba(255,255,255,0.10)"
-      };
-    }
-  });
+  // 1) prima per Business Role
+  const c1 = ra.localeCompare(rb);
+  if (c1 !== 0) return c1;
+
+  // 2) poi per nome gruppo
+  return a.localeCompare(b);
 });
+
+groupsSorted.forEach((g) => {
+  cols.push({
+  headerName: g,
+  field: g,
+
+  valueGetter: (p) => Number(p.data?.[g] || 0),
+  valueFormatter: () => "",
+
+  cellStyle: (p) => {
+    const v = Number(p.value || 0); // resta 0/1, ma non viene più mostrato
+    const roleForGroup = groupRoleMap?.[g];
+    const hex = roleMetaByRole?.[roleForGroup]?.color || "#d3ca48";
+    const bg = v ? hexToRgba(hex, 0.95) : hexToRgba(hex, 0.10);
+    return { backgroundColor: bg };
+  },
+});
+
+});
+
 
 
 
@@ -583,6 +643,7 @@ function textColorForBg(hex) {
 </select>
 
 
+
 {/* 
           <label>n_clusters</label>
           <input style={{ width: 110 }} value={nClusters} onChange={e => setNClusters(e.target.value)} placeholder="auto" />
@@ -596,71 +657,106 @@ function textColorForBg(hex) {
 
       <div style={{ height: 12 }} />
 
-      <div className="panel">
-        <div className="ag-theme-quartz-dark" style={{ height: 520, width: "100%" }}>
-          <AgGridReact
-            rowData={rowData}
-            columnDefs={columnDefs}
-            defaultColDef={{ resizable: true, sortable: true, filter: true }}
-            animateRows={true}
-            quickFilterText={quick}   // Quick Filter via prop (AG Grid)
-          />
-        </div>
+      <div style={{ height: 12 }} />
 
-        {err && <div className="err">{err}</div>}
+<div
+  ref={containerRef}
+  className="panel"
+  style={{
+    height: "calc(100vh - 190px)",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  }}
+>
+  {/* TOP: matrice */}
+  <div style={{ flex: "1 1 auto", minHeight: 240, overflow: "hidden" }}>
+    <div className="ag-theme-quartz-dark" style={{ height: "100%", width: "100%" }}>
+      <AgGridReact
+      rowData={rowData}
+      columnDefs={columnDefs}
+      defaultColDef={{ resizable: true, sortable: true, filter: true }}
+      animateRows={true}
+      quickFilterText={quick}
+      rowHeight={24}
+      headerHeight={34}
+    />
+
+    </div>
+  </div>
+
+  {/* HANDLE */}
+  <div
+    onMouseDown={startDrag}
+    title="Trascina per ridimensionare"
+    style={{
+      height: 10,
+      cursor: "row-resize",
+      background: "rgba(255,255,255,0.08)",
+      borderTop: "1px solid rgba(255,255,255,0.10)",
+      borderBottom: "1px solid rgba(255,255,255,0.10)",
+    }}
+  />
+
+  {/* BOTTOM: assegnazioni */}
+  <div style={{ flex: `0 0 ${assignH}px`, minHeight: 160, overflow: "auto" }}>
+    <div style={{ padding: "12px 12px 0 12px" }}>
+      <h3 style={{ marginTop: 0 }}>Business Roles (assegnazioni)</h3>
+      <div style={{ color: "var(--muted)", fontSize: 12 }}>
+        Totale: {Object.keys(roleData.assignments || {}).length}
       </div>
+    </div>
 
-            {/* SEZIONE DEDICATA BUSINESS ROLES (in fondo) - inline edit */}
-      <div style={{ height: 14 }} />
-      <div className="panel">
-        <h3 style={{ marginTop: 0 }}>Business Roles (assegnazioni)</h3>
+    <div style={{ padding: "0 12px 12px 12px" }}>
+      <table className="table">
+        <thead><tr><th>Display Name</th><th>Business Role</th></tr></thead>
+        <tbody>
+          {Object.entries(roleData.assignments || {}).map(([u, role]) => {
+            const bg = roleMetaByRole?.[role]?.color || "#111a2e";
+            const fg = textColorForBg(bg);
+            const dn = usersIndex?.[u] || u;
 
-        <table className="table">
-          <thead><tr><th>Display Name</th><th>Business Role</th></tr></thead>
-          <tbody>
-  {Object.entries(roleData.assignments || {}).map(([u, role]) => {
-    const bg = roleMetaByRole?.[role]?.color || "#111a2e";
-    const fg = textColorForBg(bg);
-    const dn = usersIndex?.[u] || u;
+            return (
+              <tr key={u}>
+                <td>{dn}</td>
+                <td>
+                  <select
+                    value={role}
+                    onChange={async (e) => {
+                      const newRole = e.target.value;
+                      try {
+                        await api.businessRoleAddUser(newRole, u);
+                        const refreshed = await api.businessRoles();
+                        setRoleData(refreshed);
+                      } catch (e2) {
+                        setErr(String(e2.message || e2));
+                      }
+                    }}
+                    style={{
+                      backgroundColor: bg,
+                      color: fg,
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      minWidth: 110
+                    }}
+                  >
+                    {(roleData.roles || []).map(x => (
+                      <option key={x.role} value={x.role}>{x.role}</option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-    return (
-      <tr key={u}>
-        <td>{dn}</td>
-        <td>
-          <select
-            value={role}
-            onChange={async (e) => {
-              const newRole = e.target.value;
-              try {
-                await api.businessRoleAddUser(newRole, u);
-                const refreshed = await api.businessRoles();
-                setRoleData(refreshed);
-              } catch (e2) {
-                setErr(String(e2.message || e2));
-              }
-            }}
-            style={{
-              backgroundColor: bg,
-              color: fg,
-              border: "1px solid rgba(255,255,255,0.18)",
-              borderRadius: 10,
-              padding: "10px 12px",
-              minWidth: 110
-            }}
-          >
-            {(roleData.roles || []).map(x => (
-              <option key={x.role} value={x.role}>{x.role}</option>
-            ))}
-          </select>
-        </td>
-      </tr>
-    );
-  })}
-</tbody>
+  {err && <div className="err">{err}</div>}
+</div>
 
-
-        </table>
-      </div>
 
     </div>
   );
@@ -731,6 +827,7 @@ function BusinessRolesHome() {
       }
     })();
   }, []);
+
 
     return (
     <div className="main">

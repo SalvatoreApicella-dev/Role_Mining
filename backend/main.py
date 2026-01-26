@@ -315,6 +315,8 @@ def brdb_ensure_ready() -> None:
         brdb_rebuild()
 
 def brdb_infer_group(group: str) -> Dict[str, Any]:
+
+
     """
     Predice BR per un singolo gruppo.
     """
@@ -370,6 +372,80 @@ def brdb_infer_group(group: str) -> Dict[str, Any]:
     }
     state["brdb_cache"][g0] = out
     return out
+
+from collections import defaultdict
+import random
+
+DEPT_MINCONF = 0.80
+DEPT_GROUP_SUPPORT = 0.60
+
+def ensure_role_registered(role: str) -> None:
+    role = (role or "").strip()
+    if not role:
+        return
+    rolemeta = state.setdefault("rolemeta", {})
+    broles = state.setdefault("businessroles", set())
+
+    if role not in rolemeta:
+        r = random.randint(80, 255)
+        g = random.randint(80, 255)
+        b = random.randint(80, 255)
+        rolemeta[role] = {"color": f"{r:02x}{g:02x}{b:02x}".upper(), "groups": []}
+
+    broles.add(role)
+
+def apply_department_mapping(users: List[Dict[str, Any]]) -> None:
+    # usa BRDB (si basa su userbusinessrole + rolemeta)
+    brdb_rebuild()
+
+    bydept = defaultdict(list)
+    for u in users or []:
+        dept = (u.get("department") or "").strip()
+        if dept:
+            bydept[dept].append(u)
+
+    rolemeta = state.setdefault("rolemeta", {})
+    userbr = state.setdefault("userbusinessrole", {})
+
+    for dept, members in bydept.items():
+        # votazione: ruolo predetto per ciascun utente, pesato per confidence
+        weights = defaultdict(float)
+        for u in members:
+            s = brdb_infer_groupset(u.get("groups") or [])
+            r = (s.get("role") or "Unassigned").strip()
+            c = float(s.get("confidence") or 0.0)
+            if r and r != "Unassigned" and c > 0:
+                weights[r] += c
+
+        if weights:
+            best_role, best_w = max(weights.items(), key=lambda x: x[1])
+            total = sum(weights.values()) or 1.0
+            dept_conf = best_w / total
+        else:
+            best_role, dept_conf = "Unassigned", 0.0
+
+        # decisione: mappa dept su BR esistente o crea nuovo BR (dept)
+        chosen_role = best_role if (best_role != "Unassigned" and dept_conf >= DEPT_MINCONF) else dept
+        ensure_role_registered(chosen_role)
+
+        # associa “solita logica” gruppi al BR scelto (frequenti nel dept)
+        n = max(1, len(members))
+        cnt = defaultdict(int)
+        for u in members:
+            for g in (u.get("groups") or []):
+                cnt[g] += 1
+        picked = [g for g, c in cnt.items() if (c / n) >= DEPT_GROUP_SUPPORT]
+
+        existing = set(rolemeta.get(chosen_role, {}).get("groups") or [])
+        existing.update(picked)
+        rolemeta[chosen_role]["groups"] = sorted(existing)
+
+        # override: tutti gli utenti del dept entrano in quel BR
+        for u in members:
+            uname = u.get("username")
+            if uname:
+                userbr[uname] = chosen_role
+
 
 def brdb_infer_groupset(groups: List[str]) -> Dict[str, Any]:
     """
@@ -510,6 +586,8 @@ def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
             # aggiorna displayName (se presente) e fai merge gruppi
             if nu.get("displayName"):
                 u["displayName"] = nu["displayName"]
+            if nu.get("department"):
+                u["department"] = nu["department"]
             ug = set(u.get("groups") or [])
             ug.update(nu.get("groups") or [])
             u["groups"] = sorted(ug)
@@ -731,7 +809,7 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
 
     # objectClass=user può includere account tecnici: in produzione aggiungere filtri più stretti
     search_filter = "(&(objectClass=user)(sAMAccountName=*))"
-    attrs = ["sAMAccountName", "displayName", "memberOf"]
+    attrs = ["sAMAccountName", "displayName", "memberOf", "department"]
 
     ok = conn.search(search_base=ou_dn, search_filter=search_filter, attributes=attrs)
     if not ok:
@@ -750,8 +828,18 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
             parts = str(dn).split(",")
             cn = next((p[3:] for p in parts if p.upper().startswith("CN=")), str(dn))
             groups.append(cn)
+            dept = d.get("department") or [""]
+            department = (dept[0] if isinstance(dept, list) else (dept or "")).strip()
+
         if username:
-            users.append({"username": username, "displayName": display or username, "groups": sorted(set(groups))})
+            users.append({
+                "username": username,
+                "displayName": display or username,
+                "groups": sorted(set(groups)),
+                "department": department,
+            })
+
+
 
     conn.unbind()
     return users
@@ -1077,9 +1165,13 @@ def set_connector(cfg: ConnectorConfig, username: str = Depends(require_auth)):
 @app.post("/api/ad/extract", response_model=ExtractResponse)
 def extract(req: ExtractRequest, username: str = Depends(require_auth)):
     users = extract_from_ldap(req.ou)
+    apply_department_mapping(users)
 
     # BRDB: rebuild leggero (si basa su stato corrente: last_extract + role_meta + mapping)
     brdb_rebuild()
+    
+    # Department -> BR (solo se l'utente non ha già BR assegnato)
+    apply_department_mapping_if_missing(users)
 
     # BRDB: auto-assegna BR solo se utente non ha già mapping
     for u in users:
@@ -1475,6 +1567,11 @@ def choose_csv_duplicate_row(body: ChooseCsvRowRequest, username: str = Depends(
     roles = rec.get("roles") or []
 
     uobj = next((u for u in users if (u.get("displayName") or "").strip() == dn_clean), None)
+    
+    if department:
+        uobj["department"] = department
+
+    
     if not uobj:
         raise HTTPException(status_code=400, detail="User not found in last_extract")
 
@@ -1605,6 +1702,76 @@ def _slug_username(display_name: str) -> str:
     s = re.sub(r"[^a-z0-9._-]", "", s)
     return s or "user"
 
+
+DEPT_MINCONF = 0.80
+
+def _ensure_role_registered(role: str) -> None:
+    role = (role or "").strip()
+    if not role:
+        return
+
+    state.setdefault("role_meta", {})
+    state.setdefault("business_roles", set())
+
+    if role not in state["role_meta"]:
+        r = random.randint(100, 255)
+        g = random.randint(100, 255)
+        b = random.randint(100, 255)
+        color = f"{r:02x}{g:02x}{b:02x}".upper()
+        if not color.startswith("#"):
+            color = "#" + color
+        state["role_meta"][role] = {"color": color, "groups": []}
+
+    state["business_roles"].add(role)
+
+def apply_department_mapping_if_missing(users: list[dict]) -> None:
+    # usa BRDB già presente (inference sui gruppi)
+    brdb_rebuild()
+
+    by_dept = defaultdict(list)
+    for u in (users or []):
+        dept = (u.get("department") or "").strip()
+        if dept:
+            by_dept[dept].append(u)
+
+    for dept, members in by_dept.items():
+        weights = defaultdict(float)
+
+        for u in members:
+            s = brdb_infer_groupset(u.get("groups") or [])
+            role = (s.get("role") or "Unassigned").strip()
+            conf = float(s.get("confidence") or 0.0)
+            if role and role != "Unassigned" and conf > 0:
+                weights[role] += conf
+
+        if weights:
+            best_role, best_w = max(weights.items(), key=lambda x: x[1])
+            total = sum(weights.values()) or 1.0
+            dept_conf = best_w / total
+        else:
+            best_role, dept_conf = "Unassigned", 0.0
+
+        chosen_role = best_role if (best_role != "Unassigned" and dept_conf >= DEPT_MINCONF) else dept
+        _ensure_role_registered(chosen_role)
+
+        # assegna SOLO se l'utente non ha già BR assegnato
+        state.setdefault("user_business_role", {})
+        for u in members:
+            uname = u.get("username")
+            if not uname:
+                continue
+
+            already = (state.get("user_business_role") or {}).get(uname)
+            if already:
+                continue
+
+            # se per qualche motivo è già valorizzato sul record utente, non sovrascrivere
+            if (u.get("businessRole") or "").strip():
+                continue
+
+            state["user_business_role"][uname] = chosen_role
+
+
 @app.post("/api/import/csv")
 async def import_csv(file: UploadFile = File(...), username: str = Depends(require_auth)):
     
@@ -1619,12 +1786,13 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     if reader.fieldnames:
         reader.fieldnames = [h.strip() for h in reader.fieldnames]
 
-    required = {"DisplayName", "BusinessRole", "Ruoli"}
+    required = {"DisplayName"}  # BusinessRole, Ruoli, Department diventano opzionali
     if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
         raise HTTPException(
             status_code=400,
             detail=f"Headers richiesti: {sorted(required)}; trovati: {reader.fieldnames}",
         )
+
 
     # stato base (come AD Extract)
     state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
@@ -1666,11 +1834,13 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         dn_raw = row.get("DisplayName") or ""
         br_raw = row.get("BusinessRole") or ""
         ruoli_raw = row.get("Ruoli") or ""
+        dept_raw = row.get("Department") or ""
 
-        # usiamo dn “pulito” solo per creare/trovare utente, ma dup lo contiamo AS-IS sul raw
         dn = dn_raw.strip()
         br = br_raw.strip()
         ruoli = ruoli_raw.strip()
+        dept = dept_raw.strip()
+
 
 
         row_id = f"{csv_rows_total}"  # id semplice = numero riga (1..N)
@@ -1679,12 +1849,14 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
 
         rec = {
             "rowId": row_id,
-            "displayName": dn,            # pulito
-            "displayNameRaw": dn_raw,     # come da CSV
+            "displayName": dn,
+            "displayNameRaw": dn_raw,
             "businessRole": br,
+            "department": dept,
             "roles": parsed_roles,
-            "rawLine": f"{dn_raw};{br_raw};{ruoli_raw}",
+            "rawLine": f"{dn_raw};{br_raw};{ruoli_raw};{dept_raw}",
         }
+
 
         state["last_csv_rows"].append(rec)
         state["csv_rows_by_dn"][dn_raw].append(row_id)
@@ -1744,6 +1916,8 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             created_users += 1
 
         uname = uobj["username"]
+        if dept and not uobj.get("department"):
+            uobj["department"] = dept
 
         # merge gruppi utente
         if groups:
@@ -1794,6 +1968,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             created_roles.add(br)
 
     # come AD Extract: ricalcola groups globali e applica business roles sugli utenti
+    apply_department_mapping_if_missing(base_users)
     apply_business_roles(base_users)
     state["last_extract"]["groups"] = sorted({g for u in base_users for g in (u.get("groups") or [])})
     state["last_extract"]["users"] = base_users
@@ -1866,95 +2041,14 @@ def _slug_username(display_name: str) -> str:
 
 from datetime import datetime, timezone
 
-def _apply_import_row(display_name: str, business_role: str, ruoli: str):
-    display_name = (display_name or "").strip()
-    business_role = (business_role or "").strip()
+def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: str = ""):
+    displayname = (displayname or "").strip()
+    businessrole = (businessrole or "").strip()
     ruoli = (ruoli or "").strip()
+    department = (department or "").strip()
 
-    if not display_name or not business_role:
+    if not displayname:
         return {"skipped": True}
-
-    # Sorgente unica: last_extract
-    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
-    base_users = state["last_extract"]["users"]
-
-    # meta/config
-    state.setdefault("role_meta", {})
-    state.setdefault("business_roles", set())
-
-    # mapping BR coerente con apply_business_roles (se lo usi)
-    state.setdefault("user_business_role", {})
-    # (opzionale: se ti serve ancora altrove)
-    state.setdefault("br_assign", {})  # username -> BusinessRole
-
-    # indicizza utenti esistenti
-    by_display = {}
-    by_username = {}
-    for u in base_users:
-        by_username[u.get("username")] = u
-        dn = (u.get("displayName") or "").strip()
-        if dn and dn not in by_display:
-            by_display[dn] = u
-
-    created_user = False
-    created_role = False
-    added_groups = 0
-
-    # trova o crea utente
-    uobj = by_display.get(display_name)
-    if not uobj:
-        base = _slug_username(display_name)
-        uname = base
-        i = 2
-        while uname in by_username:
-            uname = f"{base}{i}"
-            i += 1
-
-        uobj = {"username": uname, "displayName": display_name, "groups": []}
-        base_users.append(uobj)
-        by_username[uname] = uobj
-        by_display[display_name] = uobj
-        created_user = True
-
-    uname = uobj["username"]
-
-    # assegna business role (sia sul record utente che nel mapping)
-    uobj["businessRole"] = business_role
-    state["user_business_role"][uname] = business_role
-    state["br_assign"][uname] = business_role  # opzionale compat
-
-    # role registry + meta
-    state["business_roles"].add(business_role)
-    if business_role not in state["role_meta"]:
-        r = random.randint(100, 255)
-        g = random.randint(100, 255)
-        b = random.randint(100, 255)
-        color = f"{r:02x}{g:02x}{b:02x}".upper()
-        if not color.startswith("#"):
-                    color = "#" + color
-
-        state["role_meta"][business_role] = {"color": color, "groups": []}
-        created_role = True
-
-    # Ruoli = gruppi (li metto sia sull'utente che (opzionale) in role_meta)
-    groups = [g.strip() for g in ruoli.split(",") if g.strip()]
-    if groups:
-        # merge su utente (questo è ciò che impatta role mining/KPI)
-        ug = set(uobj.get("groups") or [])
-        before_u = len(ug)
-        ug.update(groups)
-        uobj["groups"] = sorted(ug)
-
-        # (opzionale) aggiorna anche i gruppi “template” del business role
-        existing = set(state["role_meta"][business_role].get("groups", []))
-        before_r = len(existing)
-        existing.update(groups)
-        state["role_meta"][business_role]["groups"] = sorted(existing)
-
-        # metrica: nuovi gruppi aggiunti al template (come facevi tu)
-        added_groups = max(0, len(existing) - before_r)
-
-    return {"created_user": created_user, "created_role": created_role, "added_groups": added_groups}
 
 
 @app.post("/api/import/xlsx")

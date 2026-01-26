@@ -17,7 +17,7 @@ services:
     build: ./frontend
     container_name: rolemining-frontend
     environment:
-      - VITE_API_BASE=http:// #Place your ip or dns here:9000  
+      - VITE_API_BASE=http://192.168.1.73:5173
     ports:
       - "5173:5173"
     depends_on:
