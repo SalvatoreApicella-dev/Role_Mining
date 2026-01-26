@@ -3,7 +3,7 @@ services:
     build: ./backend
     container_name: rolemining-backend
     environment:
-      - MOCK_AD=1
+      - MOCK_AD=0
       - JWT_SECRET=change-me-in-prod
       - JWT_EXPIRE_MINUTES=240
     ports:

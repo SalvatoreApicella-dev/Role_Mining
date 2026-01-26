@@ -22,7 +22,7 @@ except Exception:
 APP_TITLE = "Role Mining API"
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "240"))
-MOCK_AD = os.getenv("MOCK_AD", "1") == "1"
+MOCK_AD = os.getenv("MOCK_AD", "0") == "1"
 
 
 from openpyxl import load_workbook
