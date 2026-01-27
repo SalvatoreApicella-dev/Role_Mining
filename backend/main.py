@@ -1244,6 +1244,55 @@ def list_users(q: str = "", username: str = Depends(require_auth)):
         ]
     return {"total": len(users), "users": users}
 
+@app.get("/api/users/{uname}")
+def get_user(uname: str, username: str = Depends(require_auth)):
+    users = state.get("last_extract", {}).get("users") or []
+    u = next((x for x in users if x.get("username") == uname), None)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    apply_business_roles(users)  # riallinea businessRole
+    return {"user": u, "allGroups": recompute_groups_from_users(users)}
+
+
+class UserUpdateRequest(BaseModel):
+    groups: List[str] = []
+    businessRole: Optional[str] = None  # se vuoi cambiarlo dalla stessa pagina
+
+@app.post("/api/users/{uname}/update")
+def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(require_auth)):
+    users = state.get("last_extract", {}).get("users") or []
+    u = next((x for x in users if x.get("username") == uname), None)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Replace groups
+    u["groups"] = sorted({g.strip() for g in (body.groups or []) if g and g.strip()})
+
+    # (Opzionale) cambia anche BR qui, oppure continua a usare /api/businessroles/{role}/add
+    if body.businessRole is not None:
+        br = body.businessRole.strip()
+        u["businessRole"] = br
+        state.setdefault("user_business_role", {})
+        if br and br != "Unassigned":
+            state["user_business_role"][uname] = br
+        else:
+            # rimuovi mapping => torna Unassigned
+            if uname in state["user_business_role"]:
+                del state["user_business_role"][uname]
+
+        # training “forte” come fai già in businessroles/roleadd
+        try:
+            brdb_learn_assignment(br, u.get("groups") or [], weight=10)
+        except Exception:
+            pass
+
+    # riallinea derivati
+    apply_business_roles(users)
+    state["last_extract"]["groups"] = recompute_groups_from_users(users)
+    state["mining_dirty"] = True
+
+    return {"ok": True, "user": u}
 
 
 @app.post("/api/rolemining/run", response_model=RoleMiningResponse)

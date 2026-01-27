@@ -323,6 +323,8 @@ function Utenti() {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState([]);
   const [err, setErr] = useState("");
+  const nav = useNavigate();
+
 
   async function load() {
     try {
@@ -358,7 +360,12 @@ function Utenti() {
           </thead>
           <tbody>
             {rows.map(u => (
-              <tr key={u.username}>
+              <tr
+                  key={u.username}
+                  onClick={() => nav(`/utenti/${encodeURIComponent(u.username)}`)}
+                  style={{ cursor: "pointer" }}
+                >
+
                 <td>{u.username}</td>
                 <td>{u.displayName}</td>
                 <td style={{ color: "var(--muted)" }}>{(u.groups || []).join(", ")}</td>
@@ -372,6 +379,235 @@ function Utenti() {
     </div>
   );
 }
+
+function UserDetail() {
+  const { username } = useParams();
+  const nav = useNavigate();
+
+  const [user, setUser] = useState(null);
+  const [allGroups, setAllGroups] = useState([]);
+  const [rolesData, setRolesData] = useState({ roles: [], assignments: {} });
+
+  const [selectedRole, setSelectedRole] = useState("Unassigned");
+  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [filter, setFilter] = useState("");
+
+  const [ok, setOk] = useState("");
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    backgroundColor: "#111a2e",
+    borderColor: state.isFocused ? "rgba(106,166,255,0.55)" : "rgba(255,255,255,0.18)",
+    boxShadow: "none",
+    minHeight: 40,
+    borderRadius: 10,
+  }),
+  valueContainer: (base) => ({ ...base, padding: "2px 10px" }),
+  singleValue: (base) => ({ ...base, color: "#e9eefc" }),
+  input: (base) => ({ ...base, color: "#e9eefc" }),
+  placeholder: (base) => ({ ...base, color: "rgba(233,238,252,0.65)" }),
+  menu: (base) => ({
+    ...base,
+    backgroundColor: "#111a2e",
+    border: "1px solid rgba(255,255,255,0.18)",
+    boxShadow: "0 18px 55px rgba(0,0,0,0.65)",
+    overflow: "hidden",
+  }),
+  menuList: (base) => ({ ...base, backgroundColor: "#111a2e", padding: 6 }),
+  option: (base, state) => ({
+    ...base,
+    backgroundColor: state.isSelected
+      ? "rgba(106,166,255,0.22)"
+      : state.isFocused
+        ? "rgba(106,166,255,0.14)"
+        : "#111a2e",
+    color: "#e9eefc",
+    borderRadius: 10,
+    margin: "2px 0",
+  }),
+};
+
+
+  async function load() {
+    try {
+      setErr("");
+      setOk("");
+
+      const u = await api.get(`/api/users/${encodeURIComponent(username)}`); // { user, allGroups }
+      const br = await api.businessRoles(); // { roles, assignments }
+
+      setUser(u.user);
+      setAllGroups(u.allGroups || []);
+      setRolesData(br);
+
+      setSelectedRole(u.user?.businessRole || "Unassigned");
+      setSelectedGroups((u.user?.groups || []).slice().sort());
+    } catch (e) {
+      setErr(String(e?.message || e));
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username]);
+
+  function toggleGroup(g) {
+    setSelectedGroups((prev) => {
+      const has = prev.includes(g);
+      if (has) return prev.filter((x) => x !== g);
+      return prev.concat([g]).sort();
+    });
+  }
+
+  async function save() {
+    if (!user?.username) return;
+    try {
+      setSaving(true);
+      setErr("");
+      setOk("");
+
+      await api.post(`/api/users/${encodeURIComponent(user.username)}/update`, {
+        groups: selectedGroups,
+        businessRole: selectedRole,
+      });
+
+      setOk("Salvato.");
+      await load();
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const shownGroups = (allGroups || [])
+  .filter((g) => String(g).toLowerCase().includes(filter.trim().toLowerCase()))
+  .sort((a, b) => {
+    const sa = selectedGroups.includes(a) ? 0 : 1; // selezionati prima
+    const sb = selectedGroups.includes(b) ? 0 : 1;
+    if (sa !== sb) return sa - sb;
+    return String(a).localeCompare(String(b));
+  });
+
+
+  return (
+    <div className="main">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+        <div>
+          <h2 style={{ marginTop: 0 }}>
+            Utente {user?.displayName || user?.username || username}
+          </h2>
+          <div style={{ color: "var(--muted)", fontSize: 12 }}>
+            Username: {user?.username || username}
+            {user?.department ? ` • Department: ${user.department}` : ""}
+          </div>
+        </div>
+
+        <button className="link" onClick={() => nav("/utenti")}>← Back</button>
+      </div>
+
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Business Role</h3>
+        <div className="row">
+          <div style={{ width: 420 }}>
+          <Select
+            isSearchable={true}
+            styles={selectStyles}
+            value={{ value: selectedRole, label: selectedRole }}
+            onChange={(opt) => setSelectedRole(opt?.value || "Unassigned")}
+            placeholder="Seleziona ruolo..."
+            options={[
+              { value: "Unassigned", label: "Unassigned" },
+              ...(rolesData.roles || []).map((x) => ({ value: x.role, label: x.role })),
+            ]}
+            menuPortalTarget={document.body}
+            menuPosition="fixed"
+          />
+        </div>
+
+
+
+          <button className="primary" onClick={save} disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+
+        {ok ? <div className="ok">{ok}</div> : null}
+        {err ? <div className="err">{err}</div> : null}
+
+        <hr className="sep" />
+
+        <h3 style={{ marginTop: 0 }}>Gruppi</h3>
+
+        <div className="row">
+          <input
+            style={{ width: 360 }}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filtro gruppi..."
+          />
+          <div style={{ color: "var(--muted)", fontSize: 12 }}>
+            Selezionati: {selectedGroups.length}
+          </div>
+        </div>
+
+        <div style={{ height: 12 }} />
+
+        <div style={{ maxHeight: 380, overflow: "auto", borderRadius: 10, border: "1px solid rgba(255,255,255,0.10)" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{ width: 90 }}>On</th>
+                <th>Group</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shownGroups.map((g) => {
+                const checked = selectedGroups.includes(g);
+                return (
+                  <tr key={g}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleGroup(g)}
+                      />
+                    </td>
+                    <td style={{ color: checked ? "var(--fg)" : "var(--muted)" }}>{g}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ height: 12 }} />
+
+        <div className="row">
+          <button className="primary" onClick={save} disabled={saving}>
+            {saving ? "Saving..." : "Save changes"}
+          </button>
+          <button
+            className="link"
+            onClick={() => {
+              setSelectedRole(user?.businessRole || "Unassigned");
+              setSelectedGroups((user?.groups || []).slice().sort());
+              setOk("");
+              setErr("");
+            }}
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function Cluster() {
 const [roleMetaByRole, setRoleMetaByRole] = useState({});   // { "IT": {color, groups}, ... }
@@ -1318,6 +1554,7 @@ export default function App() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/cluster" element={<Cluster />} />
         <Route path="/utenti" element={<Utenti />} />
+        <Route path="/utenti/:username" element={<UserDetail />} />
         <Route path="/overprivileged-users" element={<OverprivilegedPage />} />
         <Route path="/config/connettori" element={<Connettori />} />
         <Route path="/config/logs" element={<Logs />} />

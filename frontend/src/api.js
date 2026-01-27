@@ -79,6 +79,8 @@ async function request(path, { method = "GET", body } = {}) {
 
 
 
+
+
 export const api = {
   health: () => request("/api/health"),
   login: (username, password) => request("/api/auth/login", { method: "POST", body: { username, password } }),
@@ -122,6 +124,29 @@ export const api = {
   businessRoleDetail: (role) => request(`/api/businessroles/${encodeURIComponent(role)}`),
   businessRoleAddUser: (role, username) =>
     request(`/api/businessroles/${encodeURIComponent(role)}/add`, { method: "POST", body: { username } }),
+
+  async get(path) {
+  const res = await fetch(path, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+},
+
+async post(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+},
+
 
 };
 
