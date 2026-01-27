@@ -2096,41 +2096,9 @@ def apply_department_mapping_if_missing(users: list[dict]) -> None:
             state["user_business_role"][uname] = chosen_role
 
 
-def normheader(h: str) -> str:
-    return (h or "").strip().lower()
-
-def getanyrowci(rowci: dict, keys: list[str]) -> str:
-    for k in keys:
-        if k in rowci and rowci.get(k) is not None:
-            return str(rowci.get(k))
-    return ""
-
-CSVKEYS = {
-    "displayName": ["displayname", "display name", "name", "utente", "user"],
-    "department": ["department", "dept", "dipartimento", "area", "funzione"],
-    "businessRole": ["businessrole", "business role", "br", "ruolo business", "ruolobusiness"],
-    "roles": ["ruoli", "roles", "groups", "gruppi", "entitlements"],
-}
-
-def extractcsvfieldsrow(row: dict) -> tuple[str, str, str, str, str]:
-    rowci = {normheader(k): v for k, v in (row or {}).items()}
-
-    dnraw = getanyrowci(rowci, CSVKEYS["displayName"])
-    deptraw = getanyrowci(rowci, CSVKEYS["department"])
-    brraw = getanyrowci(rowci, CSVKEYS["businessRole"])
-    rolesraw = getanyrowci(rowci, CSVKEYS["roles"])
-
-    dn = (dnraw or "").strip()
-    dept = (deptraw or "").strip()
-    br = (brraw or "").strip()
-    roles = (rolesraw or "").strip()
-
-    return dnraw, dn, dept, br, roles
-
-
 
 @app.post("/api/import/csv")
-async def importcsv(file: UploadFile = File(...), username: str = Depends(require_auth )):
+async def import_csv(file: UploadFile = File(...), username: str = Depends(require_auth)):
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="File vuoto")
@@ -2141,166 +2109,211 @@ async def importcsv(file: UploadFile = File(...), username: str = Depends(requir
     if reader.fieldnames:
         reader.fieldnames = [h.strip() for h in reader.fieldnames if h is not None]
 
-    # Snapshot "prima" per calcolare i gruppi MAI visti a sistema
-    prev_groups = set((state.get("lastextract") or {}).get("groups") or [])
-    csv_groups_set = set()
+    # minimo indispensabile
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV senza header")
 
-    # Stats righe
-    csvrowstotal = 0
-    csvdupdnrows = 0
-    csvmissingdisplayname = 0
-    csvmissingdepartment = 0
-    csvmissingbusinessrole = 0
-    csvmissingroles = 0
+    norm_fields = { (h or "").strip().lower() for h in reader.fieldnames }
+    if "displayname" not in norm_fields:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Headers richiesti: ['DisplayName']; trovati: {reader.fieldnames}",
+        )
 
-    seendnraw = set()
-    seenusernames = set()
-    newusers: List[Dict[str, Any]] = []
+    # ---------- helpers robusti ----------
+    def _norm_header(h: str) -> str:
+        return (h or "").strip().lower()
 
-    # Reset slice CSV ingest (come nel tuo codice)
-    state.setdefault("ingestsources", {})
-    state.setdefault("lastcsvrows", [])
-    state["ingestsources"]["csv"] = []
-    state["lastcsvrows"] = []
-    state.setdefault("csvrowsbydn", defaultdict(list))
-    state.setdefault("csvchoicebydn", {})
+    def _get_any(row_ci: dict, keys: list[str]) -> str:
+        for k in keys:
+            if k in row_ci and row_ci.get(k) is not None:
+                return str(row_ci.get(k))
+        return ""
 
-    for row in reader:
-        csvrowstotal += 1
-        rowid = f"csv-{csvrowstotal}"
+    CSV_KEYS = {
+        "displayName": ["displayname", "display name", "name", "utente", "user"],
+        "department": ["department", "dept", "dipartimento", "area", "funzione"],
+        "businessRole": ["businessrole", "business role", "br", "ruolo business", "ruolo_business"],
+        "roles": ["ruoli", "roles", "groups", "gruppi", "entitlements"],
+    }
 
-        dnraw, dn, dept, br, roles = extractcsvfieldsrow(row)
+    def _extract_csv_fields(row: dict) -> tuple[str, str, str, str, str]:
+        # view case-insensitive
+        row_ci = {_norm_header(k): v for k, v in (row or {}).items()}
 
-        if not dn:
-            csvmissingdisplayname += 1
-            continue
+        dnraw = _get_any(row_ci, CSV_KEYS["displayName"])
+        deptraw = _get_any(row_ci, CSV_KEYS["department"])
+        brraw = _get_any(row_ci, CSV_KEYS["businessRole"])
+        rolesraw = _get_any(row_ci, CSV_KEYS["roles"])
 
-        if dnraw in seendnraw:
-            csvdupdnrows += 1
-        else:
-            seendnraw.add(dnraw)
+        dn = (dnraw or "").strip()
+        dept = (deptraw or "").strip()
+        br = (brraw or "").strip()
+        roles = (rolesraw or "").strip()
 
-        if not dept:
-            csvmissingdepartment += 1
+        # tollera righe sbagliate tipo: "Alice Rossi,IT;VPN,GitLab"
+        if (not dept) and dn and ("," in dn):
+            dn, dept = [x.strip() for x in dn.split(",", 1)]
+
+        # fallback intelligente: se non c'è BR esplicito usa Department come BR
         if not br:
-            csvmissingbusinessrole += 1
-
-        parsedroles = [g.strip() for g in (roles or "").split(",") if g.strip()]
-        if not parsedroles:
-            csvmissingroles += 1
-
-        # accumulo gruppi distinti presenti nel CSV
-        for g in parsedroles:
-            csv_groups_set.add(g)
-
-        # fallback BR: se non c’è BR esplicito usa Department (come fai tu)
-        if not br and dept:
             br = dept
 
-        # username dedup (come nel tuo codice)
+        return dnraw, dn, dept, br, roles
+
+    # ---------- reset slice CSV ingest ----------
+    state.setdefault("ingest_sources", {})
+    state["ingest_sources"]["csv"] = []  # replace slice CSV
+
+    state["last_csv_rows"] = []
+    state["csv_choice_by_dn"] = {}
+    state["csv_rows_by_dn"] = defaultdict(list)
+
+    # ---------- stats ingest (righe) ----------
+    csv_rows_total = 0
+    csv_dup_dn_rows = 0
+    csv_missing_displayname = 0
+    csv_missing_department = 0
+    csv_missing_businessrole = 0  # dopo fallback BR=dept
+    csv_missing_roles = 0
+
+    seen_dn_raw = set()
+
+    new_users: List[Dict[str, Any]] = []
+    seen_usernames: set[str] = set()
+
+    for row in reader:
+        csv_rows_total += 1
+        row_id = f"csv:{csv_rows_total}"
+
+        dnraw, dn, dept, br, roles = _extract_csv_fields(row)
+
+        if not dn:
+            csv_missing_displayname += 1
+            continue
+
+        if dnraw in seen_dn_raw:
+            csv_dup_dn_rows += 1
+        else:
+            seen_dn_raw.add(dnraw)
+
+        if not dept:
+            csv_missing_department += 1
+
+        if not br:
+            csv_missing_businessrole += 1
+
+        parsed_roles = [g.strip() for g in (roles or "").split(",") if g.strip()]
+        if not parsed_roles:
+            csv_missing_roles += 1
+
+        # username stabile e deduplicato
         base = _slug_username(dn)
         uname = base
         i = 2
-        while uname in seenusernames:
+        while uname in seen_usernames:
             uname = f"{base}{i}"
             i += 1
-        seenusernames.add(uname)
+        seen_usernames.add(uname)
 
-        u = {
+        new_users.append({
             "username": uname,
             "displayName": dn,
-            "groups": sorted(set(parsedroles)),
+            "groups": parsed_roles,
             "department": dept or None,
             "businessRole": br or None,
             "excluded": False,
             "lastLogin": None,
-        }
-        newusers.append(u)
+        })
 
-        # (facoltativo) record per UI conflitti/duplicati, coerente con il tuo approccio
         rec = {
-            "rowId": rowid,
+            "rowId": row_id,
             "displayName": dn,
             "displayNameRaw": dnraw,
             "businessRole": br,
             "department": dept,
-            "roles": parsedroles,
+            "roles": parsed_roles,
+            "rawLine": f"{dnraw};{dept};{roles}",
         }
-        state["lastcsvrows"].append(rec)
-        state["csvrowsbydn"][dnraw].append(rowid)
-        state["csvchoicebydn"].setdefault(dnraw, rowid)
+        state["last_csv_rows"].append(rec)
+        state["csv_rows_by_dn"][dnraw].append(row_id)
+        state["csv_choice_by_dn"].setdefault(dnraw, row_id)
 
-        cand = _mk_candidate(
+        candidate = _mk_candidate(
             source="csv",
-            candidate_id=rowid,
+            candidate_id=row_id,
             display_name=dn,
             business_role=br,
-            roles=parsedroles,
-            raw=f"{dnraw};{dept};{roles}",
+            roles=parsed_roles,
+            raw=rec["rawLine"],
         )
-        state["ingestsources"]["csv"].append(cand)
-        state.setdefault("choicebydisplayName", {})
-        state["choicebydisplayName"].setdefault(cand["displayName"], cand["candidateId"])
+        state["ingest_sources"]["csv"].append(candidate)
 
-    # Dedupe + REPLACE lastextract (come nel tuo codice)
-    cleanusers = filter_and_dedupe_connector_users(newusers, source="csv")
-    replace_last_extract_from_connector(cleanusers, ou="CSV", source="csv")
+        state.setdefault("choice_by_displayName", {})
+        state["choice_by_displayName"].setdefault(candidate["displayName"], candidate["candidateId"])
 
-    # riallinea ingest candidates + risoluzione duplicati displayName
-    rebuild_ingest_candidates()
-    apply_duplicate_displayname_resolution()
+    # ---------- REPLACE: dedupe + last_extract ----------
+    clean_users = filter_and_dedupe_connector_users(new_users, source="csv")
+    replace_last_extract_from_connector(clean_users, ou="CSV", source="csv")
 
-    # (opzionale) auto-BR / dept mapping e registrazione BR in rolemeta
-    # se nel tuo flusso serve, lascialo; altrimenti puoi rimuoverlo
-    try:
-        rerun_auto_business_roles_after_connector(state.get("lastextract", {}).get("users") or [])
-    except Exception:
-        pass
+    # auto-assegnazione BR post-import (dept, rolemeta, brdb...)
+    rerun_auto_business_roles_after_connector(state["last_extract"]["users"])
 
-    newbrs = sync_roles_from_users(state.get("lastextract", {}).get("users") or [])
+    # registra BR trovati sugli utenti in role_meta/business_roles
+    new_brs = sync_roles_from_users(state["last_extract"]["users"])
 
-    # Calcolo gruppi MAI visti a sistema (confronto con snapshot PRE-import)
-    new_groups_system_list = sorted(csv_groups_set - prev_groups)
+    # stats qualità import (per clusterQuality)
+    state["last_ingest_stats"] = {
+        "source": "csv",
+        "rowsTotal": csv_rows_total,
+        "rowsKept": len(clean_users),
+        "duplicateDisplayName": csv_dup_dn_rows,
+        "missingDepartment": csv_missing_department,
+        "missingBusinessRole": csv_missing_businessrole,
+        "missingDisplayName": csv_missing_displayname,
+        "missingUsername": 0,
+        "missingRoles": csv_missing_roles,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
 
-    # salva stats (come nel tuo codice)
-    state["lastcsvstats"] = {
-        "csvRowsTotal": int(csvrowstotal),
-        "csvRowsMissingBR": int(csvmissingbusinessrole),
-        "csvDuplicateDisplayNameRows": int(csvdupdnrows),
+    # tieni anche last_csv_stats se la UI ancora lo usa
+    state["last_csv_stats"] = {
+        "csvRowsTotal": csv_rows_total,
+        "csvRowsMissingBR": csv_missing_businessrole,
+        "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
         "by": username,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
-    state["lastingeststats"] = {
-        "source": "csv",
-        "rowsTotal": int(csvrowstotal),
-        "rowsKept": int(len(cleanusers)),
-        "duplicateDisplayName": int(csvdupdnrows),
-        "missingDepartment": int(csvmissingdepartment),
-        "missingBusinessRole": int(csvmissingbusinessrole),
-        "missingDisplayName": int(csvmissingdisplayname),
-        "missingUsername": 0,
-        "missingRoles": int(csvmissingroles),
-        "ts": datetime.now(timezone.utc).isoformat(),
-    }
 
-    state["miningdirty"] = True
-    log("INFO", f"CSV import by {username} rows={csvrowstotal} kept={len(cleanusers)} newGroupsSystem={len(new_groups_system_list)}")
+    rebuild_ingest_candidates()
+    apply_duplicate_displayname_resolution()
+    state["mining_dirty"] = True
+
+    log(
+        "INFO",
+        f"CSV import by {username}: rows={csv_rows_total}, kept={len(clean_users)}, "
+        f"dupRows={csv_dup_dn_rows}, missingDept={csv_missing_department}, "
+        f"missingBR={csv_missing_businessrole}, missingRoles={csv_missing_roles}, newBRs={new_brs}"
+    )
 
     return {
-        "ok": True,
-        "rowsTotal": int(csvrowstotal),
-        "rowsKept": int(len(cleanusers)),
-        "csvRowsTotal": int(csvrowstotal),
-        "csvRowsMissingBR": int(csvmissingbusinessrole),
-        "csvDuplicateDisplayNameRows": int(csvdupdnrows),
+    "ok": True,
 
-        # lasciato per compat (anche se non lo usi più)
-        "newBusinessRoles": int(newbrs),
+    # numeriche "stabili" (quelle che il frontend userà)
+    "rowsTotal": int(csv_rows_total),
+    "rowsKept": int(len(clean_users)),
+    "newBusinessRoles": int(new_brs),
 
-        # quello che ti serve davvero
-        "newGroupsSystem": int(len(new_groups_system_list)),
-        "newGroupsSystemList": new_groups_system_list,
-    }
+    # back-compat (se in giro hai ancora frontend/pezzi vecchi)
+    "csvRowsTotal": int(csv_rows_total),
+    "csvRowsMissingBR": int(csv_missing_businessrole),
+    "csvDuplicateDisplayNameRows": int(csv_dup_dn_rows),
+
+    # opzionali ma utili per messaggio UI e debug
+    "created_users": int(max(0, len(clean_users))),   # qui puoi mettere un contatore reale se lo calcoli
+    "assigned_users": int(max(0, len(clean_users))),  # idem: se assegni sempre un BR post-fallback, coincide
+}
+
 
 
 def apply_all_choices_to_last_extract() -> None:

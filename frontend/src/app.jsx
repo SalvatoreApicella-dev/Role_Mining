@@ -317,7 +317,7 @@ const [importMsg, setImportMsg] = useState("");
 
               setImportMsg(
                 `Import OK: Totale=${n(out.rowsTotal ?? out.csvRowsTotal)}, Nuovi Utenti=${n(out.rowsKept)}, ` +
-                `Nuovi Ruoli=${n(out.newGroupsSystem)}, Valore duplicato=${n(out.csvDuplicateDisplayNameRows)}, ` +
+                `Valore duplicato=${n(out.csvDuplicateDisplayNameRows)}, ` +
                 `Valore incompleto=${n(out.csvRowsMissingBR)}`
 );
 
