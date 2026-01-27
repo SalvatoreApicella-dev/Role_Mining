@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sklearn.cluster import AgglomerativeClustering
 from fastapi import UploadFile, File
-
+import numpy as np
 import csv, io, re
 try:
     from ldap3 import ALL, NTLM, SIMPLE, Connection, Server, Tls, NONE
@@ -207,12 +207,37 @@ state: Dict[str, Any] = {
     
 }
 
+# --- Canonical keys (one source of truth) ---
+state.setdefault("role_meta", {})
+state.setdefault("business_roles", set())
+state.setdefault("user_business_role", {})
+
+# Stats unificati per qualità import (AD/CSV/XLSX)
+state.setdefault("last_ingest_stats", {
+    "source": None,
+    "rowsTotal": 0,
+    "rowsKept": 0,
+    "duplicateDisplayName": 0,
+    "missingDepartment": 0,
+    "missingBusinessRole": 0,
+    "missingDisplayName": 0,
+    "missingUsername": 0,
+    "ts": None,
+})
+
+# Back-compat (se ti è rimasto codice vecchio in giro)
+state["rolemeta"] = state["role_meta"]
+state["businessroles"] = state["business_roles"]
+state["userbusinessrole"] = state["user_business_role"]
+
+
 state.setdefault("last_rolemining_result", None)
 state.setdefault("ingest_sources", {})          # es: {"ad":[...], "csv":[...], "xlsx":[...]}
 state.setdefault("ingest_candidates", [])       # flatten di ingest_sources
 state.setdefault("choice_by_displayName", {})   # displayName -> candidateId scelto
 state.setdefault("mining_dirty", True)
 state.setdefault("last_mining_params", {"n_clusters": None, "role_support": 0.6})
+state.setdefault("last_rejects", {"source": "ad|csv", "reason": "...", "user": {...}, "ts": "..."})
 
 # ----------------------------
 # Internal DB: auto-mapping Group -> BusinessRole
@@ -238,7 +263,29 @@ def apply_business_roles(users: List[Dict[str, Any]]) -> None:
     m = state.get("user_business_role", {})
     for u in users:
         u["businessRole"] = m.get(u["username"], "Unassigned")
-        # =============================================================================
+
+def sync_roles_from_users(users: List[Dict[str, Any]]) -> int:
+    """
+    Registra in role_meta/business_roles tutti i BR presenti sugli utenti.
+    Ritorna quanti BR nuovi sono stati creati.
+    """
+    role_meta = state.setdefault("role_meta", {})
+    business_roles = state.setdefault("business_roles", set())
+    created = 0
+
+    for u in users or []:
+        br = (u.get("businessRole") or "").strip()
+        if not br or br == "Unassigned":
+            continue
+        if br not in role_meta:
+            _ensure_role_registered(br)  # usa role_meta/business_roles
+            created += 1
+        business_roles.add(br)
+
+    return created
+
+
+# =============================================================================
 # BRDB (NO AI): learning DB + inference engine
 # =============================================================================
 from collections import defaultdict
@@ -380,35 +427,51 @@ DEPT_MINCONF = 0.80
 DEPT_GROUP_SUPPORT = 0.60
 
 def ensure_role_registered(role: str) -> None:
-    role = (role or "").strip()
-    if not role:
-        return
-    rolemeta = state.setdefault("rolemeta", {})
-    broles = state.setdefault("businessroles", set())
+    _ensure_role_registered(role)
 
-    if role not in rolemeta:
-        r = random.randint(80, 255)
-        g = random.randint(80, 255)
-        b = random.randint(80, 255)
-        rolemeta[role] = {"color": f"{r:02x}{g:02x}{b:02x}".upper(), "groups": []}
+DEPT_GROUP_SUPPORT = 0.60
+DEPT_MINCONF = 0.80
+DEPT_MERGE_JACCARD = 0.55  # soglia similarità gruppi dept vs BR template
 
-    broles.add(role)
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a and not b:
+        return 1.0
+    return len(a & b) / max(1, len(a | b))
 
 def apply_department_mapping(users: List[Dict[str, Any]]) -> None:
-    # usa BRDB (si basa su userbusinessrole + rolemeta)
+    # Prepara strutture coerenti
+    state.setdefault("user_business_role", {})
+    state.setdefault("role_meta", {})
+    state.setdefault("business_roles", set())
+    state.setdefault("dept_to_role", {})          # dept -> canonical BR
+    state.setdefault("dept_role_analysis", {})    # dept -> evidence
+
     brdb_rebuild()
 
-    bydept = defaultdict(list)
+    by_dept = defaultdict(list)
     for u in users or []:
         dept = (u.get("department") or "").strip()
         if dept:
-            bydept[dept].append(u)
+            by_dept[dept].append(u)
 
-    rolemeta = state.setdefault("rolemeta", {})
-    userbr = state.setdefault("userbusinessrole", {})
+    role_meta = state["role_meta"]
+    user_br = state["user_business_role"]
+    dept_to_role = state["dept_to_role"]
+    dept_analysis = state["dept_role_analysis"]
 
-    for dept, members in bydept.items():
-        # votazione: ruolo predetto per ciascun utente, pesato per confidence
+    for dept, members in by_dept.items():
+        # 1) Baseline deterministica: BR = dept
+        _ensure_role_registered(dept)
+
+        # 2) Profilo gruppi frequenti del dipartimento
+        n = max(1, len(members))
+        cnt = defaultdict(int)
+        for u in members:
+            for g in (u.get("groups") or []):
+                cnt[g] += 1
+        dept_groups = {g for g, c in cnt.items() if (c / n) >= DEPT_GROUP_SUPPORT}
+
+        # 3) Analisi: “votazione” ruolo macro dai gruppi utenti (BRDB)
         weights = defaultdict(float)
         for u in members:
             s = brdb_infer_groupset(u.get("groups") or [])
@@ -417,35 +480,52 @@ def apply_department_mapping(users: List[Dict[str, Any]]) -> None:
             if r and r != "Unassigned" and c > 0:
                 weights[r] += c
 
+        chosen_role = dept
+        evidence = {
+            "dept": dept,
+            "members": len(members),
+            "deptGroups": sorted(dept_groups),
+            "chosenRole": dept,
+            "reason": "baseline",
+        }
+
         if weights:
             best_role, best_w = max(weights.items(), key=lambda x: x[1])
             total = sum(weights.values()) or 1.0
-            dept_conf = best_w / total
-        else:
-            best_role, dept_conf = "Unassigned", 0.0
+            conf = best_w / total
 
-        # decisione: mappa dept su BR esistente o crea nuovo BR (dept)
-        chosen_role = best_role if (best_role != "Unassigned" and dept_conf >= DEPT_MINCONF) else dept
-        ensure_role_registered(chosen_role)
+            role_groups = set((role_meta.get(best_role, {}) or {}).get("groups") or [])
+            sim = _jaccard(dept_groups, role_groups) if role_groups else 1.0  # se non ho template ancora, non blocco
 
-        # associa “solita logica” gruppi al BR scelto (frequenti nel dept)
-        n = max(1, len(members))
-        cnt = defaultdict(int)
-        for u in members:
-            for g in (u.get("groups") or []):
-                cnt[g] += 1
-        picked = [g for g, c in cnt.items() if (c / n) >= DEPT_GROUP_SUPPORT]
+            evidence.update({
+                "bestRole": best_role,
+                "confidence": round(conf, 3),
+                "jaccard": round(sim, 3),
+                "weightsTop": sorted(weights.items(), key=lambda x: x[1], reverse=True)[:5],
+            })
 
-        existing = set(rolemeta.get(chosen_role, {}).get("groups") or [])
-        existing.update(picked)
-        rolemeta[chosen_role]["groups"] = sorted(existing)
+            # Merge automatico (come mi hai chiesto), ma solo sopra soglie
+            if best_role != "Unassigned" and conf >= DEPT_MINCONF and sim >= DEPT_MERGE_JACCARD:
+                chosen_role = best_role
+                _ensure_role_registered(chosen_role)
+                evidence["chosenRole"] = chosen_role
+                evidence["reason"] = "merged_by_analysis"
 
-        # override: tutti gli utenti del dept entrano in quel BR
+        # 4) Consolidamento template BR: aggiungo gruppi frequenti dept al ruolo scelto
+        existing = set((role_meta.get(chosen_role, {}) or {}).get("groups") or [])
+        role_meta[chosen_role]["groups"] = sorted(existing | dept_groups)
+
+        # 5) Salvo mapping dept->BR e assegno utenti
+        dept_to_role[dept] = chosen_role
+        dept_analysis[dept] = evidence
+
         for u in members:
             uname = u.get("username")
             if uname:
-                userbr[uname] = chosen_role
+                user_br[uname] = chosen_role
 
+    # applica mapping sugli oggetti utente
+    apply_business_roles(users)
 
 def brdb_infer_groupset(groups: List[str]) -> Dict[str, Any]:
     """
@@ -568,6 +648,72 @@ def apply_duplicate_displayname_resolution() -> None:
     apply_business_roles(users)
 
 
+def pick_best_user(cands: List[Dict[str, Any]]) -> Dict[str, Any]:
+    # regola: preferisci lastLogin più recente (se presente), poi "completezza" (dept+br), poi più gruppi
+    def score(u: Dict[str, Any]) -> tuple:
+        last = u.get("lastLogin") or u.get("last_login") or ""
+        has_dept = 1 if (u.get("department") or "").strip() else 0
+        has_br = 1 if (u.get("businessRole") or "").strip() else 0
+        ng = len(u.get("groups") or [])
+        return (last, has_dept + has_br, ng)
+    return sorted(cands, key=score, reverse=True)[0]
+
+def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
+    rejects = []
+    stats = state.setdefault("last_ingest_stats", {})
+    stats.update({
+        "source": source,
+        "rowsTotal": int(len(raw_users or [])),
+        "rowsKept": 0,
+        "duplicateDisplayName": 0,
+        "missingDepartment": 0,
+        "missingBusinessRole": 0,
+        "missingDisplayName": 0,
+        "missingUsername": 0,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+
+    by_dn = defaultdict(list)
+    for u in (raw_users or []):
+        if not (u.get("username") or "").strip():
+            stats["missingUsername"] += 1
+        dn = (u.get("displayName") or "").strip()
+        if dn:
+            by_dn[dn].append(u)
+        else:
+            stats["missingDisplayName"] += 1
+            rejects.append({"source": source, "reason": "Missing displayName", "user": u, "ts": stats["ts"]})
+
+    chosen = []
+    for dn, cands in by_dn.items():
+        u = pick_best_user(cands)
+
+        if len(cands) > 1:
+            stats["duplicateDisplayName"] += (len(cands) - 1)
+
+        # log degli altri duplicati
+        for other in cands:
+            if other is u:
+                continue
+            rejects.append({"source": source, "reason": f"Duplicate displayName '{dn}' (kept best)", "user": other, "ts": stats["ts"]})
+
+        dept = (u.get("department") or "").strip()
+        br = (u.get("businessRole") or "").strip()
+
+        if not dept:
+            stats["missingDepartment"] += 1
+            rejects.append({"source": source, "reason": "Missing department", "user": u, "ts": stats["ts"]})
+        if not br:
+            stats["missingBusinessRole"] += 1
+            rejects.append({"source": source, "reason": "Missing businessRole", "user": u, "ts": stats["ts"]})
+
+        chosen.append(u)
+
+    stats["rowsKept"] = int(len(chosen))
+    state["last_rejects"] = rejects
+    return chosen
+
+
 from datetime import datetime, timezone
 
 def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
@@ -600,6 +746,43 @@ def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
     state["last_extract"]["groups"] = recompute_groups_from_users(base_users)
     state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
 
+
+def replace_last_extract_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) -> None:
+    clean: List[Dict[str, Any]] = []
+    for u in (new_users or []):
+        username = (u.get("username") or "").strip()
+        if not username:
+            continue
+        clean.append({
+            "username": username,
+            "displayName": (u.get("displayName") or username).strip(),
+            "groups": sorted(set(u.get("groups") or [])),
+            "department": (u.get("department") or "").strip() or None,
+            "businessRole": (u.get("businessRole") or "").strip() or None,
+            "excluded": False,
+        })
+
+    state["last_extract"] = {
+        "ou": ou,
+        "users": clean,
+        "groups": sorted({g for u in clean for g in (u.get("groups") or [])}),
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+    }
+
+    # Non toccare qui user_business_role: lo ricreiamo dopo con l'auto-assegnazione
+    state["mining_dirty"] = True
+
+def rerun_auto_business_roles_after_connector(users: List[Dict[str, Any]]) -> None:
+    # reset mapping
+    state["user_business_role"] = {}
+    for u in (users or []):
+        u["businessRole"] = None
+
+    # ricostruisci mapping usando dept + analisi merge
+    apply_department_mapping(users)
+
+    state["mining_dirty"] = True
 
 import numpy as np
 from typing import Any, Dict, List, Optional
@@ -808,7 +991,7 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
 
     # objectClass=user può includere account tecnici: in produzione aggiungere filtri più stretti
     search_filter = "(&(objectClass=user)(sAMAccountName=*))"
-    attrs = ["sAMAccountName", "displayName", "memberOf", "department"]
+    attrs = ["sAMAccountName", "displayName", "memberOf", "department", "lastLogonTimestamp"]
 
     ok = conn.search(search_base=ou_dn, search_filter=search_filter, attributes=attrs)
     if not ok:
@@ -821,14 +1004,19 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
         username = (d.get("sAMAccountName") or [""])[0]
         display = (d.get("displayName") or [""])[0]
         member_of = d.get("memberOf") or []
-        # Normalizza gruppi prendendo CN=...
+
         groups = []
         for dn in member_of:
             parts = str(dn).split(",")
             cn = next((p[3:] for p in parts if p.upper().startswith("CN=")), str(dn))
             groups.append(cn)
-            dept = d.get("department") or [""]
-            department = (dept[0] if isinstance(dept, list) else (dept or "")).strip()
+
+        dept = d.get("department") or [""]
+        department = (dept[0] if isinstance(dept, list) else (dept or "")).strip() or None
+
+        llt = d.get("lastLogonTimestamp")
+        llt0 = llt[0] if isinstance(llt, list) and llt else llt
+        last_login = str(llt0).strip() if llt0 is not None else None
 
         if username:
             users.append({
@@ -836,7 +1024,10 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
                 "displayName": display or username,
                 "groups": sorted(set(groups)),
                 "department": department,
+                "lastLogin": last_login,
             })
+
+
 
 
 
@@ -943,7 +1134,6 @@ def compute_ai_detection(matrix: dict) -> dict:
     }
 
 
-
 def compute_kpis(
     users: List[Dict[str, Any]],
     clusters: List[Dict[str, Any]],
@@ -953,101 +1143,145 @@ def compute_kpis(
 
     total_users = len(users)
     if total_users == 0:
-        return {"totalUsers": 0, "overprivilegedPct": 0, "clusterQuality": 0, "roleCoverage": 0}
+        return {
+            "totalUsers": 0,
+            "overprivilegedPct": 0,
+            "clusterQuality": 0,
+            "clusteringQuality": 0,
+            "roleCoverage": 0,
+            "aiDetection": 0,
+            "redundantAssignments": 0,
+            "totalAssignments": 0,
+            "usersWithRedundancy": 0,
+        }
 
     # --- Overprivileged: top 10% per numero gruppi calcolato dalla matrix ---
-        # --- Overprivileged: top 10% per numero gruppi calcolato dalla matrix ---
     row_counts = np.array(
-        [int(sum(row.values())) for row in (matrix or {}).values()],
+        [int(sum((row or {}).values())) for row in (matrix or {}).values()],
         dtype=np.int32
     )
     if row_counts.size == 0:
-        return {"totalUsers": total_users, "overprivilegedPct": 0, "clusterQuality": 0, "roleCoverage": 0}
+        return {
+            "totalUsers": total_users,
+            "overprivilegedPct": 0,
+            "clusterQuality": 0,
+            "clusteringQuality": 0,
+            "roleCoverage": 0,
+            "aiDetection": 0,
+            "redundantAssignments": 0,
+            "totalAssignments": 0,
+            "usersWithRedundancy": 0,
+        }
 
-    # Opzione A: top-k (robusta anche con pochi utenti)
     k_top = int(np.ceil(0.1 * row_counts.size))
     k_top = max(1, k_top)
 
-    # soglia = k-esimo valore più grande (partition è O(n))
     thr = int(np.partition(row_counts, -k_top)[-k_top])
 
-    # >= così includi sempre almeno k utenti (a parità di conteggi può includerne di più)
     overpriv = float((row_counts >= thr).mean() * 100.0)
 
+    # --- AI detection (redundant broad roles) ---
+    ai = compute_ai_detection(matrix)
 
     # --- RoleCoverage: roleGroups copre i gruppi reali (da matrix) dei membri ---
-    cov_vals = []
+    cov_vals: list[float] = []
     for c in (clusters or []):
         role_groups = set(c.get("roleGroups") or [])
-        for uname in (c.get("members") or []):
+        members = c.get("members") or []
+        for uname in members:
             row = matrix.get(uname) or {}
-            denom = int(sum(row.values()))
+            denom = int(sum((row or {}).values()))
             if denom <= 0:
                 cov_vals.append(0.0)
             else:
                 covered = sum(int(row.get(g, 0)) for g in role_groups)
                 cov_vals.append(covered / denom)
 
-    # role_coverage = float((np.mean(cov_vals) if cov_vals else 0.0) * 100.0)
+    role_coverage = float((np.mean(cov_vals) if cov_vals else 0.0) * 100.0)
 
-    # --- ClusterQuality (data-quality score da ingestione CSV) ---
-    stats = state.get("last_csv_stats") or {}
-    csv_total = int(stats.get("csvRowsTotal") or 0)
-    csv_missing_br = int(stats.get("csvRowsMissingBR") or 0)
-    csv_dup_dn = int(stats.get("csvDuplicateDisplayNameRows") or 0)
+    # --- clusterQuality = data-quality score (ingest) ---
+    ingest = state.get("last_ingest_stats") or {}
+    total = int(ingest.get("rowsTotal") or 0)
 
-    if csv_total > 0:
-        missing_br_rate = csv_missing_br / csv_total
-        dup_rate = csv_dup_dn / csv_total
-        cluster_quality = 100.0 * (1.0 - dup_rate) * (1.0 - missing_br_rate)
+    if total > 0:
+        dup = int(ingest.get("duplicateDisplayName") or 0)
+        miss_dept = int(ingest.get("missingDepartment") or 0)
+        miss_br = int(ingest.get("missingBusinessRole") or 0)
+        miss_dn = int(ingest.get("missingDisplayName") or 0)
+        miss_user = int(ingest.get("missingUsername") or 0)
+
+        penalty = (
+            1.00 * (dup / total) +
+            0.70 * (miss_dept / total) +
+            0.70 * (miss_br / total) +
+            0.40 * (miss_dn / total) +
+            0.40 * (miss_user / total)
+        )
+        penalty = min(1.0, penalty)
+        cluster_quality = 100.0 * (1.0 - penalty)
     else:
-        # nessun CSV importato => nessun problema di ingestione misurabile
         cluster_quality = 100.0
 
-    ai = compute_ai_detection(matrix)
-    
+    # --- clusteringQuality = qualità clustering (purity media pesata) ---
+    if clusters:
+        total_sz = sum(int(c.get("size") or len(c.get("members") or [])) for c in clusters) or 1
+        weighted = 0.0
+        for c in clusters:
+            sz = int(c.get("size") or len(c.get("members") or []))
+            weighted += float(c.get("purity") or 0.0) * sz
+        clustering_quality = (weighted / total_sz) * 100.0
+    else:
+        clustering_quality = 0.0
 
     return {
         "totalUsers": total_users,
         "overprivilegedPct": round(overpriv, 2),
         "clusterQuality": round(float(cluster_quality), 2),
+        "clusteringQuality": round(float(clustering_quality), 2),
         "aiDetection": ai.get("aiDetection", 0),
         "redundantAssignments": ai.get("redundantAssignments", 0),
         "totalAssignments": ai.get("totalAssignments", 0),
         "usersWithRedundancy": ai.get("usersWithRedundancy", 0),
-
-
-        # "roleCoverage": round(role_coverage, 2),
-        "roleCoverage": 0,
-        "csvRowsTotal": csv_total,
-        "csvRowsMissingBR": csv_missing_br,
-        "csvDuplicateDisplayNameRows": csv_dup_dn,
+        "roleCoverage": round(float(role_coverage), 2),
     }
 
 
-def run_role_mining(users: List[Dict[str, Any]], n_clusters: Optional[int], role_support: float) -> Dict[str, Any]:
+def run_role_mining(
+    users: List[Dict[str, Any]],
+    n_clusters: Optional[int],
+    role_support: float
+) -> Dict[str, Any]:
+    # usa solo utenti attivi
     users = [u for u in (users or []) if not u.get("excluded")]
 
     usernames, groups, X = build_matrix(users)
-        # Colonne UI = gruppi snapshot (ultima estrazione) → NON dipendono dalle assegnazioni correnti
+
+    # Colonne UI = gruppi snapshot (ultima estrazione) → NON dipendono dalle assegnazioni correnti
     snapshot_groups = ((state.get("last_extract") or {}).get("groups") or []).copy()
     snapshot_groups = [g for g in snapshot_groups if g]  # safety
 
     # Se lo snapshot è vuoto (es. mai estratto), fallback ai gruppi del build_matrix
     all_groups_ui = snapshot_groups if snapshot_groups else groups
 
+    # dataset troppo piccolo
     if len(usernames) < 2 or len(groups) == 0:
-        return {"clusters": [], "matrix": {}, "kpi": compute_kpis(users, [], {})}
+        return {
+            "clusters": [],
+            "matrix": {},
+            "kpi": compute_kpis(users, [], {}),
+            "groups": all_groups_ui,
+        }
 
-
+    # scegli k
     auto_k = max(2, int(round(np.sqrt(len(usernames)))))
     k = int(n_clusters) if n_clusters else min(8, auto_k, len(usernames))
 
+    # clustering su distanza Jaccard precomputed
     D = jaccard_distance_matrix(X)
     model = AgglomerativeClustering(n_clusters=k, metric="precomputed", linkage="average")
     labels = model.fit_predict(D)
 
-    # cluster -> indexes
+    # clusters -> members/roleGroups/purity
     clusters: List[Dict[str, Any]] = []
     for cid in sorted(set(labels.tolist())):
         idx = [i for i, lab in enumerate(labels) if lab == cid]
@@ -1067,23 +1301,26 @@ def run_role_mining(users: List[Dict[str, Any]], n_clusters: Optional[int], role
             "size": len(members),
         })
 
-            # matrix for UI (DEVE avere tutte le colonne di all_groups_ui)
-        # costruisco un mapping per i gruppi presenti in X
-        gindex = {g: j for j, g in enumerate(groups)}
+    # matrix for UI (DEVE avere tutte le colonne di all_groups_ui)
+    # mapping per i gruppi presenti in X
+    gindex = {g: j for j, g in enumerate(groups)}
 
-        matrix: Dict[str, Dict[str, int]] = {}
-        for i, uname in enumerate(usernames):
-            row = {}
-            for g in all_groups_ui:
-                j = gindex.get(g)
-                row[g] = int(X[i, j]) if j is not None else 0
-            matrix[uname] = row
-
+    matrix: Dict[str, Dict[str, int]] = {}
+    for i, uname in enumerate(usernames):
+        row: Dict[str, int] = {}
+        for g in all_groups_ui:
+            j = gindex.get(g)
+            row[g] = int(X[i, j]) if j is not None else 0
+        matrix[uname] = row
 
     kpi = compute_kpis(users, clusters, matrix)
 
-    return {"clusters": clusters, "matrix": matrix, "kpi": kpi, "groups": all_groups_ui}
-
+    return {
+        "clusters": clusters,
+        "matrix": matrix,
+        "kpi": kpi,
+        "groups": all_groups_ui,
+    }
 
 
 def ensure_last_mining() -> None:
@@ -1215,35 +1452,11 @@ def set_connector(cfg: ConnectorConfig, username: str = Depends(require_auth)):
 
 @app.post("/api/ad/extract", response_model=ExtractResponse)
 def extract(req: ExtractRequest, username: str = Depends(require_auth)):
-    users = extract_from_ldap(req.ou)
-    apply_department_mapping(users)
 
+    
+    users = extract_from_ldap(req.ou)
     # BRDB: rebuild leggero (si basa su stato corrente: last_extract + role_meta + mapping)
     brdb_rebuild()
-    
-    # Department -> BR (solo se l'utente non ha già BR assegnato)
-    apply_department_mapping_if_missing(users)
-
-    # BRDB: auto-assegna BR solo se utente non ha già mapping
-    for u in users:
-        uname = u.get("username")
-        if not uname:
-            continue
-        if (state.get("user_business_role") or {}).get(uname):
-            continue
-
-        sug = brdb_infer_groupset(u.get("groups") or [])
-        u["autoBusinessRole"] = sug  # utile per debug/UI
-        if sug["role"] != "Unassigned" and float(sug["confidence"]) >= BRDB_MIN_CONF:
-            state.setdefault("user_business_role", {})
-            state["user_business_role"][uname] = sug["role"]
-
-            # learning “debole”: conferma implicita dall’auto-assegnazione
-            brdb_learn_assignment(sug["role"], u.get("groups") or [], weight=1)
-
-    # applica business roles (ora include anche le nuove auto-assegnazioni)
-    apply_business_roles(users)
-
 
     # 1) Costruisci candidati AD
     ad_candidates = []
@@ -1260,7 +1473,13 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
         )
 
     # 2) DB di sistema: append/upsert
-    _merge_users_into_last_extract(users, ou=req.ou)
+    # _merge_users_into_last_extract(users, ou=req.ou)
+    users = filter_and_dedupe_connector_users(users, source="ad")
+    replace_last_extract_from_connector(users, ou=req.ou, source="ad")
+    rerun_auto_business_roles_after_connector(state["last_extract"]["users"])
+    new_brs = sync_roles_from_users(state["last_extract"]["users"])
+
+
 
     # 3) Ingest sources: aggiorna solo lo slice AD (non distruggere gli altri)
     state.setdefault("ingest_sources", {})
@@ -1413,7 +1632,12 @@ def kpi_drilldown(metric: str, username: str = Depends(require_auth)):
 
     if metric == "cluster-quality":
         # se ti serve davvero: return {"metric": metric, "items": build_cluster_quality_items(clusters, matrix)}
-        ...
+        return {
+            "metric": "cluster-quality",
+            "items": build_cluster_quality_items(...),
+            "rejects": state.get("last_rejects") or []
+            }
+
     raise HTTPException(status_code=404, detail="Unknown metric")
 
 
@@ -1872,245 +2096,212 @@ def apply_department_mapping_if_missing(users: list[dict]) -> None:
             state["user_business_role"][uname] = chosen_role
 
 
+def normheader(h: str) -> str:
+    return (h or "").strip().lower()
+
+def getanyrowci(rowci: dict, keys: list[str]) -> str:
+    for k in keys:
+        if k in rowci and rowci.get(k) is not None:
+            return str(rowci.get(k))
+    return ""
+
+CSVKEYS = {
+    "displayName": ["displayname", "display name", "name", "utente", "user"],
+    "department": ["department", "dept", "dipartimento", "area", "funzione"],
+    "businessRole": ["businessrole", "business role", "br", "ruolo business", "ruolobusiness"],
+    "roles": ["ruoli", "roles", "groups", "gruppi", "entitlements"],
+}
+
+def extractcsvfieldsrow(row: dict) -> tuple[str, str, str, str, str]:
+    rowci = {normheader(k): v for k, v in (row or {}).items()}
+
+    dnraw = getanyrowci(rowci, CSVKEYS["displayName"])
+    deptraw = getanyrowci(rowci, CSVKEYS["department"])
+    brraw = getanyrowci(rowci, CSVKEYS["businessRole"])
+    rolesraw = getanyrowci(rowci, CSVKEYS["roles"])
+
+    dn = (dnraw or "").strip()
+    dept = (deptraw or "").strip()
+    br = (brraw or "").strip()
+    roles = (rolesraw or "").strip()
+
+    return dnraw, dn, dept, br, roles
+
+
+
 @app.post("/api/import/csv")
-async def import_csv(file: UploadFile = File(...), username: str = Depends(require_auth)):
-    
-
-
+async def importcsv(file: UploadFile = File(...), username: str = Depends(require_auth )):
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="File vuoto")
 
     text = raw.decode("utf-8-sig", errors="replace")
     reader = csv.DictReader(io.StringIO(text), delimiter=";", skipinitialspace=True)
+
     if reader.fieldnames:
-        reader.fieldnames = [h.strip() for h in reader.fieldnames]
+        reader.fieldnames = [h.strip() for h in reader.fieldnames if h is not None]
 
-    required = {"DisplayName"}  # BusinessRole, Ruoli, Department diventano opzionali
-    if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Headers richiesti: {sorted(required)}; trovati: {reader.fieldnames}",
-        )
+    # Snapshot "prima" per calcolare i gruppi MAI visti a sistema
+    prev_groups = set((state.get("lastextract") or {}).get("groups") or [])
+    csv_groups_set = set()
 
+    # Stats righe
+    csvrowstotal = 0
+    csvdupdnrows = 0
+    csvmissingdisplayname = 0
+    csvmissingdepartment = 0
+    csvmissingbusinessrole = 0
+    csvmissingroles = 0
 
-    # stato base (come AD Extract)
-    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
-    state.setdefault("user_business_role", {})
-    state.setdefault("role_meta", {})
-    state.setdefault("business_roles", set())
+    seendnraw = set()
+    seenusernames = set()
+    newusers: List[Dict[str, Any]] = []
 
-    base_users = state["last_extract"].get("users") or []
-
-    # indicizza utenti esistenti
-    by_username = {u["username"]: u for u in base_users if u.get("username")}
-    by_display = {}
-    for u in base_users:
-        dn0 = (u.get("displayName") or "").strip()
-        if dn0 and dn0 not in by_display:
-            by_display[dn0] = u
-
-    created_roles = set()
-    created_users = 0
-    assigned_users = 0
-    added_groups = 0
-
-    # ---- CSV ingest quality stats (su righe, non su utenti “fusi”) ----
-    csv_rows_total = 0
-    csv_rows_missing_br = 0
-    csv_dup_dn_rows = 0
-    seen_dn_in_csv = set()
-    state.setdefault("ingest_sources", {})
-    state["ingest_sources"].setdefault("csv", [])
-
-    state["last_csv_rows"] = []              # elenco righe “raw” per drilldown
-    state["csv_choice_by_dn"] = {}           # displayNameRaw -> rowId scelto
-    state["csv_rows_by_dn"] = defaultdict(list)  # displayNameRaw -> [rowId...]
-
+    # Reset slice CSV ingest (come nel tuo codice)
+    state.setdefault("ingestsources", {})
+    state.setdefault("lastcsvrows", [])
+    state["ingestsources"]["csv"] = []
+    state["lastcsvrows"] = []
+    state.setdefault("csvrowsbydn", defaultdict(list))
+    state.setdefault("csvchoicebydn", {})
 
     for row in reader:
-        csv_rows_total += 1
+        csvrowstotal += 1
+        rowid = f"csv-{csvrowstotal}"
 
-        dn_raw = row.get("DisplayName") or ""
-        br_raw = row.get("BusinessRole") or ""
-        ruoli_raw = row.get("Ruoli") or ""
-        dept_raw = row.get("Department") or ""
-
-        dn = dn_raw.strip()
-        br = br_raw.strip()
-        ruoli = ruoli_raw.strip()
-        dept = dept_raw.strip()
-
-
-
-        row_id = f"{csv_rows_total}"  # id semplice = numero riga (1..N)
-
-        parsed_roles = [g.strip() for g in (ruoli or "").split(",") if g.strip()]
-
-        rec = {
-            "rowId": row_id,
-            "displayName": dn,
-            "displayNameRaw": dn_raw,
-            "businessRole": br,
-            "department": dept,
-            "roles": parsed_roles,
-            "rawLine": f"{dn_raw};{br_raw};{ruoli_raw};{dept_raw}",
-        }
-
-
-        state["last_csv_rows"].append(rec)
-        state["csv_rows_by_dn"][dn_raw].append(row_id)
-
-        # default: prima riga incontrata diventa “scelta”
-        state["csv_choice_by_dn"].setdefault(dn_raw, row_id)
-
-
-        # tollera righe sbagliate tipo: "Alice Rossi,IT;VPN,GitLab"
-        if (not br) and dn and ("," in dn):
-            dn, br = [x.strip() for x in dn.split(",", 1)]
+        dnraw, dn, dept, br, roles = extractcsvfieldsrow(row)
 
         if not dn:
+            csvmissingdisplayname += 1
             continue
 
-        # duplicati displayName nel CSV (AS-IS sul valore della colonna)
-        if dn_raw in seen_dn_in_csv:
-            csv_dup_dn_rows += 1
+        if dnraw in seendnraw:
+            csvdupdnrows += 1
         else:
-            seen_dn_in_csv.add(dn_raw)
+            seendnraw.add(dnraw)
 
-        # gruppi dalla colonna Ruoli
-        groups = [g.strip() for g in ruoli.split(",") if g.strip()]
+        if not dept:
+            csvmissingdepartment += 1
+        if not br:
+            csvmissingbusinessrole += 1
 
-        row_id = f"csv:{csv_rows_total}"
+        parsedroles = [g.strip() for g in (roles or "").split(",") if g.strip()]
+        if not parsedroles:
+            csvmissingroles += 1
 
-        candidate = _mk_candidate(
+        # accumulo gruppi distinti presenti nel CSV
+        for g in parsedroles:
+            csv_groups_set.add(g)
+
+        # fallback BR: se non c’è BR esplicito usa Department (come fai tu)
+        if not br and dept:
+            br = dept
+
+        # username dedup (come nel tuo codice)
+        base = _slug_username(dn)
+        uname = base
+        i = 2
+        while uname in seenusernames:
+            uname = f"{base}{i}"
+            i += 1
+        seenusernames.add(uname)
+
+        u = {
+            "username": uname,
+            "displayName": dn,
+            "groups": sorted(set(parsedroles)),
+            "department": dept or None,
+            "businessRole": br or None,
+            "excluded": False,
+            "lastLogin": None,
+        }
+        newusers.append(u)
+
+        # (facoltativo) record per UI conflitti/duplicati, coerente con il tuo approccio
+        rec = {
+            "rowId": rowid,
+            "displayName": dn,
+            "displayNameRaw": dnraw,
+            "businessRole": br,
+            "department": dept,
+            "roles": parsedroles,
+        }
+        state["lastcsvrows"].append(rec)
+        state["csvrowsbydn"][dnraw].append(rowid)
+        state["csvchoicebydn"].setdefault(dnraw, rowid)
+
+        cand = _mk_candidate(
             source="csv",
-            candidate_id=row_id,
+            candidate_id=rowid,
             display_name=dn,
             business_role=br,
-            roles=groups,
-            raw=f"{dn_raw};{br_raw};{ruoli_raw}",
+            roles=parsedroles,
+            raw=f"{dnraw};{dept};{roles}",
         )
+        state["ingestsources"]["csv"].append(cand)
+        state.setdefault("choicebydisplayName", {})
+        state["choicebydisplayName"].setdefault(cand["displayName"], cand["candidateId"])
 
-        state["ingest_sources"]["csv"].append(candidate)
+    # Dedupe + REPLACE lastextract (come nel tuo codice)
+    cleanusers = filter_and_dedupe_connector_users(newusers, source="csv")
+    replace_last_extract_from_connector(cleanusers, ou="CSV", source="csv")
 
-        # default: se non esiste ancora una scelta per questo displayName, prendo la prima riga
-        state.setdefault("choice_by_displayName", {})
-        state["choice_by_displayName"].setdefault(candidate["displayName"], candidate["candidateId"])
+    # riallinea ingest candidates + risoluzione duplicati displayName
+    rebuild_ingest_candidates()
+    apply_duplicate_displayname_resolution()
 
+    # (opzionale) auto-BR / dept mapping e registrazione BR in rolemeta
+    # se nel tuo flusso serve, lascialo; altrimenti puoi rimuoverlo
+    try:
+        rerun_auto_business_roles_after_connector(state.get("lastextract", {}).get("users") or [])
+    except Exception:
+        pass
 
-        # trova utente (prima per displayName, poi crea)
-        uobj = by_display.get(dn)
-        if not uobj:
-            base = _slug_username(dn)
-            uname = base
-            i = 2
-            while uname in by_username:
-                uname = f"{base}{i}"
-                i += 1
+    newbrs = sync_roles_from_users(state.get("lastextract", {}).get("users") or [])
 
-            uobj = {"username": uname, "displayName": dn, "groups": []}
-            base_users.append(uobj)  # come AD extract
-            by_username[uname] = uobj
-            by_display[dn] = uobj
-            created_users += 1
+    # Calcolo gruppi MAI visti a sistema (confronto con snapshot PRE-import)
+    new_groups_system_list = sorted(csv_groups_set - prev_groups)
 
-        uname = uobj["username"]
-        if dept and not uobj.get("department"):
-            uobj["department"] = dept
-
-        # merge gruppi utente
-        if groups:
-            ug = set(uobj.get("groups") or [])
-            before = len(ug)
-            ug.update(groups)
-            uobj["groups"] = sorted(ug)
-            added_groups += max(0, len(ug) - before)
-
-        # se BR mancante: non assegnare, ma traccia l’anomalia e NON scartare l’utente
-                # se BR mancante: prova inferenza (NO AI) usando i gruppi della colonna Ruoli
-        if not br:
-            csv_rows_missing_br += 1
-
-            sug = brdb_infer_groupset(groups)
-            rec["autoBusinessRole"] = sug  # per drilldown/debug
-
-            if sug["role"] != "Unassigned" and float(sug["confidence"]) >= BRDB_MIN_CONF:
-                br = sug["role"]
-                rec["businessRole"] = br  # aggiorna anche la riga “raw” per UI/drilldown
-            else:
-                # opzionale: rendi esplicito che l'utente non ha BR (senza sovrascrivere se esiste già)
-                if "businessRole" not in uobj:
-                    uobj["businessRole"] = ""
-                continue
-
-
-        # assegna BR (mappa ufficiale + campo sull'utente per analytics/UI)
-        state["user_business_role"][uname] = br
-        uobj["businessRole"] = br
-                # training forte: il CSV (quando BR è valorizzato) è una “verità”
-        brdb_learn_assignment(br, groups, weight=5)
-
-        assigned_users += 1
-
-        # registra BR “a sistema”
-        state["business_roles"].add(br)
-        if br not in state["role_meta"]:
-            r = random.randint(100, 255)
-            g = random.randint(100, 255)
-            b = random.randint(100, 255)
-            color = f"{r:02x}{g:02x}{b:02x}".upper()
-            if not color.startswith("#"):
-                    color = "#" + color
-
-
-            state["role_meta"][br] = {"color": color, "groups": []}
-            created_roles.add(br)
-
-    # come AD Extract: ricalcola groups globali e applica business roles sugli utenti
-    apply_department_mapping_if_missing(base_users)
-    apply_business_roles(base_users)
-    state["last_extract"]["groups"] = sorted({g for u in base_users for g in (u.get("groups") or [])})
-    state["last_extract"]["users"] = base_users
-    state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
-
-    # salva stats ingestione per KPI
-    state["last_csv_stats"] = {
-        "csvRowsTotal": csv_rows_total,
-        "csvRowsMissingBR": csv_rows_missing_br,
-        "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
+    # salva stats (come nel tuo codice)
+    state["lastcsvstats"] = {
+        "csvRowsTotal": int(csvrowstotal),
+        "csvRowsMissingBR": int(csvmissingbusinessrole),
+        "csvDuplicateDisplayNameRows": int(csvdupdnrows),
         "by": username,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
+    state["lastingeststats"] = {
+        "source": "csv",
+        "rowsTotal": int(csvrowstotal),
+        "rowsKept": int(len(cleanusers)),
+        "duplicateDisplayName": int(csvdupdnrows),
+        "missingDepartment": int(csvmissingdepartment),
+        "missingBusinessRole": int(csvmissingbusinessrole),
+        "missingDisplayName": int(csvmissingdisplayname),
+        "missingUsername": 0,
+        "missingRoles": int(csvmissingroles),
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
 
-    log(
-        "INFO",
-        f"CSV import by {username}: users+={created_users}, assigned={assigned_users}, roles+={len(created_roles)}, "
-        f"csvRowsTotal={csv_rows_total}, csvRowsMissingBR={csv_rows_missing_br}, csvDupDnRows={csv_dup_dn_rows}"
-    )
-
-    rebuild_ingest_candidates()
-
-# applica tutte le scelte correnti (AD + CSV) sugli utenti a sistema
-    rebuild_ingest_candidates()
-    apply_duplicate_displayname_resolution()
-    state["mining_dirty"] = True
-
+    state["miningdirty"] = True
+    log("INFO", f"CSV import by {username} rows={csvrowstotal} kept={len(cleanusers)} newGroupsSystem={len(new_groups_system_list)}")
 
     return {
-    "ok": True,
-    "assigned_users": assigned_users,
-    "created_users": created_users,
-    "created_roles": sorted(created_roles),
-    "added_groups": added_groups,
-    "csvRowsTotal": csv_rows_total,
-    "csvRowsMissingBR": csv_rows_missing_br,
-    "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
+        "ok": True,
+        "rowsTotal": int(csvrowstotal),
+        "rowsKept": int(len(cleanusers)),
+        "csvRowsTotal": int(csvrowstotal),
+        "csvRowsMissingBR": int(csvmissingbusinessrole),
+        "csvDuplicateDisplayNameRows": int(csvdupdnrows),
 
-    # campi attesi dal frontend
-    "newBusinessRoles": len(created_roles),
-    "newRoles": added_groups,
-}
+        # lasciato per compat (anche se non lo usi più)
+        "newBusinessRoles": int(newbrs),
+
+        # quello che ti serve davvero
+        "newGroupsSystem": int(len(new_groups_system_list)),
+        "newGroupsSystemList": new_groups_system_list,
+    }
+
 
 def apply_all_choices_to_last_extract() -> None:
     rebuild_ingest_candidates()

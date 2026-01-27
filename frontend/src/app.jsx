@@ -282,7 +282,7 @@ const [importMsg, setImportMsg] = useState("");
       <h3 style={{ marginTop: 0 }}>Connettore Generico (CSV)</h3>
 
       <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
-        Atteso: DisplayName;BusinessRole;Ruoli (con Ruoli separati da virgola)
+        Atteso: DisplayName;Dipartimento;Ruoli (con Ruoli separati da virgola)
       </div>
 
       <div className="row">
@@ -299,12 +299,33 @@ const [importMsg, setImportMsg] = useState("");
             if (!csvFile) return;
             try {
               setImportMsg("");
+
               const out = await importBusinessRolesCsv(csvFile);
-              setImportMsg( `Import OK: ${out.newBusinessRoles} Business Roles, ${out.newRoles} Ruoli, ${out.created_users} Utenti`);
+
+              const n = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+
+              const rowsTotal = n(out.rowsTotal ?? out.csvRowsTotal);
+              const rowsKept = n(out.rowsKept);
+              const dupDn = n(out.csvDuplicateDisplayNameRows ?? out.duplicateDisplayName);
+              const missingBR = n(out.csvRowsMissingBR ?? out.missingBusinessRole);
+              const newBRs = n(out.newBusinessRoles);
+
+              // compat con eventuali nomi diversi (se li aggiungi lato backend)
+              const createdUsers = n(out.created_users ?? out.createdUsers ?? out.createdusers);
+              const assignedUsers = n(out.assigned_users ?? out.assignedUsers ?? out.assignedusers);
+
+
+              setImportMsg(
+                `Import OK: Totale=${n(out.rowsTotal ?? out.csvRowsTotal)}, Nuovi Utenti=${n(out.rowsKept)}, ` +
+                `Nuovi Ruoli=${n(out.newGroupsSystem)}, Valore duplicato=${n(out.csvDuplicateDisplayNameRows)}, ` +
+                `Valore incompleto=${n(out.csvRowsMissingBR)}`
+);
+
             } catch (e) {
-              setImportMsg(`Import KO: ${e.message || String(e)}`);
+              setImportMsg(`Import KO: ${e?.message ?? String(e)}`);
             }
           }}
+
         >
           Importa CSV
         </button>
