@@ -588,9 +588,8 @@ def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
                 u["displayName"] = nu["displayName"]
             if nu.get("department"):
                 u["department"] = nu["department"]
-            ug = set(u.get("groups") or [])
-            ug.update(nu.get("groups") or [])
-            u["groups"] = sorted(ug)
+            u["groups"] = sorted(set(nu.get("groups") or []))  # REPLACE da connettore
+
         else:
             base_users.append(nu)
             by_username[uname] = nu
@@ -695,7 +694,7 @@ def apply_choice_for_displayname(display_name: str,
         if u.get("username") in m:
             del m[u["username"]]
 
-    state["last_extract"]["groups"] = recompute_groups_from_users(users)
+    # state["last_extract"]["groups"] = recompute_groups_from_users(users)
 
 
 # ----------------------------
@@ -1030,6 +1029,13 @@ def run_role_mining(users: List[Dict[str, Any]], n_clusters: Optional[int], role
     users = [u for u in (users or []) if not u.get("excluded")]
 
     usernames, groups, X = build_matrix(users)
+        # Colonne UI = gruppi snapshot (ultima estrazione) → NON dipendono dalle assegnazioni correnti
+    snapshot_groups = ((state.get("last_extract") or {}).get("groups") or []).copy()
+    snapshot_groups = [g for g in snapshot_groups if g]  # safety
+
+    # Se lo snapshot è vuoto (es. mai estratto), fallback ai gruppi del build_matrix
+    all_groups_ui = snapshot_groups if snapshot_groups else groups
+
     if len(usernames) < 2 or len(groups) == 0:
         return {"clusters": [], "matrix": {}, "kpi": compute_kpis(users, [], {})}
 
@@ -1061,16 +1067,24 @@ def run_role_mining(users: List[Dict[str, Any]], n_clusters: Optional[int], role
             "size": len(members),
         })
 
-    # matrix for UI
-    matrix: Dict[str, Dict[str, int]] = {}
-    for i, uname in enumerate(usernames):
-        row = {g: int(X[i, j]) for j, g in enumerate(groups)}
-        matrix[uname] = row
+            # matrix for UI (DEVE avere tutte le colonne di all_groups_ui)
+        # costruisco un mapping per i gruppi presenti in X
+        gindex = {g: j for j, g in enumerate(groups)}
+
+        matrix: Dict[str, Dict[str, int]] = {}
+        for i, uname in enumerate(usernames):
+            row = {}
+            for g in all_groups_ui:
+                j = gindex.get(g)
+                row[g] = int(X[i, j]) if j is not None else 0
+            matrix[uname] = row
+
 
     kpi = compute_kpis(users, clusters, matrix)
 
+    return {"clusters": clusters, "matrix": matrix, "kpi": kpi, "groups": all_groups_ui}
 
-    return {"clusters": clusters, "matrix": matrix, "kpi": kpi, "groups": groups}
+
 
 def ensure_last_mining() -> None:
     """
@@ -1134,6 +1148,43 @@ app.add_middleware(
 @app.get("/api/health")
 def health():
     return {"ok": True, "ts": int(time.time())}
+
+
+class ToggleUserGroupRequest(BaseModel):
+    username: str
+    group: str
+    enabled: bool  # True=assegna, False=rimuovi
+
+
+@app.post("/api/users/groups/toggle")
+def toggle_user_group(body: ToggleUserGroupRequest, username: str = Depends(require_auth)):
+    # 1) trova utente nello stato
+    users = (state.get("last_extract") or {}).get("users") or []
+    uobj = next((u for u in users if u.get("username") == body.username), None)
+    if not uobj:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 2) valida gruppo (e impedisci di “resuscitare” gruppi non più nello snapshot AD/CSV)
+    g = (body.group or "").strip()
+    if not g:
+        raise HTTPException(status_code=400, detail="Group empty")
+
+    snapshot_groups = set(((state.get("last_extract") or {}).get("groups") or []))
+    if snapshot_groups and g not in snapshot_groups:
+        raise HTTPException(status_code=400, detail="Group not in last extract snapshot")
+
+    # 3) toggle
+    current = set(uobj.get("groups") or [])
+    if body.enabled:
+        current.add(g)
+    else:
+        current.discard(g)
+
+    uobj["groups"] = sorted(current)
+
+    # IMPORTANTISSIMO: NON aggiornare state["last_extract"]["groups"] qui
+    state["mining_dirty"] = True
+    return {"ok": True, "username": body.username, "group": g, "enabled": body.enabled}
 
 
 @app.post("/api/auth/login", response_model=TokenResponse)
@@ -1289,7 +1340,7 @@ def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(req
 
     # riallinea derivati
     apply_business_roles(users)
-    state["last_extract"]["groups"] = recompute_groups_from_users(users)
+    # state["last_extract"]["groups"] = recompute_groups_from_users(users)
     state["mining_dirty"] = True
 
     return {"ok": True, "user": u}

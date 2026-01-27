@@ -623,6 +623,55 @@ const [assignH, setAssignH] = useState(() => {
   return Number.isFinite(v) && v > 0 ? v : 260;
 });
 
+async function onCellDoubleClicked(p) {
+  try {
+    setErr("");
+
+    const field = p?.colDef?.field;   // nome colonna (group)
+    const row = p?.data;              // riga (utente)
+
+    if (!field || !row?.username) return;
+
+    // Non applicare su colonne non-gruppo
+    if (
+      field === "displayName" ||
+      field === "clusterId" ||
+      field === "businessRole" ||
+      field === "roleColor" ||
+      field === "username"
+    ) {
+      return;
+    }
+
+    const v = Number(row[field] ?? 0);
+
+    // Carica l'utente reale per avere lo stato corrente dei gruppi
+    const ud = await api.get(`/api/users/${encodeURIComponent(row.username)}`);
+    const curr = (ud.user?.groups || []).slice();
+
+    let next;
+    if (v === 1) {
+      // doppio click su "1" => rimuovi
+      next = curr.filter((g) => g !== field);
+    } else {
+      // doppio click su "0" => assegna
+      if (curr.includes(field)) return; // safety
+      next = curr.concat(field).sort();
+    }
+
+    await api.post(`/api/users/${encodeURIComponent(row.username)}/update`, {
+      groups: next,
+      businessRole: ud.user?.businessRole || "Unassigned",
+    });
+
+    // Refresh: riallinea matrix/cluster
+    await run();
+  } catch (e) {
+    setErr(String(e?.message || e));
+  }
+}
+
+
 useEffect(() => {
   localStorage.setItem(SPLIT_KEY, String(assignH));
 }, [assignH]);
@@ -911,12 +960,14 @@ groupsSorted.forEach((g) => {
       <AgGridReact
       rowData={rowData}
       columnDefs={columnDefs}
+      onCellDoubleClicked={onCellDoubleClicked}
       defaultColDef={{ resizable: true, sortable: true, filter: true }}
       animateRows={true}
       quickFilterText={quick}
       rowHeight={24}
       headerHeight={34}
     />
+
 
     </div>
   </div>
