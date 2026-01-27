@@ -156,10 +156,9 @@ export default function OverprivilegedPage() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.55)",
+            background: "rgba(0,0,0,1)",
             display: "grid",
             placeItems: "center",
-            zIndex: 9999,
             padding: 16,
           }}
         >
