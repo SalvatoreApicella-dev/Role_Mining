@@ -252,3 +252,6 @@ hr.sep { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
   opacity: .75;
 }
 
+.sidebar{display:flex;flex-direction:column;}
+
+

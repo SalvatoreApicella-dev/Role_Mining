@@ -31,7 +31,7 @@ const [csvFile, setCsvFile] = useState(null);
 
   return (
     <aside className="sidebar">
-      <div className="brand">Role Mining UI</div>
+
       <div className="menu">
         <NavLink to="/analytics" className={({ isActive }) => (isActive ? "active" : "")}>Analytics</NavLink>
         <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "active" : "")}>Business Roles</NavLink>
@@ -52,6 +52,19 @@ const [csvFile, setCsvFile] = useState(null);
         <hr className="sep" />
         <button className="danger" onClick={onLogout}>Logout</button>
       </div>
+
+        <div className="brand" style={{ marginTop: "auto" }}>
+       <img
+          src="/BIP-Thumbnail-RED-on-BLUE.png"
+          alt="Logo"
+          style={{ width: "100%", maxHeight: 140, objectFit: "contain", display: "block" }}
+        />
+        <div style={{ marginTop: 8, fontSize: 20, color: "var(--muted)", textAlign: "center" }}>
+          Role Builder AI
+        </div>
+
+      </div>
+
     </aside>
   );
 }
@@ -78,6 +91,12 @@ function Login() {
   return (
     <div className="main" style={{ display: "grid", placeItems: "center", height: "100vh" }}>
       <div className="panel" style={{ width: 420 }}>
+        <img
+          src="/BIP-Thumbnail-RED-on-BLUE.png"
+          alt="Logo"
+          style={{ width: 320, margin: "0 auto 14px", display: "block" }}
+        />
+
         <h2 style={{ marginTop: 0 }}>Login</h2>
         <p style={{ color: "var(--muted)", marginTop: -6 }}>
           Mock AD: admin / admin123
