@@ -39,7 +39,7 @@ from fastapi import HTTPException
 
 # Cache dell’ultima esecuzione (serve per drilldown)
 
-BROAD_MARKERS = ['all','tutti','tutte','full','global','everyone','any','anyone','everybody']
+BROAD_MARKERS = ['all','tutti','tutte','full','global','everyone','any']
 
 def _tokens(s: str) -> list[str]:
     s = (s or '').lower()
@@ -216,7 +216,7 @@ def build_cluster_quality_items(clusters: list, matrix: dict) -> list[dict]:
             "clusterIndex": c_idx,
             "clusterName": c.get("name") or f"Cluster {c_idx}",
             "avgDistance": avg_distance,
-            "worstUsers": user_items[:50],  # top 50 driver
+            "worstUsers": user_items[:500],  # top 50 driver
         })
 
     out.sort(key=lambda r: r["avgDistance"], reverse=True)
@@ -1323,7 +1323,7 @@ def run_role_mining(
     snapshot_groups = [g for g in snapshot_groups if g]  # safety
 
     # Se lo snapshot è vuoto (es. mai estratto), fallback ai gruppi del build_matrix
-    all_groups_ui = snapshot_groups if snapshot_groups else groups
+    all_groups_ui = groups
 
     # dataset troppo piccolo
     if len(usernames) < 2 or len(groups) == 0:
@@ -1537,12 +1537,65 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
             )
         )
 
-    # 2) DB di sistema: append/upsert
-    # _merge_users_into_last_extract(users, ou=req.ou)
+        # 2) DB di sistema: MERGE (AD dentro pool esistente, senza distruggere CSV) + stats per ClusterQuality
     users = filter_and_dedupe_connector_users(users, source="ad")
-    replace_last_extract_from_connector(users, ou=req.ou, source="ad")
+
+    # merge su username (state["last_extract"]["users"] è una LISTA)
+    existing_list = (state.get("last_extract") or {}).get("users") or []
+    existing_by_uname = {u.get("username"): u for u in existing_list if u.get("username")}
+
+    added_users = 0
+    updated_users = 0
+
+    for u in users:
+        uname = u.get("username")
+        if not uname:
+            continue
+
+        if uname in existing_by_uname:
+            cur = existing_by_uname[uname]
+            # merge gruppi: unione, non overwrite
+            cur["groups"] = sorted(set((cur.get("groups") or []) + (u.get("groups") or [])))
+            # aggiorna campi “anagrafici” se arrivano da AD
+            for k in ["displayName", "department", "businessRole", "lastLogin"]:
+                if u.get(k) is not None and u.get(k) != "":
+                    cur[k] = u.get(k)
+            updated_users += 1
+        else:
+            existing_by_uname[uname] = u
+            added_users += 1
+
+    merged_users = list(existing_by_uname.values())
+
+    state.setdefault("last_extract", {})
+    state["last_extract"]["users"] = merged_users
+    state["last_extract"]["ou"] = req.ou
+    state["last_extract"]["groups"] = sorted({g for uu in merged_users for g in (uu.get("groups") or [])})
+    state["last_extract"]["ts"] = time.time()
+
+    # auto-assegnazione BR post-import + sync BR catalog
     rerun_auto_business_roles_after_connector(state["last_extract"]["users"])
     new_brs = sync_roles_from_users(state["last_extract"]["users"])
+
+    # IMPORTANTISSIMO: stats per la pagina Cluster Quality (come CSV)
+    ad_users = state["last_extract"]["users"]
+    missing_dept = sum(1 for uu in ad_users if not (uu.get("department") or "").strip())
+    missing_roles = sum(1 for uu in ad_users if not (uu.get("groups") or []))
+
+    state["last_ingest_stats"] = {
+        "source": "ad",
+        "rowsTotal": len(ad_users),          # record AD letti (post filter/dedupe)
+        "rowsKept": len(merged_users),        # record a sistema dopo merge
+        "duplicateDisplayName": 0,        # se vuoi calcolarlo, aggiungilo qui
+        "missingDepartment": missing_dept,
+        "missingDisplayName": 0,
+        "missingUsername": 0,
+        "missingRoles": missing_roles,
+        "addedUsers": added_users,
+        "updatedUsers": updated_users,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+
 
 
 
@@ -1557,6 +1610,11 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
     rebuild_ingest_candidates()
     apply_duplicate_displayname_resolution()
     state["mining_dirty"] = True
+    
+    users = active_users(state['last_extract']['users'])
+    res = run_role_mining(users, None, 0.6)
+    state['last_mining'] = res
+
 
     return ExtractResponse(
         ou=state["last_extract"]["ou"],
@@ -1702,6 +1760,15 @@ def kpi_drilldown(metric: str, username: str = Depends(require_auth)):
             "items": build_cluster_quality_items(...),
             "rejects": state.get("last_rejects") or []
             }
+    
+    if metric == "cluster-quality":
+        clusters = state.get("last_mining", {}).get("clusters", [])
+        matrix = state.get("last_mining", {}).get("matrix", {})
+        return {
+            "metric": "cluster-quality",
+            "items": build_cluster_quality_items(clusters, matrix),  # dal paste.txt
+            "stats": state.get("last_ingest_stats", {})  # aggiunge stats
+        }
 
     raise HTTPException(status_code=404, detail="Unknown metric")
 
