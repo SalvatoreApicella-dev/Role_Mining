@@ -764,7 +764,7 @@ def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: s
             })
 
         chosen.append(u)
-
+    log("INFO", f"INGEST STATS ({source}): {stats}")
     stats["rowsKept"] = int(len(chosen))
     state["last_rejects"] = rejects
     return chosen
@@ -1275,8 +1275,8 @@ def compute_kpis(
 
     if total > 0:
         dup = int(ingest.get("duplicateDisplayName") or 0)
-        miss_dept = int(ingest.get("missingDepartment") or 0)
-        miss_br = int(ingest.get("missingBusinessRole") or 0)
+        # miss_dept = int(ingest.get("missingDepartment") or 0)
+        # miss_br = int(ingest.get("missingBusinessRole") or 0)
         miss_dn = int(ingest.get("missingDisplayName") or 0)
         miss_user = int(ingest.get("missingUsername") or 0)
 
@@ -1286,8 +1286,8 @@ def compute_kpis(
 
         penalty = (
             1.00 * (dup / total) +
-            0.70 * (miss_dept / total) +
-            0.70 * (miss_br / total) +
+            # 0.70 * (miss_dept / total) +
+            # 0.70 * (miss_br / total) +
             0.40 * (miss_dn / total) +
             0.40 * (miss_user / total)
         )
