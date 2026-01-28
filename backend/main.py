@@ -752,9 +752,16 @@ def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: s
         if not dept:
             stats["missingDepartment"] += 1
             rejects.append({"source": source, "reason": "Missing department", "user": u, "ts": stats["ts"]})
-        if not br:
+        count_missing_br = not str(source).lower().startswith("ad")
+
+        if count_missing_br and not br:
             stats["missingBusinessRole"] += 1
-            rejects.append({"source": source, "reason": "Missing businessRole", "user": u, "ts": stats["ts"]})
+            rejects.append({
+                "source": source,
+                "reason": "Missing businessRole",
+                "user": u,
+                "ts": stats.get("ts"),
+            })
 
         chosen.append(u)
 
@@ -1264,6 +1271,7 @@ def compute_kpis(
     # --- clusterQuality = data-quality score (ingest) ---
     ingest = state.get("last_ingest_stats") or {}
     total = int(ingest.get("rowsTotal") or 0)
+    src = str(ingest.get("source") or "").lower()
 
     if total > 0:
         dup = int(ingest.get("duplicateDisplayName") or 0)
@@ -1271,6 +1279,10 @@ def compute_kpis(
         miss_br = int(ingest.get("missingBusinessRole") or 0)
         miss_dn = int(ingest.get("missingDisplayName") or 0)
         miss_user = int(ingest.get("missingUsername") or 0)
+
+        if src.startswith("ad"):
+            miss_br = 0
+            dup = 0
 
         penalty = (
             1.00 * (dup / total) +
