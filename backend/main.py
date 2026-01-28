@@ -39,11 +39,13 @@ from fastapi import HTTPException
 
 # Cache dell’ultima esecuzione (serve per drilldown)
 
-BROAD_MARKERS = {"all", "tutti", "tutte", "full", "global", "everyone", "any"}
+BROAD_MARKERS = ['all','tutti','tutte','full','global','everyone','any','anyone','everybody']
 
 def _tokens(s: str) -> list[str]:
-    s = (s or "").lower()
-    s = re.sub(r"[^a-z0-9]+", " ", s)
+    s = (s or '').lower()
+  # Treat underscore/dash like separators too, so VPN_ALL -> ["vpn","all"]
+    s = s.replace('_', ' ').replace('-', ' ')
+    s = re.sub(r'[^a-z0-9]', ' ', s)
     return [t for t in s.split() if t]
 
 def _family_key(role_name: str) -> str:
@@ -107,10 +109,37 @@ PREDEFINED_COLORS = [
     "F39C12", "1ABC9C", "E74C3C", "9B59B6", "3498DB", "F1C40F"
 ]
 
+def predict_redundant(broad_role: str, specific_role: str, family: str, user_groups: set[str]) -> float:
+  bt = set(_tokens(broad_role))
+  st = set(_tokens(specific_role))
+  if not bt or not st:
+    return 0.0
+
+  # Similarità nome ruolo (Jaccard su token)
+  j_role = len(bt & st) / max(1, len(bt | st))
+
+  # Broadness
+  b_is_broad = 1.0 if _is_broad(broad_role) else 0.0
+
+  # Overlap token specific vs gruppi reali utente
+  st2 = [t for t in st if len(t) >= 3]
+  hits = 0
+  for g in user_groups:
+    gl = (g or "").lower()
+    if any(t in gl for t in st2):
+      hits += 1
+  g_overlap = hits / max(1, len(user_groups))
+
+  p = 0.55 * j_role + 0.30 * b_is_broad + 0.15 * g_overlap
+  return float(max(0.0, min(1.0, p)))
+
+
+
 def build_ai_detection_items(matrix: dict) -> list[dict]:
     items = []
     for uname, row in (matrix or {}).items():
         roles = [r for r, v in (row or {}).items() if int(v) == 1]
+        user_groups = _matrix_user_roles(matrix, uname)
 
         fam = defaultdict(list)
         for r in roles:
@@ -121,17 +150,37 @@ def build_ai_detection_items(matrix: dict) -> list[dict]:
         for family, rs in fam.items():
             broad = [r for r in rs if _is_broad(r)]
             specific = [r for r in rs if not _is_broad(r)]
-            if broad and specific:
+            
+            if not broad or not specific:
+                continue
+
+            redundant = []
+            kept = set(specific)
+
+            for b in broad:
+                probs = [predict_redundant(b, s, family, user_groups) for s in specific]
+                p = max(probs) if probs else 0.0
+                if p >= 0.50:
+                    redundant.append(b)
+
+            # Fallback: se hai broad + specific ma l'algoritmo non è sicuro, 
+            # mostrali comunque come "sospetti" invece di nasconderli
+            if not redundant and broad:
+                 redundant = list(broad)
+            
+            if redundant:
                 items.append({
                     "username": uname,
                     "family": family,
-                    "redundantRoles": sorted(broad),
-                    "keptRoles": sorted(specific),
-                    "redundantCount": len(broad),
+                    "redundantRoles": sorted(set(redundant)),
+                    "keptRoles": sorted(list(kept)),
+                    "redundantCount": len(set(redundant)),
                 })
 
+    # Ordina per chi ne ha di più
     items.sort(key=lambda x: x["redundantCount"], reverse=True)
     return items
+
 
 def build_cluster_quality_items(clusters: list, matrix: dict) -> list[dict]:
     """
@@ -1103,6 +1152,8 @@ def compute_ai_detection(matrix: dict) -> dict:
 
     for uname, row in (matrix or {}).items():
         roles = [r for r, v in (row or {}).items() if int(v) == 1]
+        user_groups = _matrix_user_roles(matrix, uname)
+
         total_assignments += len(roles)
 
         fam = defaultdict(list)
@@ -1112,11 +1163,22 @@ def compute_ai_detection(matrix: dict) -> dict:
                 fam[k].append(r)
 
         has_redundancy = False
+
         for rs in fam.values():
             broad = [r for r in rs if _is_broad(r)]
             specific = [r for r in rs if not _is_broad(r)]
-            if broad and specific:
-                redundant_assignments += len(broad)
+            if not broad or not specific:
+                continue
+
+            red = 0
+            for b in broad:
+                probs = [predict_redundant(b, s, _family_key(b), user_groups) for s in specific]
+                p = max(probs) if probs else 0.0
+                if p >= 0.50:
+                    red += 1
+
+            if red > 0:
+                redundant_assignments += red
                 has_redundancy = True
 
         if has_redundancy:
@@ -1379,6 +1441,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/api/kpi/drilldown")
+def kpidrilldown_q(metric: str, username: str = Depends(require_auth)):
+    return kpi_drilldown(metric, username)
 
 
 
@@ -2253,8 +2318,56 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         state["choice_by_displayName"].setdefault(candidate["displayName"], candidate["candidateId"])
 
     # ---------- REPLACE: dedupe + last_extract ----------
-    clean_users = filter_and_dedupe_connector_users(new_users, source="csv")
-    replace_last_extract_from_connector(clean_users, ou="CSV", source="csv")
+    # ---------- MERGE con existing (AD + prev CSV) ----------
+        existing_users_list = state.get("last_extract", {}).get("users", [])
+        existing_users_dict = {
+            user.get("username", _slug_username(user.get("displayName", f"user_{i}"))): user
+            for i, user in enumerate(existing_users_list)
+        }
+
+        added_users = 0
+        updated_users = 0
+        created_brs = set()
+
+        for user in new_users:
+            uname = user["username"]
+            if uname in existing_users_dict:
+                # MERGE: append gruppi unici, aggiorna BR/dept
+                existing_users_dict[uname]["groups"] = sorted(
+                    set(existing_users_dict[uname].get("groups", []) + user["groups"])
+                )
+                if user.get("businessRole"):
+                    existing_users_dict[uname]["businessRole"] = user["businessRole"]
+                if user.get("department"):
+                    existing_users_dict[uname]["department"] = user["department"]
+                updated_users += 1
+            else:
+                existing_users_dict[uname] = user.copy()  # evita mutazioni
+                added_users += 1
+            
+            if user.get("businessRole"):
+                created_brs.add(user["businessRole"])
+
+        # Lista finale merged (compatibile con tuo codice)
+        merged_users = list(existing_users_dict.values())
+
+        # Salva in state
+        state["last_extract"]["users"] = merged_users
+        if 'recompute_groups_from_users' in globals():
+            state["last_extract"]["groups"] = recompute_groups_from_users(merged_users)
+        state["last_extract"]["ou"] = "MERGED"
+        state["last_extract"]["ts"] = time.time()
+
+        # Stats UPDATE (sovrascrivi quelle vecchie)
+        state["last_ingest_stats"] = {
+            **state.get("last_ingest_stats", {}),
+            "rowsKept": len(merged_users),
+            "addedUsers": added_users,
+            "updatedUsers": updated_users,
+            "newBusinessRoles": len(created_brs),
+            "source": "csv_merged"
+        }
+
 
     # auto-assegnazione BR post-import (dept, rolemeta, brdb...)
     rerun_auto_business_roles_after_connector(state["last_extract"]["users"])
@@ -2266,7 +2379,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     state["last_ingest_stats"] = {
         "source": "csv",
         "rowsTotal": csv_rows_total,
-        "rowsKept": len(clean_users),
+        "rowsKept": len(merged_users),
         "duplicateDisplayName": csv_dup_dn_rows,
         "missingDepartment": csv_missing_department,
         "missingBusinessRole": csv_missing_businessrole,
@@ -2291,17 +2404,20 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
 
     log(
         "INFO",
-        f"CSV import by {username}: rows={csv_rows_total}, kept={len(clean_users)}, "
+        f"CSV import by {username}: rows={csv_rows_total}, kept={len(merged_users)}, "
         f"dupRows={csv_dup_dn_rows}, missingDept={csv_missing_department}, "
         f"missingBR={csv_missing_businessrole}, missingRoles={csv_missing_roles}, newBRs={new_brs}"
     )
 
     return {
     "ok": True,
+    "addedUsers": added_users,
+    "updatedUsers": updated_users,
+    "totalUsers": len(merged_users),
 
     # numeriche "stabili" (quelle che il frontend userà)
     "rowsTotal": int(csv_rows_total),
-    "rowsKept": int(len(clean_users)),
+    "rowsKept": int(len(existing_users_dict)),
     "newBusinessRoles": int(new_brs),
 
     # back-compat (se in giro hai ancora frontend/pezzi vecchi)
@@ -2310,8 +2426,8 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     "csvDuplicateDisplayNameRows": int(csv_dup_dn_rows),
 
     # opzionali ma utili per messaggio UI e debug
-    "created_users": int(max(0, len(clean_users))),   # qui puoi mettere un contatore reale se lo calcoli
-    "assigned_users": int(max(0, len(clean_users))),  # idem: se assegni sempre un BR post-fallback, coincide
+    "created_users": int(max(0, len(existing_users_dict))),   # qui puoi mettere un contatore reale se lo calcoli
+    "assigned_users": int(max(0, len(existing_users_dict))),  # idem: se assegni sempre un BR post-fallback, coincide
 }
 
 
