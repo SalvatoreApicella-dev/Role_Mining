@@ -114,7 +114,7 @@ export const api = {
     request("/api/rolemining/run", { method: "POST", body: { n_clusters, role_support } }),
   roleMiningLast: () => request("/api/rolemining/last"),
 
-    kpiDrilldown: (metric) => request(`/api/kpi/drilldown/${encodeURIComponent(metric)}`),
+  kpiDrilldown: (metric) => request(`/api/kpi/drilldown?metric=${encodeURIComponent(metric)}`),
 
   kpi: () => request("/api/kpi"),
   logs: () => request("/api/logs"),
