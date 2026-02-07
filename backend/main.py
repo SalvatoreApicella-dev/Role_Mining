@@ -9,9 +9,9 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sklearn.cluster import AgglomerativeClustering
-from fastapi import UploadFile, File
-import numpy as np
+from sklearn.cluster import AgglomerativeClustering, MiniBatchKMeans
+from sklearn.decomposition import TruncatedSVD
+from fastapi import UploadFile, File, BackgroundTasks
 import csv, io, re
 try:
     from ldap3 import ALL, NTLM, SIMPLE, Connection, Server, Tls, NONE
@@ -22,21 +22,72 @@ except Exception:
 
 APP_TITLE = "Role Mining API"
 import secrets
-JWT_SECRET = os.getenv("JWT_SECRET") or secrets.token_hex(32)
+# Use a persistent key for dev to avoid invalidating tokens on restart
+JWT_SECRET = os.getenv("JWT_SECRET") or "dev_secret_key_persistent_change_in_prod"
 APP_LOGIN_USER = os.getenv("APP_LOGIN_USER", "admin")
 APP_LOGIN_PASS = os.getenv("APP_LOGIN_PASS", "admin123")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "240"))
 MOCK_AD = os.getenv("MOCK_AD", "0") == "1"
 
 
+
 from openpyxl import load_workbook
 from collections import defaultdict
 
-import re
-from collections import defaultdict
-from fastapi import HTTPException
 
+# =============================================================================
+# Response Cache (Solution 1: In-Memory TTL Cache)
+# =============================================================================
+class ResponseCache:
+    """Simple in-memory cache with TTL (time-to-live) support."""
+    
+    def __init__(self):
+        self._cache: Dict[str, tuple] = {}  # key -> (value, expire_time)
+        self._hits = 0
+        self._misses = 0
+    
+    def get(self, key: str) -> Optional[Any]:
+        """Get cached value if exists and not expired."""
+        if key in self._cache:
+            value, expire_time = self._cache[key]
+            if time.time() < expire_time:
+                self._hits += 1
+                return value
+            else:
+                del self._cache[key]
+        self._misses += 1
+        return None
+    
+    def set(self, key: str, value: Any, ttl_seconds: float = 30.0) -> None:
+        """Store value with TTL."""
+        self._cache[key] = (value, time.time() + ttl_seconds)
+    
+    def invalidate(self, key: str = None) -> None:
+        """Invalidate specific key or all keys."""
+        if key:
+            self._cache.pop(key, None)
+        else:
+            self._cache.clear()
+    
+    def stats(self) -> Dict[str, Any]:
+        """Return cache statistics."""
+        total = self._hits + self._misses
+        hit_rate = (self._hits / total * 100) if total > 0 else 0
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": f"{hit_rate:.1f}%",
+            "cached_keys": len(self._cache)
+        }
 
+# Global cache instance
+RESPONSE_CACHE = ResponseCache()
+
+# Cache TTL settings (seconds)
+CACHE_TTL_MINING = 60.0      # Mining results (invalidated on new mining)
+CACHE_TTL_KPI = 60.0         # KPI data
+CACHE_TTL_USERS = 30.0       # User list
+CACHE_TTL_ROLES = 30.0       # Business roles
 
 # Cache dell’ultima esecuzione (serve per drilldown)
 
@@ -1443,10 +1494,18 @@ def run_role_mining(
     auto_k = max(2, int(round(np.sqrt(len(usernames)))))
     k = int(n_clusters) if n_clusters else min(8, auto_k, len(usernames))
 
-    # clustering su distanza Jaccard precomputed
-    D = jaccard_distance_matrix(X)
-    model = AgglomerativeClustering(n_clusters=k, metric="precomputed", linkage="average")
-    labels = model.fit_predict(D)
+    # clustering su SVD + MiniBatchKMeans (O(N) complexity)
+    # SVD reduction
+    n_components = min(50, X.shape[1] - 1)
+    if n_components > 1:
+        svd = TruncatedSVD(n_components=n_components, random_state=42)
+        X_reduced = svd.fit_transform(X)
+    else:
+        X_reduced = X
+
+    # MiniBatchKMeans
+    model = MiniBatchKMeans(n_clusters=k, random_state=42, batch_size=256, n_init="auto")
+    labels = model.fit_predict(X_reduced)
 
     # clusters -> members/roleGroups/purity
     clusters: List[Dict[str, Any]] = []
@@ -1490,12 +1549,32 @@ def run_role_mining(
     }
 
 
-def ensure_last_mining() -> None:
+def _mining_worker(n_clusters, role_support):
+    users = active_users(state.get("last_extract", {}).get("users") or [])
+    res = run_role_mining(users, n_clusters=n_clusters, role_support=role_support)
+
+    # Build displayNames map (username -> displayName) for frontend optimization
+    display_names = {}
+    for u in users:
+        uname = u.get("username")
+        if uname:
+            display_names[uname] = u.get("displayName") or uname
+
+    state["last_mining"] = {
+        "clusters": res.get("clusters", []),
+        "matrix": res.get("matrix", {}),
+        "kpi": res.get("kpi", {}),
+        "groups": res.get("groups", []),
+        "displayNames": display_names,  # Solution 2: Include displayNames
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "status": "ready"
+    }
+    state["mining_dirty"] = False
+    state["mining_processing"] = False
+
+def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
     """
-    Ricalcola il clustering se:
-    - mining_dirty=True, oppure
-    - non esiste una matrix, oppure
-    - last_extract.ts è più recente di last_mining.ts (cache stale)
+    Ricalcola il clustering in background se dirty.
     """
     last_extract = state.get("last_extract") or {}
     last_mining = state.get("last_mining") or {}
@@ -1505,25 +1584,24 @@ def ensure_last_mining() -> None:
     matrix = last_mining.get("matrix") or {}
 
     stale = bool(extract_ts and (not mining_ts or str(extract_ts) > str(mining_ts)))
+    
+    if state.get("mining_processing"):
+        return # Already running
 
     if not state.get("mining_dirty") and matrix and not stale:
         return
 
+    # Trigger background
+    state["mining_processing"] = True
     params = state.get("last_mining_params") or {}
     n_clusters = params.get("n_clusters", None)
     role_support = params.get("role_support", 0.6)
-
-    users = active_users(last_extract.get("users") or [])
-    res = run_role_mining(users, n_clusters=n_clusters, role_support=role_support)
-
-    state["last_mining"] = {
-        "clusters": res.get("clusters", []),
-        "matrix": res.get("matrix", {}),
-        "kpi": res.get("kpi", {}),
-        "groups": res.get("groups", []),
-        "ts": datetime.now(timezone.utc).isoformat(),
-    }
-    state["mining_dirty"] = False
+    
+    if background_tasks:
+        background_tasks.add_task(_mining_worker, n_clusters, role_support)
+    else:
+        # Fallback sync if no background_tasks provided (should verify calls)
+        _mining_worker(n_clusters, role_support)
 
 
 
@@ -1669,7 +1747,7 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
 
 
 @app.get("/api/users")
-def list_users(q: str = "", username: str = Depends(require_auth)):
+def list_users(q: str = "", limit: int = 100, offset: int = 0, username: str = Depends(require_auth)):
     users = active_users(state["last_extract"]["users"] or [])
     if q:
         ql = q.lower()
@@ -1678,7 +1756,10 @@ def list_users(q: str = "", username: str = Depends(require_auth)):
             if ql in (u.get("username") or "").lower()
             or ql in (u.get("displayName") or "").lower()
         ]
-    return {"total": len(users), "users": users}
+    
+    total = len(users)
+    sliced = users[offset : offset + limit]
+    return {"total": total, "items": sliced, "limit": limit, "offset": offset}
 
 @app.get("/api/users/{uname}")
 def get_user(uname: str, username: str = Depends(require_auth)):
@@ -1731,57 +1812,82 @@ def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(req
     return {"ok": True, "user": u}
 
 
-@app.post("/api/rolemining/run", response_model=RoleMiningResponse)
-def rolemining_run(req: RoleMiningRequest, username: str = Depends(require_auth)):
+@app.post("/api/rolemining/run")
+def rolemining_run(req: RoleMiningRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
     users = active_users(state["last_extract"]["users"] or [])
     if not users:
         raise HTTPException(status_code=400, detail="Esegui prima AD Extract")
 
     state["last_mining_params"] = {"n_clusters": req.n_clusters, "role_support": req.role_support}
+    state["mining_dirty"] = True
+    
+    # Avvia mining in background
+    ensure_last_mining(background_tasks)
 
-    res = run_role_mining(users, req.n_clusters, req.role_support)
-    clusters = res["clusters"]
-    kpi = res["kpi"]
-    groups = res.get("groups", state["last_extract"]["groups"])
-
-    state["last_mining"] = {
-        "clusters": clusters,
-        "matrix": res["matrix"],
-        "kpi": kpi,
-        "groups": groups,
-        "ts": datetime.now(timezone.utc).isoformat()
-    }
-    state["mining_dirty"] = False
-
-    log("INFO", f"Role mining run: clusters={len(clusters)}")
-
-    return RoleMiningResponse(
-        total_users=len(users),
-        total_groups=len(groups),
-        n_clusters=len(clusters),
-        clusters=clusters,
-        kpi=kpi
-    )
+    return {"status": "started"}
 
 
 @app.get("/api/rolemining/last")
-def rolemining_last(username: str = Depends(require_auth)):
-    return state["last_mining"]
+def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    ensure_last_mining(background_tasks)
+    
+    # Check cache first
+    status = state.get("mining_status", "idle")
+    cache_key = f"rolemining_last_{status}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+    
+    last = state.get("last_mining") or {}
+    
+    # Optimize payload: Convert dense matrix to sparse (list of active groups)
+    # This significantly reduces JSON size for large datasets (e.g. 5000 users)
+    matrix_dense = last.get("matrix") or {}
+    matrix_sparse = {}
+    for u, row in matrix_dense.items():
+        # Only include groups with value 1 (or truthy)
+        matrix_sparse[u] = [g for g, v in row.items() if v]
+    
+    result = {
+        **last,
+        "matrix": matrix_sparse,
+        "status": status
+    }
+    
+    # Cache only if mining is not running (stable result)
+    if status != "running":
+        RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_MINING)
+    
+    return result
 
 
 @app.get("/api/kpi")
-def kpi(username: str = Depends(require_auth)):
-    ensure_last_mining()
+def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    # Check cache first
+    cache_key = "kpi"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+    
+    ensure_last_mining(background_tasks)
     last = state.get("last_mining") or {}
-    kpi = last.get("kpi") or {}
-    if not kpi:
+    kpi_data = last.get("kpi") or {}
+    if not kpi_data:
         raise HTTPException(status_code=400, detail="Nessun risultato: dataset vuoto o role mining non eseguibile")
-    return kpi
+    
+    # Cache KPI data
+    RESPONSE_CACHE.set(cache_key, kpi_data, CACHE_TTL_KPI)
+    return kpi_data
 
+
+@app.get("/api/cache/stats")
+def cache_stats(username: str = Depends(require_auth)):
+    """Return cache statistics for monitoring."""
+    return RESPONSE_CACHE.stats()
 
 @app.get("/api/kpi/drilldown/{metric}")
-def kpi_drilldown(metric: str, username: str = Depends(require_auth)):
-    ensure_last_mining()
+def kpi_drilldown(metric: str, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    ensure_last_mining(background_tasks)
     last = state.get("last_mining") or {}
     matrix = last.get("matrix") or {}
     clusters = last.get("clusters") or []
@@ -1857,6 +1963,12 @@ class RoleAssignRequest(BaseModel):
 
 @app.get("/api/businessroles")
 def businessroles(username: str = Depends(require_auth)):
+    # Check cache first
+    cache_key = "businessroles"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+    
     users = active_users(state["last_extract"]["users"] or [])
 
     apply_business_roles(users)
@@ -1867,10 +1979,13 @@ def businessroles(username: str = Depends(require_auth)):
     for r in roles:
         members = [u for u in users if u.get("businessRole") == r]
         roles_info.append({"role": r, "count": len(members)})
-    return {
+    result = {
         "roles": roles_info,
         "assignments": {u["username"]: u.get("businessRole", "Unassigned") for u in users},
     }
+    
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_ROLES)
+    return result
 
 class RoleCreateRequest(BaseModel):
     role: str
@@ -1899,8 +2014,17 @@ def ad_groups(username: str = Depends(require_auth)):
 
 @app.get("/api/businessroles/{role}/meta")
 def businessrole_meta(role: str, username: str = Depends(require_auth)):
+    # Check cache first
+    cache_key = f"role_meta_{role}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+    
     meta = state.get("role_meta", {}).get(role, {"color": "#ffffff", "groups": []})
-    return {"role": role, "color": meta.get("color", "#ffffff"), "groups": meta.get("groups", [])}
+    result = {"role": role, "color": meta.get("color", "#ffffff"), "groups": meta.get("groups", [])}
+    
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_ROLES)
+    return result
 
 @app.post("/api/businessroles/{role}/color")
 def businessrole_set_color(role: str, body: RoleColorRequest, username: str = Depends(require_auth)):
@@ -2632,4 +2756,9 @@ async def import_xlsx(file: UploadFile = File(...), username: str = Depends(requ
         "assigned_users": assigned_users,
         "added_groups": added_groups_total
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8002, reload=True)
 

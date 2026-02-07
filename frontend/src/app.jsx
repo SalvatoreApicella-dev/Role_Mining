@@ -381,30 +381,42 @@ function Connettori() {
 function Utenti() {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [limit] = useState(50);
+  const [offset, setOffset] = useState(0);
   const [err, setErr] = useState("");
   const nav = useNavigate();
 
 
-  async function load() {
+  async function load(currOffset = 0) {
     try {
       setErr("");
-      const res = await api.users(q);
-      setRows(res.users || []);
+      setOffset(currOffset);
+      const res = await api.users(q, limit, currOffset);
+      setRows(res.items || []);
+      setTotal(res.total || 0);
     } catch (e) {
       setErr(String(e.message || e));
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(0); }, []);
+
+  function goPrev() {
+    if (offset - limit >= 0) load(offset - limit);
+  }
+  function goNext() {
+    if (offset + limit < total) load(offset + limit);
+  }
 
   return (
     <div className="main">
-      <h2 style={{ marginTop: 0 }}>Utenti</h2>
+      <h2 style={{ marginTop: 0 }}>Utenti ({total})</h2>
 
       <div className="panel">
         <div className="row">
           <input style={{ width: 360 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Filtro (username/displayName)" />
-          <button className="primary" onClick={load}>Cerca</button>
+          <button className="primary" onClick={() => load(0)}>Cerca</button>
         </div>
 
         <hr className="sep" />
@@ -432,6 +444,14 @@ function Utenti() {
             ))}
           </tbody>
         </table>
+
+        <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
+          <button disabled={offset === 0} onClick={goPrev}>Prev</button>
+          <span style={{ color: "var(--muted)", alignSelf: "center", fontSize: 13 }}>
+            Page {Math.floor(offset / limit) + 1} / {Math.ceil(total / limit) || 1}
+          </span>
+          <button disabled={offset + limit >= total} onClick={goNext}>Next</button>
+        </div>
 
         {err && <div className="err">{err}</div>}
       </div>
@@ -791,6 +811,8 @@ function Cluster() {
   const [roleFilter, setRoleFilter] = useState("All");
 
   const [roleData, setRoleData] = useState({ roles: [], assignments: {} });
+  const [assignPage, setAssignPage] = useState(0);
+  const ASSIGN_PAGE_SIZE = 50;
 
   async function loadRoles() {
     const r = await api.businessRoles(); // {roles:[{role,count}], assignments:{user:role}}
@@ -824,17 +846,30 @@ function Cluster() {
   }
 
 
-  async function run() {
+  // Load existing mining data (called on mount - doesn't trigger new mining)
+  async function load() {
     try {
       setErr("");
-      const n = nClusters ? Number(nClusters) : null;
-      await api.roleMiningRun(Number.isFinite(n) ? n : null, Number(roleSupport));
+      // Fetch existing mining result (may be cached on backend)
       const last = await api.roleMiningLast();
-      setMining(last);
-      const u = await api.users("");
-      const idx = {};
-      (u.users || []).forEach(x => { idx[x.username] = x.displayName; });
-      setUsersIndex(idx);
+
+      if (last.status === "running") {
+        // Mining in progress - poll for completion
+        setMining({ ...last, isComputing: true });
+        let current = last;
+        while (current.status === "running") {
+          await new Promise(r => setTimeout(r, 1000));
+          current = await api.roleMiningLast();
+          setMining({ ...current, isComputing: true });
+        }
+        setMining(current);
+        setUsersIndex(current.displayNames || {});
+      } else if (last.matrix && Object.keys(last.matrix).length > 0) {
+        // Has existing data - use it
+        setMining(last);
+        setUsersIndex(last.displayNames || {});
+      }
+      // If no data, leave mining as null (shows empty state)
 
       await loadRoles();
     } catch (e) {
@@ -842,9 +877,39 @@ function Cluster() {
     }
   }
 
-  useEffect(() => { run(); }, []);
+  // Run new mining (called when user clicks button)
+  async function run() {
+    try {
+      setErr("");
+      setMining(null); // Clear previous mining to show loading
+      const n = nClusters ? Number(nClusters) : null;
+      await api.roleMiningRun(Number.isFinite(n) ? n : null, Number(roleSupport));
+
+      // Polling
+      let last = await api.roleMiningLast();
+      while (last.status === "running") {
+        setMining({ ...last, isComputing: true });
+        await new Promise(r => setTimeout(r, 1000));
+        last = await api.roleMiningLast();
+      }
+
+      setMining(last);
+
+      // Solution 2: Use displayNames from mining response instead of fetching 10k users
+      // The backend now includes displayNames map in the mining result
+      const displayNamesFromMining = last.displayNames || {};
+      setUsersIndex(displayNamesFromMining);
+
+      await loadRoles();
+    } catch (e) {
+      setErr(String(e.message || e));
+    }
+  }
+
+  useEffect(() => { load(); }, []);
 
   const { columnDefs, rowData } = useMemo(() => {
+    if (mining?.isComputing) return { columnDefs: [], rowData: [] };
     if (!mining || !mining.matrix || !mining.groups) return { columnDefs: [], rowData: [] };
 
     const groups = mining.groups;
@@ -857,14 +922,27 @@ function Cluster() {
       const businessRole = roleData.assignments?.[u] || "Unassigned";
       const roleColor = roleMetaByRole?.[businessRole]?.color || "#111a2e";
 
-      return {
+      const userMatrix = mining.matrix[u];
+      // Support sparse matrix (List of groups) or legacy dense matrix (Dict)
+      const userGroupsSparse = Array.isArray(userMatrix)
+        ? new Set(userMatrix)
+        : new Set(Object.entries(userMatrix || {}).filter(([k, v]) => v).map(([k]) => k));
+
+      // Construct row object for AG Grid (needs flat properties for columns)
+      const rowObj = {
         username: u,
         displayName: usersIndex?.[u] || u,
         clusterId: clusterByUser[u] ?? -1,
         businessRole,
         roleColor,
-        ...mining.matrix[u]
       };
+
+      // Fill group columns: 1 if present, 0 otherwise
+      groups.forEach(g => {
+        rowObj[g] = userGroupsSparse.has(g) ? 1 : 0;
+      });
+
+      return rowObj;
     });
 
 
@@ -937,11 +1015,14 @@ function Cluster() {
 
 
     return { columnDefs: cols, rowData: rows };
-  }, [mining, roleData, roleFilter]);
+  }, [mining, roleData, roleFilter, roleMetaByRole, groupRoleMap]);
 
   return (
     <div className="main">
-      <h2 style={{ marginTop: 0 }}>Business Role Model</h2>
+      <h2 style={{ marginTop: 0 }}>
+        Business Role Model
+        {mining?.isComputing && <span style={{ fontSize: "0.6em", marginLeft: 10, color: "var(--accent)" }}>Computing...</span>}
+      </h2>
 
       {/* FILTRI NON trasparenti */}
       <div className="filtersBar">
@@ -995,7 +1076,7 @@ function Cluster() {
           <label>role_support</label>
           <input style={{ width: 110 }} value={roleSupport} onChange={e => setRoleSupport(e.target.value)} /> */}
 
-          {/* <button className="primary" onClick={run}>Run</button> */}
+          <button className="primary" onClick={run}>Ricalcola</button>
         </div>
       </div>
 
@@ -1046,10 +1127,31 @@ function Cluster() {
 
         {/* BOTTOM: assegnazioni */}
         <div style={{ flex: `0 0 ${assignH}px`, minHeight: 160, overflow: "auto" }}>
-          <div style={{ padding: "12px 12px 0 12px" }}>
-            <h3 style={{ marginTop: 0 }}>Business Roles (assegnazioni)</h3>
-            <div style={{ color: "var(--muted)", fontSize: 12 }}>
-              Totale: {Object.keys(roleData.assignments || {}).length}
+          <div style={{ padding: "12px 12px 0 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h3 style={{ marginTop: 0, marginBottom: 4 }}>Business Roles (assegnazioni)</h3>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                Totale: {Object.keys(roleData.assignments || {}).length}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                disabled={assignPage === 0}
+                onClick={() => setAssignPage(p => Math.max(0, p - 1))}
+                style={{ padding: "4px 10px" }}
+              >
+                ◀ Prev
+              </button>
+              <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                Pag. {assignPage + 1} / {Math.ceil(Object.keys(roleData.assignments || {}).length / ASSIGN_PAGE_SIZE) || 1}
+              </span>
+              <button
+                disabled={(assignPage + 1) * ASSIGN_PAGE_SIZE >= Object.keys(roleData.assignments || {}).length}
+                onClick={() => setAssignPage(p => p + 1)}
+                style={{ padding: "4px 10px" }}
+              >
+                Next ▶
+              </button>
             </div>
           </div>
 
@@ -1057,44 +1159,46 @@ function Cluster() {
             <table className="table">
               <thead><tr><th>Display Name</th><th>Business Role</th></tr></thead>
               <tbody>
-                {Object.entries(roleData.assignments || {}).map(([u, role]) => {
-                  const bg = roleMetaByRole?.[role]?.color || "#111a2e";
-                  const fg = textColorForBg(bg);
-                  const dn = usersIndex?.[u] || u;
+                {Object.entries(roleData.assignments || {})
+                  .slice(assignPage * ASSIGN_PAGE_SIZE, (assignPage + 1) * ASSIGN_PAGE_SIZE)
+                  .map(([u, role]) => {
+                    const bg = roleMetaByRole?.[role]?.color || "#111a2e";
+                    const fg = textColorForBg(bg);
+                    const dn = usersIndex?.[u] || u;
 
-                  return (
-                    <tr key={u}>
-                      <td>{dn}</td>
-                      <td>
-                        <select
-                          value={role}
-                          onChange={async (e) => {
-                            const newRole = e.target.value;
-                            try {
-                              await api.businessRoleAddUser(newRole, u);
-                              const refreshed = await api.businessRoles();
-                              setRoleData(refreshed);
-                            } catch (e2) {
-                              setErr(String(e2.message || e2));
-                            }
-                          }}
-                          style={{
-                            backgroundColor: bg,
-                            color: fg,
-                            border: "1px solid rgba(255,255,255,0.18)",
-                            borderRadius: 10,
-                            padding: "10px 12px",
-                            minWidth: 110
-                          }}
-                        >
-                          {(roleData.roles || []).map(x => (
-                            <option key={x.role} value={x.role}>{x.role}</option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={u}>
+                        <td>{dn}</td>
+                        <td>
+                          <select
+                            value={role}
+                            onChange={async (e) => {
+                              const newRole = e.target.value;
+                              try {
+                                await api.businessRoleAddUser(newRole, u);
+                                const refreshed = await api.businessRoles();
+                                setRoleData(refreshed);
+                              } catch (e2) {
+                                setErr(String(e2.message || e2));
+                              }
+                            }}
+                            style={{
+                              backgroundColor: bg,
+                              color: fg,
+                              border: "1px solid rgba(255,255,255,0.18)",
+                              borderRadius: 10,
+                              padding: "10px 12px",
+                              minWidth: 110
+                            }}
+                          >
+                            {(roleData.roles || []).map(x => (
+                              <option key={x.role} value={x.role}>{x.role}</option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

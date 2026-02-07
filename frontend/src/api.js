@@ -111,7 +111,7 @@ export const api = {
   setConnector: (cfg) => request("/api/config/connector", { method: "POST", body: cfg }),
 
   extract: (ou) => request("/api/ad/extract", { method: "POST", body: { ou } }),
-  users: (q = "") => request(`/api/users?q=${encodeURIComponent(q)}`),
+  users: (q = "", limit = 100, offset = 0) => request(`/api/users?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
 
   roleMiningRun: (n_clusters, role_support) =>
     request("/api/rolemining/run", { method: "POST", body: { n_clusters, role_support } }),
