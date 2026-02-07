@@ -240,10 +240,30 @@ init_default_state()
 
 
 def apply_business_roles(users: List[Dict[str, Any]]) -> None:
-    """Add businessRole field to each user based on state mapping."""
+    """Add businessRole field to each user based on state mapping.
+    
+    CRITICAL: Only assigns from mapping if:
+    1. User has no existing valid BR, OR
+    2. Mapping has a valid (non-Unassigned) value for this user
+    
+    This preserves CSV-assigned BRs while allowing department-based assignment.
+    """
     m = state.get("user_business_role", {})
     for u in users:
-        u["businessRole"] = m.get(u["username"], "Unassigned")
+        existing_br = (u.get("businessRole") or "").strip()
+        mapped_br = m.get(u.get("username"), "")
+        
+        # Priority: existing valid BR > mapped valid BR > "Unassigned"
+        if existing_br and existing_br != "Unassigned":
+            # Keep existing valid BR
+            pass
+        elif mapped_br and mapped_br != "Unassigned":
+            # Use mapped BR if valid
+            u["businessRole"] = mapped_br
+        else:
+            # No valid BR anywhere - mark as Unassigned
+            if not existing_br:
+                u["businessRole"] = "Unassigned"
 
 def sync_roles_from_users(users: List[Dict[str, Any]]) -> int:
     """
@@ -752,13 +772,37 @@ def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
     state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
 
 
-def replace_last_extract_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) -> None:
-    clean: List[Dict[str, Any]] = []
+def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) -> None:
+    """
+    Merge new users from connector (AD/LDAP) into existing state.
+    Matches by BOTH displayName AND username - if either matches, updates existing user.
+    """
+    # Ensure baseline exists (if first run)
+    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
+    base_users = state["last_extract"]["users"]
+    log("INFO", f"Merge start. Existing users in state: {len(base_users)}")
+
+    # Build dual indexes for matching by BOTH username AND displayName
+    by_username = {}
+    by_displayname = {}
+    for u in base_users:
+        uname = u.get("username")
+        if uname:
+            by_username[uname] = u
+        dn = (u.get("displayName") or "").strip().lower()
+        if dn:
+            by_displayname[dn] = u
+    
+    clean_new_users: List[Dict[str, Any]] = []
+    updated_count = 0
+    added_count = 0
+    
+    # Pre-clean new users 
     for u in (new_users or []):
         username = (u.get("username") or "").strip()
         if not username:
             continue
-        clean.append({
+        clean_new_users.append({
             "username": username,
             "displayName": (u.get("displayName") or username).strip(),
             "groups": sorted(set(u.get("groups") or [])),
@@ -767,28 +811,67 @@ def replace_last_extract_from_connector(new_users: List[Dict[str, Any]], ou: str
             "excluded": False,
         })
 
-    state["last_extract"] = {
-        "ou": ou,
-        "users": clean,
-        "groups": sorted({g for u in clean for g in (u.get("groups") or [])}),
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "source": source,
-    }
+    for nu in clean_new_users:
+        uname = nu["username"]
+        dn_key = (nu.get("displayName") or "").strip().lower()
+        
+        # Match by displayName first, then by username
+        existing_user = by_displayname.get(dn_key) or by_username.get(uname)
+        
+        if existing_user:
+            # REPLACE existing user with new data from import
+            existing_user["displayName"] = nu["displayName"]
+            existing_user["department"] = nu["department"]
+            # REPLACE groups (not merge)
+            existing_user["groups"] = nu.get("groups") or []
+            if nu.get("businessRole"):
+                existing_user["businessRole"] = nu["businessRole"]
+            # Update username if it changed (displayName matched but username different)
+            if existing_user.get("username") != uname:
+                old_uname = existing_user.get("username")
+                existing_user["username"] = uname
+                # Update index
+                if old_uname in by_username:
+                    del by_username[old_uname]
+                by_username[uname] = existing_user
+            updated_count += 1
+        else:
+            # New user - add to base
+            base_users.append(nu)
+            by_username[uname] = nu
+            if dn_key:
+                by_displayname[dn_key] = nu
+            added_count += 1
 
-    # Non toccare qui user_business_role: lo ricreiamo dopo con l'auto-assegnazione
+    # Update metadata
+    state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
+    state["last_extract"]["source"] = source
+    if ou:
+        state["last_extract"]["ou"] = ou
+
+    # Recompute global groups list
+    state["last_extract"]["groups"] = recompute_groups_from_users(base_users)
     state["mining_dirty"] = True
+    log("INFO", f"Merge complete. Updated: {updated_count}, Added: {added_count}, Total: {len(base_users)}")
 
 def rerun_auto_business_roles_after_connector(users: List[Dict[str, Any]], only_depts: Optional[set[str]] = None) -> None:
-    # reset mapping
-    # If doing partial update, do NOT wipe user_business_role completely!
+    # CRITICAL: Preserve existing valid Business Roles from user objects BEFORE resetting mapping
+    # This ensures CSV-assigned BRs survive the auto-assignment process
+    preserved_brs = {}
+    for u in (users or []):
+        uname = u.get("username")
+        br = (u.get("businessRole") or "").strip()
+        if uname and br and br != "Unassigned":
+            preserved_brs[uname] = br
+    
+    # Reset mapping (partial or full)
     if not only_depts:
-        # Full rebuild
-        state["user_business_role"] = {}
+        # Full rebuild - start fresh but preserve existing BRs
+        state["user_business_role"] = preserved_brs.copy()
     else:
-        # Partial update: we only touch 'only_depts'.
-        # However, to be safe, we might just update keys for users in those depts.
-        # But apply_department_mapping writes to user_business_role.
-        pass
+        # Partial update: merge preserved into existing
+        state.setdefault("user_business_role", {})
+        state["user_business_role"].update(preserved_brs)
 
     
     # Do NOT wipe existing business roles on the user objects themselves,
@@ -1559,7 +1642,7 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
 
     # 2) DB di sistema: filter, replace, auto-assign
     users = filter_and_dedupe_connector_users(users, source="ad")
-    replace_last_extract_from_connector(users, ou=req.ou, source="ad")
+    merge_from_connector(users, ou=req.ou, source="ad")
     
     # rerun_auto_business_roles_after_connector already calls rerun_auto_business_roles_after_connector
     # which calls brdb_rebuild and apply_department_mapping.
@@ -2307,9 +2390,20 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         state.setdefault("choice_by_displayName", {})
         state["choice_by_displayName"].setdefault(candidate["displayName"], candidate["candidateId"])
 
-    # Merge with existing users
+    # Merge with existing users - match by BOTH displayName AND username
+    # When matching: REPLACE groups and department (not merge)
     existing_users_list = state.get("last_extract", {}).get("users", [])
-    existing_users_dict = { u.get("username"): u for u in existing_users_list if u.get("username") }
+    
+    # Build dual indexes for matching
+    existing_by_dn = {}
+    existing_by_uname = {}
+    for u in existing_users_list:
+        uname = u.get("username")
+        if uname:
+            existing_by_uname[uname] = u
+        dn = (u.get("displayName") or "").strip().lower()
+        if dn:
+            existing_by_dn[dn] = u
 
     added_users = 0
     updated_users = 0
@@ -2317,22 +2411,51 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
 
     for user in new_users:
         uname = user["username"]
-        if uname in existing_users_dict:
-            existing_users_dict[uname]["groups"] = sorted(set(existing_users_dict[uname].get("groups", []) + user["groups"]))
+        dn_key = (user.get("displayName") or "").strip().lower()
+        
+        # Match by displayName first, then by username
+        existing_user = existing_by_dn.get(dn_key) or existing_by_uname.get(uname)
+        
+        if existing_user:
+            # REPLACE groups and other fields with new values from import
+            existing_user["groups"] = user.get("groups") or []
             if user.get("businessRole"):
-                existing_users_dict[uname]["businessRole"] = user["businessRole"]
+                existing_user["businessRole"] = user["businessRole"]
             if user.get("department"):
-                existing_users_dict[uname]["department"] = user["department"]
+                existing_user["department"] = user["department"]
+            if user.get("displayName"):
+                existing_user["displayName"] = user["displayName"]
+            
+            # Update username if it changed (displayName matched but username different)
+            if existing_user.get("username") != uname:
+                old_uname = existing_user.get("username")
+                existing_user["username"] = uname
+                if old_uname in existing_by_uname:
+                    del existing_by_uname[old_uname]
+                existing_by_uname[uname] = existing_user
+            
             updated_users += 1
         else:
-            existing_users_dict[uname] = user.copy()
+            # New user - add to indexes
+            existing_by_uname[uname] = user.copy()
+            if dn_key:
+                existing_by_dn[dn_key] = existing_by_uname[uname]
             added_users += 1
 
-    merged_users = list(existing_users_dict.values())
+    merged_users = list(existing_by_uname.values())
     state["last_extract"]["users"] = merged_users
     state["last_extract"]["groups"] = recompute_groups_from_users(merged_users)
     state["last_extract"]["ou"] = "MERGED"
     state["last_extract"]["ts"] = time.time()
+
+    # CRITICAL: Populate state["user_business_role"] with CSV Business Roles BEFORE auto-assignment
+    # This ensures the preservation logic in apply_department_mapping has data to preserve
+    state.setdefault("user_business_role", {})
+    for u in merged_users:
+        uname = u.get("username")
+        br = (u.get("businessRole") or "").strip()
+        if uname and br and br != "Unassigned":
+            state["user_business_role"][uname] = br
 
     touched_depts = { u.get("department") for u in new_users if u.get("department") }
     rerun_auto_business_roles_after_connector(merged_users, only_depts=touched_depts)
