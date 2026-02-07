@@ -1,0 +1,31 @@
+test_01_health_check (__main__.RoleMiningUAT.test_01_health_check)
+Verify API is responsive. ... ok
+test_02_login (__main__.RoleMiningUAT.test_02_login)
+Verify login functionality. ... ok
+test_03_import_csv (__main__.RoleMiningUAT.test_03_import_csv)
+Simulate CSV import (using post parameters similar to frontend). ... ok
+test_04_verify_csv_user_created (__main__.RoleMiningUAT.test_04_verify_csv_user_created)
+Verify the user import created the user. ... ok
+test_05_verify_csv_business_role_created (__main__.RoleMiningUAT.test_05_verify_csv_business_role_created)
+Verify the 'RoleUAT' was added to business roles. ... FAIL
+test_06_run_mining (__main__.RoleMiningUAT.test_06_run_mining)
+Trigger mining. ... ok
+test_08_config_ad (__main__.RoleMiningUAT.test_08_config_ad)
+Configure AD Connector. ... ok
+test_09_import_ad (__main__.RoleMiningUAT.test_09_import_ad)
+Perform AD Extraction. ... ok
+
+======================================================================
+FAIL: test_05_verify_csv_business_role_created (__main__.RoleMiningUAT.test_05_verify_csv_business_role_created)
+Verify the 'RoleUAT' was added to business roles.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\Salvo\Desktop\Progetti\Role Mining\Role_Mining\backend\uat_test.py", line 89, in test_05_verify_csv_business_role_created
+    self.assertTrue(found, f"Imported Business Role 'RoleUAT' not found. Found: {roles_found}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : Imported Business Role 'RoleUAT' not found. Found: ['DeptUAT', 'FINANCE', 'HR', 'IT', 'IT|VPN,Azure', 'LEGAL', 'MARKETING', 'OPS', 'PERSIST_TEST', 'SALES', 'Unassigned']
+
+----------------------------------------------------------------------
+Ran 8 tests in 19.593s
+
+FAILED (failures=1)

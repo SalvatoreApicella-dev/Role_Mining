@@ -6,7 +6,7 @@ import "ag-grid-community/styles/ag-theme-quartz.css";
 import KpiDrilldownPage from "./pages/KpiDrilldownPage";
 import { api, clearToken, getToken, setToken } from "./api.js";
 import Select from "react-select";
-import {importBusinessRolesCsv } from "./api";
+import { importBusinessRolesCsv } from "./api";
 import OverprivilegedPage from "./pages/OverprivilegedPage";
 import AiDetectionPage from "./pages/AiDetectionPage";
 
@@ -20,8 +20,8 @@ function Sidebar({ onLogout, roles }) {
   const [openCfg, setOpenCfg] = useState(true);
   const [openBr, setOpenBr] = useState(true);
   const [xlsxFile, setXlsxFile] = useState(null);
-const [importMsg, setImportMsg] = useState("");
-const [csvFile, setCsvFile] = useState(null);
+  const [importMsg, setImportMsg] = useState("");
+  const [csvFile, setCsvFile] = useState(null);
 
 
 
@@ -37,7 +37,7 @@ const [csvFile, setCsvFile] = useState(null);
         <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "active" : "")}>Business Roles</NavLink>
         <NavLink to="/cluster" className={({ isActive }) => (isActive ? "active" : "")}>Cluster</NavLink>
         <NavLink to="/utenti" className={({ isActive }) => (isActive ? "active" : "")}>Utenti</NavLink>
-        
+
 
         <button className="link" onClick={() => setOpenCfg(v => !v)}>
           Configurazioni ▾
@@ -53,8 +53,8 @@ const [csvFile, setCsvFile] = useState(null);
         <button className="danger" onClick={onLogout}>Logout</button>
       </div>
 
-        <div className="brand" style={{ marginTop: "auto" }}>
-       <img
+      <div className="brand" style={{ marginTop: "auto" }}>
+        <img
           src="/BIP-Thumbnail-RED-on-BLUE.png"
           alt="Logo"
           style={{ width: "100%", maxHeight: 140, objectFit: "contain", display: "block" }}
@@ -119,11 +119,11 @@ function Analytics() {
 
   const navigate = useNavigate();
 
-const kpiRouteByLabel = {
-  "Cluster Quality": "/kpi/cluster-quality",
-  "Overprivileged %": "/overprivileged-users",   // <-- qui
-  "AI Detection": "/ai-detection",
-};
+  const kpiRouteByLabel = {
+    "Cluster Quality": "/kpi/cluster-quality",
+    "Overprivileged %": "/overprivileged-users",   // <-- qui
+    "AI Detection": "/ai-detection",
+  };
 
 
   useEffect(() => {
@@ -161,23 +161,23 @@ const kpiRouteByLabel = {
       <hr className="sep" />
 
       <div className="panel">
-          <Plot
-            data={plotData}
-            layout={{
-              paper_bgcolor: "rgba(0,0,0,0)",
-              plot_bgcolor: "rgba(0,0,0,0)",
-              font: { color: "#e9eefc" },
-              margin: { l: 40, r: 10, t: 20, b: 50 },
-              yaxis: { range: [0, 100] }
-            }}
-            style={{ width: "100%", height: 320 }}
-            config={{ displayModeBar: false }}
-            onClick={(ev) => {
-              const label = ev?.points?.[0]?.x;
-              const route = kpiRouteByLabel[label];
-              if (route) navigate(route);
-            }}
-          />
+        <Plot
+          data={plotData}
+          layout={{
+            paper_bgcolor: "rgba(0,0,0,0)",
+            plot_bgcolor: "rgba(0,0,0,0)",
+            font: { color: "#e9eefc" },
+            margin: { l: 40, r: 10, t: 20, b: 50 },
+            yaxis: { range: [0, 100] }
+          }}
+          style={{ width: "100%", height: 320 }}
+          config={{ displayModeBar: false }}
+          onClick={(ev) => {
+            const label = ev?.points?.[0]?.x;
+            const route = kpiRouteByLabel[label];
+            if (route) navigate(route);
+          }}
+        />
 
         {err && <div className="err">{err}</div>}
       </div>
@@ -192,7 +192,7 @@ function Connettori() {
   const [err, setErr] = useState("");
 
   const [csvFile, setCsvFile] = useState(null);
-const [importMsg, setImportMsg] = useState("");
+  const [importMsg, setImportMsg] = useState("");
 
 
 
@@ -229,131 +229,150 @@ const [importMsg, setImportMsg] = useState("");
   }
 
   return (
-  <div className="main">
-    <h2 style={{ marginTop: 0 }}>Connettori</h2>
+    <div className="main">
+      <h2 style={{ marginTop: 0 }}>Connettori</h2>
 
-    {/* CARD 1: AD Connector */}
-    <div className="panel">
-      <h3 style={{ marginTop: 0 }}>Active Directory (Connector)</h3>
+      {/* CARD 1: AD Connector */}
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Active Directory (Connector)</h3>
 
-      <div className="row">
-        <input
-          style={{ width: 260 }}
-          value={cfg.server}
-          onChange={e => setCfg({ ...cfg, server: e.target.value })}
-          placeholder="server (es: ad.local o mock)"
-        />
-        <select
-          value={cfg.auth}
-          onChange={e => setCfg({ ...cfg, auth: e.target.value })}
-        >
-          <option value="SIMPLE">SIMPLE</option>
-          <option value="NTLM">NTLM</option>
-        </select>
+        <div className="row">
+          <input
+            style={{ width: 260 }}
+            value={cfg.server}
+            onChange={e => setCfg({ ...cfg, server: e.target.value })}
+            placeholder="server (es: ad.local o mock)"
+          />
+          <select
+            value={cfg.auth}
+            onChange={e => setCfg({ ...cfg, auth: e.target.value })}
+          >
+            <option value="SIMPLE">SIMPLE</option>
+            <option value="NTLM">NTLM</option>
+          </select>
+        </div>
+
+        <div className="row" style={{ marginTop: 10 }}>
+          <input
+            type="number"
+            style={{ width: 120 }}
+            value={cfg.port || ""}
+            onChange={e => setCfg({ ...cfg, port: e.target.value })}
+            placeholder="Port (389)"
+          />
+          <label style={{ display: "flex", alignItems: "center", marginLeft: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={!!cfg.use_ssl}
+              onChange={e => setCfg({ ...cfg, use_ssl: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            Usa SSL
+          </label>
+        </div>
+
+        <div className="row" style={{ marginTop: 10 }}>
+          <input
+            style={{ width: 260 }}
+            value={cfg.bind_user}
+            onChange={e => setCfg({ ...cfg, bind_user: e.target.value })}
+            placeholder="bind_user"
+          />
+          <input
+            style={{ width: 260 }}
+            value={cfg.bind_password}
+            onChange={e => setCfg({ ...cfg, bind_password: e.target.value })}
+            placeholder="bind_password"
+            type="password"
+          />
+        </div>
+
+        <div className="row" style={{ marginTop: 10 }}>
+          <input
+            style={{ width: 540 }}
+            value={cfg.base_dn}
+            onChange={e => setCfg({ ...cfg, base_dn: e.target.value })}
+            placeholder="base_dn (opzionale qui)"
+          />
+          <button className="primary" onClick={saveCfg}>Salva</button>
+        </div>
+
+        <hr className="sep" />
+
+        <div className="row">
+          <input
+            style={{ width: 540 }}
+            value={ou}
+            onChange={e => setOu(e.target.value)}
+            placeholder="OU DN"
+          />
+          <button className="primary" onClick={doExtract}>AD Extract</button>
+        </div>
+
+        {statusMsg && <div className="ok">{statusMsg}</div>}
+        {err && <div className="err">{err}</div>}
       </div>
 
-      <div className="row" style={{ marginTop: 10 }}>
-        <input
-          style={{ width: 260 }}
-          value={cfg.bind_user}
-          onChange={e => setCfg({ ...cfg, bind_user: e.target.value })}
-          placeholder="bind_user"
-        />
-        <input
-          style={{ width: 260 }}
-          value={cfg.bind_password}
-          onChange={e => setCfg({ ...cfg, bind_password: e.target.value })}
-          placeholder="bind_password"
-          type="password"
-        />
+      <div style={{ height: 12 }} />
+
+      {/* CARD 2: CSV Import */}
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Connettore Generico (CSV)</h3>
+
+        <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
+          Atteso: DisplayName;Dipartimento;Ruoli (con Ruoli separati da virgola)
+        </div>
+
+        <div className="row">
+          <input
+            type="file"
+            accept=".csv"
+            onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+          />
+
+          <button
+            className="primary"
+            disabled={!csvFile}
+            onClick={async () => {
+              if (!csvFile) return;
+              try {
+                setImportMsg("");
+
+                const out = await importBusinessRolesCsv(csvFile);
+
+                const n = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+
+                const rowsTotal = n(out.rowsTotal ?? out.csvRowsTotal);
+                const rowsKept = n(out.rowsKept);
+                const dupDn = n(out.csvDuplicateDisplayNameRows ?? out.duplicateDisplayName);
+                const missingBR = n(out.csvRowsMissingBR ?? out.missingBusinessRole);
+                const newBRs = n(out.newBusinessRoles);
+
+                // compat con eventuali nomi diversi (se li aggiungi lato backend)
+                const createdUsers = n(out.created_users ?? out.createdUsers ?? out.createdusers);
+                const assignedUsers = n(out.assigned_users ?? out.assignedUsers ?? out.assignedusers);
+
+
+                setImportMsg(
+                  `Import OK: Totale=${n(out.rowsTotal ?? out.csvRowsTotal)}, Nuovi Utenti=${n(out.rowsKept)}, ` +
+                  `Valore duplicato=${n(out.csvDuplicateDisplayNameRows)}, ` +
+                  `Valore incompleto=${n(out.csvRowsMissingBR)}`
+                );
+
+              } catch (e) {
+                setImportMsg(`Import KO: ${e?.message ?? String(e)}`);
+              }
+            }}
+
+          >
+            Importa CSV
+          </button>
+        </div>
+
+        {importMsg && <div style={{ marginTop: 10 }}>{importMsg}</div>}
       </div>
-
-      <div className="row" style={{ marginTop: 10 }}>
-        <input
-          style={{ width: 540 }}
-          value={cfg.base_dn}
-          onChange={e => setCfg({ ...cfg, base_dn: e.target.value })}
-          placeholder="base_dn (opzionale qui)"
-        />
-        <button className="primary" onClick={saveCfg}>Salva</button>
-      </div>
-
-      <hr className="sep" />
-
-      <div className="row">
-        <input
-          style={{ width: 540 }}
-          value={ou}
-          onChange={e => setOu(e.target.value)}
-          placeholder="OU DN"
-        />
-        <button className="primary" onClick={doExtract}>AD Extract</button>
-      </div>
-
-      {statusMsg && <div className="ok">{statusMsg}</div>}
-      {err && <div className="err">{err}</div>}
     </div>
-
-    <div style={{ height: 12 }} />
-
-    {/* CARD 2: CSV Import */}
-    <div className="panel">
-      <h3 style={{ marginTop: 0 }}>Connettore Generico (CSV)</h3>
-
-      <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
-        Atteso: DisplayName;Dipartimento;Ruoli (con Ruoli separati da virgola)
-      </div>
-
-      <div className="row">
-        <input
-          type="file"
-          accept=".csv"
-          onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-        />
-
-        <button
-          className="primary"
-          disabled={!csvFile}
-          onClick={async () => {
-            if (!csvFile) return;
-            try {
-              setImportMsg("");
-
-              const out = await importBusinessRolesCsv(csvFile);
-
-              const n = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
-
-              const rowsTotal = n(out.rowsTotal ?? out.csvRowsTotal);
-              const rowsKept = n(out.rowsKept);
-              const dupDn = n(out.csvDuplicateDisplayNameRows ?? out.duplicateDisplayName);
-              const missingBR = n(out.csvRowsMissingBR ?? out.missingBusinessRole);
-              const newBRs = n(out.newBusinessRoles);
-
-              // compat con eventuali nomi diversi (se li aggiungi lato backend)
-              const createdUsers = n(out.created_users ?? out.createdUsers ?? out.createdusers);
-              const assignedUsers = n(out.assigned_users ?? out.assignedUsers ?? out.assignedusers);
-
-
-              setImportMsg(
-                `Import OK: Totale=${n(out.rowsTotal ?? out.csvRowsTotal)}, Nuovi Utenti=${n(out.rowsKept)}, ` +
-                `Valore duplicato=${n(out.csvDuplicateDisplayNameRows)}, ` +
-                `Valore incompleto=${n(out.csvRowsMissingBR)}`
-);
-
-            } catch (e) {
-              setImportMsg(`Import KO: ${e?.message ?? String(e)}`);
-            }
-          }}
-
-        >
-          Importa CSV
-        </button>
-      </div>
-
-      {importMsg && <div style={{ marginTop: 10 }}>{importMsg}</div>}
-    </div>
-  </div>
-);
+  );
 
 
 
@@ -401,10 +420,10 @@ function Utenti() {
           <tbody>
             {rows.map(u => (
               <tr
-                  key={u.username}
-                  onClick={() => nav(`/utenti/${encodeURIComponent(u.username)}`)}
-                  style={{ cursor: "pointer" }}
-                >
+                key={u.username}
+                onClick={() => nav(`/utenti/${encodeURIComponent(u.username)}`)}
+                style={{ cursor: "pointer" }}
+              >
 
                 <td>{u.username}</td>
                 <td>{u.displayName}</td>
@@ -437,38 +456,38 @@ function UserDetail() {
   const [saving, setSaving] = useState(false);
 
   const selectStyles = {
-  control: (base, state) => ({
-    ...base,
-    backgroundColor: "#111a2e",
-    borderColor: state.isFocused ? "rgba(106,166,255,0.55)" : "rgba(255,255,255,0.18)",
-    boxShadow: "none",
-    minHeight: 40,
-    borderRadius: 10,
-  }),
-  valueContainer: (base) => ({ ...base, padding: "2px 10px" }),
-  singleValue: (base) => ({ ...base, color: "#e9eefc" }),
-  input: (base) => ({ ...base, color: "#e9eefc" }),
-  placeholder: (base) => ({ ...base, color: "rgba(233,238,252,0.65)" }),
-  menu: (base) => ({
-    ...base,
-    backgroundColor: "#111a2e",
-    border: "1px solid rgba(255,255,255,0.18)",
-    boxShadow: "0 18px 55px rgba(0,0,0,0.65)",
-    overflow: "hidden",
-  }),
-  menuList: (base) => ({ ...base, backgroundColor: "#111a2e", padding: 6 }),
-  option: (base, state) => ({
-    ...base,
-    backgroundColor: state.isSelected
-      ? "rgba(106,166,255,0.22)"
-      : state.isFocused
-        ? "rgba(106,166,255,0.14)"
-        : "#111a2e",
-    color: "#e9eefc",
-    borderRadius: 10,
-    margin: "2px 0",
-  }),
-};
+    control: (base, state) => ({
+      ...base,
+      backgroundColor: "#111a2e",
+      borderColor: state.isFocused ? "rgba(106,166,255,0.55)" : "rgba(255,255,255,0.18)",
+      boxShadow: "none",
+      minHeight: 40,
+      borderRadius: 10,
+    }),
+    valueContainer: (base) => ({ ...base, padding: "2px 10px" }),
+    singleValue: (base) => ({ ...base, color: "#e9eefc" }),
+    input: (base) => ({ ...base, color: "#e9eefc" }),
+    placeholder: (base) => ({ ...base, color: "rgba(233,238,252,0.65)" }),
+    menu: (base) => ({
+      ...base,
+      backgroundColor: "#111a2e",
+      border: "1px solid rgba(255,255,255,0.18)",
+      boxShadow: "0 18px 55px rgba(0,0,0,0.65)",
+      overflow: "hidden",
+    }),
+    menuList: (base) => ({ ...base, backgroundColor: "#111a2e", padding: 6 }),
+    option: (base, state) => ({
+      ...base,
+      backgroundColor: state.isSelected
+        ? "rgba(106,166,255,0.22)"
+        : state.isFocused
+          ? "rgba(106,166,255,0.14)"
+          : "#111a2e",
+      color: "#e9eefc",
+      borderRadius: 10,
+      margin: "2px 0",
+    }),
+  };
 
 
   async function load() {
@@ -525,13 +544,13 @@ function UserDetail() {
   }
 
   const shownGroups = (allGroups || [])
-  .filter((g) => String(g).toLowerCase().includes(filter.trim().toLowerCase()))
-  .sort((a, b) => {
-    const sa = selectedGroups.includes(a) ? 0 : 1; // selezionati prima
-    const sb = selectedGroups.includes(b) ? 0 : 1;
-    if (sa !== sb) return sa - sb;
-    return String(a).localeCompare(String(b));
-  });
+    .filter((g) => String(g).toLowerCase().includes(filter.trim().toLowerCase()))
+    .sort((a, b) => {
+      const sa = selectedGroups.includes(a) ? 0 : 1; // selezionati prima
+      const sb = selectedGroups.includes(b) ? 0 : 1;
+      if (sa !== sb) return sa - sb;
+      return String(a).localeCompare(String(b));
+    });
 
 
   return (
@@ -554,20 +573,20 @@ function UserDetail() {
         <h3 style={{ marginTop: 0 }}>Business Role</h3>
         <div className="row">
           <div style={{ width: 420 }}>
-          <Select
-            isSearchable={true}
-            styles={selectStyles}
-            value={{ value: selectedRole, label: selectedRole }}
-            onChange={(opt) => setSelectedRole(opt?.value || "Unassigned")}
-            placeholder="Seleziona ruolo..."
-            options={[
-              { value: "Unassigned", label: "Unassigned" },
-              ...(rolesData.roles || []).map((x) => ({ value: x.role, label: x.role })),
-            ]}
-            menuPortalTarget={document.body}
-            menuPosition="fixed"
-          />
-        </div>
+            <Select
+              isSearchable={true}
+              styles={selectStyles}
+              value={{ value: selectedRole, label: selectedRole }}
+              onChange={(opt) => setSelectedRole(opt?.value || "Unassigned")}
+              placeholder="Seleziona ruolo..."
+              options={[
+                { value: "Unassigned", label: "Unassigned" },
+                ...(rolesData.roles || []).map((x) => ({ value: x.role, label: x.role })),
+              ]}
+              menuPortalTarget={document.body}
+              menuPosition="fixed"
+            />
+          </div>
 
 
 
@@ -650,117 +669,117 @@ function UserDetail() {
 
 
 function Cluster() {
-const [roleMetaByRole, setRoleMetaByRole] = useState({});   // { "IT": {color, groups}, ... }
-const [groupRoleMap, setGroupRoleMap] = useState({});       // { "VPN": "IT", "Payroll": "HR", ... }
-const [usersIndex, setUsersIndex] = useState({});
+  const [roleMetaByRole, setRoleMetaByRole] = useState({});   // { "IT": {color, groups}, ... }
+  const [groupRoleMap, setGroupRoleMap] = useState({});       // { "VPN": "IT", "Payroll": "HR", ... }
+  const [usersIndex, setUsersIndex] = useState({});
 
-const containerRef = React.useRef(null);
-const SPLIT_KEY = "cluster_assignments_height_v1";
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const containerRef = React.useRef(null);
+  const SPLIT_KEY = "cluster_assignments_height_v1";
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-const [assignH, setAssignH] = useState(() => {
-  const v = Number(localStorage.getItem(SPLIT_KEY));
-  return Number.isFinite(v) && v > 0 ? v : 260;
-});
+  const [assignH, setAssignH] = useState(() => {
+    const v = Number(localStorage.getItem(SPLIT_KEY));
+    return Number.isFinite(v) && v > 0 ? v : 260;
+  });
 
-async function onCellDoubleClicked(p) {
-  try {
-    setErr("");
+  async function onCellDoubleClicked(p) {
+    try {
+      setErr("");
 
-    const field = p?.colDef?.field;   // nome colonna (group)
-    const row = p?.data;              // riga (utente)
+      const field = p?.colDef?.field;   // nome colonna (group)
+      const row = p?.data;              // riga (utente)
 
-    if (!field || !row?.username) return;
+      if (!field || !row?.username) return;
 
-    // Non applicare su colonne non-gruppo
-    if (
-      field === "displayName" ||
-      field === "clusterId" ||
-      field === "businessRole" ||
-      field === "roleColor" ||
-      field === "username"
-    ) {
-      return;
+      // Non applicare su colonne non-gruppo
+      if (
+        field === "displayName" ||
+        field === "clusterId" ||
+        field === "businessRole" ||
+        field === "roleColor" ||
+        field === "username"
+      ) {
+        return;
+      }
+
+      const v = Number(row[field] ?? 0);
+
+      // Carica l'utente reale per avere lo stato corrente dei gruppi
+      const ud = await api.get(`/api/users/${encodeURIComponent(row.username)}`);
+      const curr = (ud.user?.groups || []).slice();
+
+      let next;
+      if (v === 1) {
+        // doppio click su "1" => rimuovi
+        next = curr.filter((g) => g !== field);
+      } else {
+        // doppio click su "0" => assegna
+        if (curr.includes(field)) return; // safety
+        next = curr.concat(field).sort();
+      }
+
+      await api.post(`/api/users/${encodeURIComponent(row.username)}/update`, {
+        groups: next,
+        businessRole: ud.user?.businessRole || "Unassigned",
+      });
+
+      // Refresh: riallinea matrix/cluster
+      await run();
+    } catch (e) {
+      setErr(String(e?.message || e));
     }
-
-    const v = Number(row[field] ?? 0);
-
-    // Carica l'utente reale per avere lo stato corrente dei gruppi
-    const ud = await api.get(`/api/users/${encodeURIComponent(row.username)}`);
-    const curr = (ud.user?.groups || []).slice();
-
-    let next;
-    if (v === 1) {
-      // doppio click su "1" => rimuovi
-      next = curr.filter((g) => g !== field);
-    } else {
-      // doppio click su "0" => assegna
-      if (curr.includes(field)) return; // safety
-      next = curr.concat(field).sort();
-    }
-
-    await api.post(`/api/users/${encodeURIComponent(row.username)}/update`, {
-      groups: next,
-      businessRole: ud.user?.businessRole || "Unassigned",
-    });
-
-    // Refresh: riallinea matrix/cluster
-    await run();
-  } catch (e) {
-    setErr(String(e?.message || e));
   }
-}
 
 
-useEffect(() => {
-  localStorage.setItem(SPLIT_KEY, String(assignH));
-}, [assignH]);
+  useEffect(() => {
+    localStorage.setItem(SPLIT_KEY, String(assignH));
+  }, [assignH]);
 
-function hexToRgba(hex, a) {
-  if (!hex || !hex.startsWith("#") || hex.length !== 7) return `rgba(17,26,46,${a})`;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${a})`;
-}
+  function hexToRgba(hex, a) {
+    if (!hex || !hex.startsWith("#") || hex.length !== 7) return `rgba(17,26,46,${a})`;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
 
-function startDrag(e) {
-  e.preventDefault();
-  const startY = e.clientY;
-  const startH = assignH;
+  function startDrag(e) {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = assignH;
 
-  const onMove = (ev) => {
-    const dy = ev.clientY - startY;
-    const el = containerRef.current;
-    const total = el?.clientHeight || 800;
+    const onMove = (ev) => {
+      const dy = ev.clientY - startY;
+      const el = containerRef.current;
+      const total = el?.clientHeight || 800;
 
-    const minH = 160;
-    const maxH = Math.floor(total * 0.75);
+      const minH = 160;
+      const maxH = Math.floor(total * 0.75);
 
-    // trascini su => aumenti assegnazioni; giù => diminuisci
-    setAssignH(clamp(startH - dy, minH, maxH));
-  };
+      // trascini su => aumenti assegnazioni; giù => diminuisci
+      setAssignH(clamp(startH - dy, minH, maxH));
+    };
 
-  const onUp = () => {
-    window.removeEventListener("mousemove", onMove);
-    window.removeEventListener("mouseup", onUp);
-  };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
 
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("mouseup", onUp);
-}
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
 
-function textColorForBg(hex) {
-  // hex: "#RRGGBB"
-  if (!hex || !hex.startsWith("#") || hex.length !== 7) return "#06101e";
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  // luminanza semplificata
-  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-  return yiq >= 140 ? "#06101e" : "#ffffff";
-}
+  function textColorForBg(hex) {
+    // hex: "#RRGGBB"
+    if (!hex || !hex.startsWith("#") || hex.length !== 7) return "#06101e";
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    // luminanza semplificata
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 140 ? "#06101e" : "#ffffff";
+  }
 
   const [roleSupport, setRoleSupport] = useState(0.5);
   const [nClusters, setNClusters] = useState("");
@@ -774,35 +793,35 @@ function textColorForBg(hex) {
   const [roleData, setRoleData] = useState({ roles: [], assignments: {} });
 
   async function loadRoles() {
-  const r = await api.businessRoles(); // {roles:[{role,count}], assignments:{user:role}}
-  setRoleData(r);
+    const r = await api.businessRoles(); // {roles:[{role,count}], assignments:{user:role}}
+    setRoleData(r);
 
-  // carica meta (color + groups) per ogni ruolo
-  const roles = (r.roles || []).map(x => x.role);
-  const metas = await Promise.all(
-    roles.map(async (role) => {
-      try {
-        const m = await api.businessRoleMeta(role); // {role,color,groups}
-        return [role, m];
-      } catch {
-        return [role, { role, color: "#6aa6ff", groups: [] }];
+    // carica meta (color + groups) per ogni ruolo
+    const roles = (r.roles || []).map(x => x.role);
+    const metas = await Promise.all(
+      roles.map(async (role) => {
+        try {
+          const m = await api.businessRoleMeta(role); // {role,color,groups}
+          return [role, m];
+        } catch {
+          return [role, { role, color: "#6aa6ff", groups: [] }];
+        }
+      })
+    );
+
+    const metaObj = Object.fromEntries(metas);
+    setRoleMetaByRole(metaObj);
+
+    // costruisce group -> role (se un group è in più ruoli, vince il primo)
+    const gmap = {};
+    for (const role of roles) {
+      const gs = metaObj?.[role]?.groups || [];
+      for (const g of gs) {
+        if (!gmap[g]) gmap[g] = role;
       }
-    })
-  );
-
-  const metaObj = Object.fromEntries(metas);
-  setRoleMetaByRole(metaObj);
-
-  // costruisce group -> role (se un group è in più ruoli, vince il primo)
-  const gmap = {};
-  for (const role of roles) {
-    const gs = metaObj?.[role]?.groups || [];
-    for (const g of gs) {
-      if (!gmap[g]) gmap[g] = role;
     }
+    setGroupRoleMap(gmap);
   }
-  setGroupRoleMap(gmap);
-}
 
 
   async function run() {
@@ -854,64 +873,64 @@ function textColorForBg(hex) {
     }
 
     const cols = [
-  {
-  field: "displayName",
-  headerName: "User",
-  pinned: "left",
-  filter: true,
-  width: 220,
-  sortable: true,
-  comparator: (valueA, valueB, nodeA, nodeB) => {
-    const ca = nodeA?.data?.roleColor || "";
-    const cb = nodeB?.data?.roleColor || "";
-    if (ca === cb) return String(valueA || "").localeCompare(String(valueB || ""));
-    return ca.localeCompare(cb);
-  },
-  cellStyle: (p) => {
-    const role = p.data?.businessRole || "Unassigned";
-    const bg = roleMetaByRole?.[role]?.color || "#6aa6ff";
-    return {
-      backgroundColor: bg,
-      color: textColorForBg(bg),
-      fontWeight: 800,
-      borderRight: "1px solid rgba(255,255,255,0.10)"
-    };
-  }
-},
-  { field: "clusterId", headerName: "Cluster", pinned: "left", width: 110, hide: true }
-];
+      {
+        field: "displayName",
+        headerName: "User",
+        pinned: "left",
+        filter: true,
+        width: 220,
+        sortable: true,
+        comparator: (valueA, valueB, nodeA, nodeB) => {
+          const ca = nodeA?.data?.roleColor || "";
+          const cb = nodeB?.data?.roleColor || "";
+          if (ca === cb) return String(valueA || "").localeCompare(String(valueB || ""));
+          return ca.localeCompare(cb);
+        },
+        cellStyle: (p) => {
+          const role = p.data?.businessRole || "Unassigned";
+          const bg = roleMetaByRole?.[role]?.color || "#6aa6ff";
+          return {
+            backgroundColor: bg,
+            color: textColorForBg(bg),
+            fontWeight: 800,
+            borderRight: "1px solid rgba(255,255,255,0.10)"
+          };
+        }
+      },
+      { field: "clusterId", headerName: "Cluster", pinned: "left", width: 110, hide: true }
+    ];
 
 
-  const groupsSorted = [...(groups || [])].sort((a, b) => {
-  const ra = groupRoleMap?.[a] || "Unassigned";
-  const rb = groupRoleMap?.[b] || "Unassigned";
+    const groupsSorted = [...(groups || [])].sort((a, b) => {
+      const ra = groupRoleMap?.[a] || "Unassigned";
+      const rb = groupRoleMap?.[b] || "Unassigned";
 
-  // 1) prima per Business Role
-  const c1 = ra.localeCompare(rb);
-  if (c1 !== 0) return c1;
+      // 1) prima per Business Role
+      const c1 = ra.localeCompare(rb);
+      if (c1 !== 0) return c1;
 
-  // 2) poi per nome gruppo
-  return a.localeCompare(b);
-});
+      // 2) poi per nome gruppo
+      return a.localeCompare(b);
+    });
 
-groupsSorted.forEach((g) => {
-  cols.push({
-  headerName: g,
-  field: g,
+    groupsSorted.forEach((g) => {
+      cols.push({
+        headerName: g,
+        field: g,
 
-  valueGetter: (p) => Number(p.data?.[g] || 0),
-  valueFormatter: () => "",
+        valueGetter: (p) => Number(p.data?.[g] || 0),
+        valueFormatter: () => "",
 
-  cellStyle: (p) => {
-    const v = Number(p.value || 0); // resta 0/1, ma non viene più mostrato
-    const roleForGroup = groupRoleMap?.[g];
-    const hex = roleMetaByRole?.[roleForGroup]?.color || "#d3ca48";
-    const bg = v ? hexToRgba(hex, 0.95) : hexToRgba(hex, 0.10);
-    return { backgroundColor: bg };
-  },
-});
+        cellStyle: (p) => {
+          const v = Number(p.value || 0); // resta 0/1, ma non viene più mostrato
+          const roleForGroup = groupRoleMap?.[g];
+          const hex = roleMetaByRole?.[roleForGroup]?.color || "#d3ca48";
+          const bg = v ? hexToRgba(hex, 0.95) : hexToRgba(hex, 0.10);
+          return { backgroundColor: bg };
+        },
+      });
 
-});
+    });
 
 
 
@@ -942,34 +961,34 @@ groupsSorted.forEach((g) => {
               <option key={r.role} value={r.role}>{r.role}</option>
             ))}
           </select> */}
-        
-<label>Business Role</label>
-<select
-  value={roleFilter}
-  onChange={(e) => setRoleFilter(e.target.value)}
-  style={{
-    backgroundColor:
-      roleFilter === "All"
-        ? "#111a2e"
-        : (roleMetaByRole?.[roleFilter]?.color || "#111a2e"),
-    color:
-      roleFilter === "All"
-        ? "#e9eefc"
-        : textColorForBg(roleMetaByRole?.[roleFilter]?.color || "#111a2e"),
-    border: "1px solid rgba(255,255,255,0.18)",
-    borderRadius: 10,
-    padding: "10px 12px"
-  }}
->
-  <option value="All">All</option>
-  {(roleData.roles || []).map(x => (
-    <option key={x.role} value={x.role}>{x.role}</option>
-  ))}
-</select>
+
+          <label>Business Role</label>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            style={{
+              backgroundColor:
+                roleFilter === "All"
+                  ? "#111a2e"
+                  : (roleMetaByRole?.[roleFilter]?.color || "#111a2e"),
+              color:
+                roleFilter === "All"
+                  ? "#e9eefc"
+                  : textColorForBg(roleMetaByRole?.[roleFilter]?.color || "#111a2e"),
+              border: "1px solid rgba(255,255,255,0.18)",
+              borderRadius: 10,
+              padding: "10px 12px"
+            }}
+          >
+            <option value="All">All</option>
+            {(roleData.roles || []).map(x => (
+              <option key={x.role} value={x.role}>{x.role}</option>
+            ))}
+          </select>
 
 
 
-{/* 
+          {/* 
           <label>n_clusters</label>
           <input style={{ width: 110 }} value={nClusters} onChange={e => setNClusters(e.target.value)} placeholder="auto" />
 
@@ -984,105 +1003,105 @@ groupsSorted.forEach((g) => {
 
       <div style={{ height: 12 }} />
 
-<div
-  ref={containerRef}
-  className="panel"
-  style={{
-    height: "calc(100vh - 190px)",
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-  }}
->
-  {/* TOP: matrice */}
-  <div style={{ flex: "1 1 auto", minHeight: 240, overflow: "hidden" }}>
-    <div className="ag-theme-quartz-dark" style={{ height: "100%", width: "100%" }}>
-      <AgGridReact
-      rowData={rowData}
-      columnDefs={columnDefs}
-      onCellDoubleClicked={onCellDoubleClicked}
-      defaultColDef={{ resizable: true, sortable: true, filter: true }}
-      animateRows={true}
-      quickFilterText={quick}
-      rowHeight={24}
-      headerHeight={34}
-    />
+      <div
+        ref={containerRef}
+        className="panel"
+        style={{
+          height: "calc(100vh - 190px)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        {/* TOP: matrice */}
+        <div style={{ flex: "1 1 auto", minHeight: 240, overflow: "hidden" }}>
+          <div className="ag-theme-quartz-dark" style={{ height: "100%", width: "100%" }}>
+            <AgGridReact
+              rowData={rowData}
+              columnDefs={columnDefs}
+              onCellDoubleClicked={onCellDoubleClicked}
+              defaultColDef={{ resizable: true, sortable: true, filter: true }}
+              animateRows={true}
+              quickFilterText={quick}
+              rowHeight={24}
+              headerHeight={34}
+            />
 
 
-    </div>
-  </div>
+          </div>
+        </div>
 
-  {/* HANDLE */}
-  <div
-    onMouseDown={startDrag}
-    title="Trascina per ridimensionare"
-    style={{
-      height: 10,
-      cursor: "row-resize",
-      background: "rgba(255,255,255,0.08)",
-      borderTop: "1px solid rgba(255,255,255,0.10)",
-      borderBottom: "1px solid rgba(255,255,255,0.10)",
-    }}
-  />
+        {/* HANDLE */}
+        <div
+          onMouseDown={startDrag}
+          title="Trascina per ridimensionare"
+          style={{
+            height: 10,
+            cursor: "row-resize",
+            background: "rgba(255,255,255,0.08)",
+            borderTop: "1px solid rgba(255,255,255,0.10)",
+            borderBottom: "1px solid rgba(255,255,255,0.10)",
+          }}
+        />
 
-  {/* BOTTOM: assegnazioni */}
-  <div style={{ flex: `0 0 ${assignH}px`, minHeight: 160, overflow: "auto" }}>
-    <div style={{ padding: "12px 12px 0 12px" }}>
-      <h3 style={{ marginTop: 0 }}>Business Roles (assegnazioni)</h3>
-      <div style={{ color: "var(--muted)", fontSize: 12 }}>
-        Totale: {Object.keys(roleData.assignments || {}).length}
+        {/* BOTTOM: assegnazioni */}
+        <div style={{ flex: `0 0 ${assignH}px`, minHeight: 160, overflow: "auto" }}>
+          <div style={{ padding: "12px 12px 0 12px" }}>
+            <h3 style={{ marginTop: 0 }}>Business Roles (assegnazioni)</h3>
+            <div style={{ color: "var(--muted)", fontSize: 12 }}>
+              Totale: {Object.keys(roleData.assignments || {}).length}
+            </div>
+          </div>
+
+          <div style={{ padding: "0 12px 12px 12px" }}>
+            <table className="table">
+              <thead><tr><th>Display Name</th><th>Business Role</th></tr></thead>
+              <tbody>
+                {Object.entries(roleData.assignments || {}).map(([u, role]) => {
+                  const bg = roleMetaByRole?.[role]?.color || "#111a2e";
+                  const fg = textColorForBg(bg);
+                  const dn = usersIndex?.[u] || u;
+
+                  return (
+                    <tr key={u}>
+                      <td>{dn}</td>
+                      <td>
+                        <select
+                          value={role}
+                          onChange={async (e) => {
+                            const newRole = e.target.value;
+                            try {
+                              await api.businessRoleAddUser(newRole, u);
+                              const refreshed = await api.businessRoles();
+                              setRoleData(refreshed);
+                            } catch (e2) {
+                              setErr(String(e2.message || e2));
+                            }
+                          }}
+                          style={{
+                            backgroundColor: bg,
+                            color: fg,
+                            border: "1px solid rgba(255,255,255,0.18)",
+                            borderRadius: 10,
+                            padding: "10px 12px",
+                            minWidth: 110
+                          }}
+                        >
+                          {(roleData.roles || []).map(x => (
+                            <option key={x.role} value={x.role}>{x.role}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {err && <div className="err">{err}</div>}
       </div>
-    </div>
-
-    <div style={{ padding: "0 12px 12px 12px" }}>
-      <table className="table">
-        <thead><tr><th>Display Name</th><th>Business Role</th></tr></thead>
-        <tbody>
-          {Object.entries(roleData.assignments || {}).map(([u, role]) => {
-            const bg = roleMetaByRole?.[role]?.color || "#111a2e";
-            const fg = textColorForBg(bg);
-            const dn = usersIndex?.[u] || u;
-
-            return (
-              <tr key={u}>
-                <td>{dn}</td>
-                <td>
-                  <select
-                    value={role}
-                    onChange={async (e) => {
-                      const newRole = e.target.value;
-                      try {
-                        await api.businessRoleAddUser(newRole, u);
-                        const refreshed = await api.businessRoles();
-                        setRoleData(refreshed);
-                      } catch (e2) {
-                        setErr(String(e2.message || e2));
-                      }
-                    }}
-                    style={{
-                      backgroundColor: bg,
-                      color: fg,
-                      border: "1px solid rgba(255,255,255,0.18)",
-                      borderRadius: 10,
-                      padding: "10px 12px",
-                      minWidth: 110
-                    }}
-                  >
-                    {(roleData.roles || []).map(x => (
-                      <option key={x.role} value={x.role}>{x.role}</option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  {err && <div className="err">{err}</div>}
-</div>
 
 
     </div>
@@ -1156,7 +1175,7 @@ function BusinessRolesHome() {
   }, []);
 
 
-    return (
+  return (
     <div className="main">
       <h2 style={{ marginTop: 0 }}>Business Roles</h2>
 
@@ -1195,27 +1214,27 @@ function BusinessRolesHome() {
         <table className="table">
           <thead><tr><th>Role</th><th>Users</th></tr></thead>
           <tbody>
-  {roles.map(r => (
-    <tr key={r.role}>
-      <td>
-        <NavLink
-          to={`/business-roles/${encodeURIComponent(r.role)}`}
-          className="roleRowLink"
-        >
-          {r.role}
-        </NavLink>
-      </td>
-      <td>
-        <NavLink
-          to={`/business-roles/${encodeURIComponent(r.role)}`}
-          className="roleRowLink mutedLink"
-        >
-          {r.count}
-        </NavLink>
-      </td>
-    </tr>
-  ))}
-</tbody>
+            {roles.map(r => (
+              <tr key={r.role}>
+                <td>
+                  <NavLink
+                    to={`/business-roles/${encodeURIComponent(r.role)}`}
+                    className="roleRowLink"
+                  >
+                    {r.role}
+                  </NavLink>
+                </td>
+                <td>
+                  <NavLink
+                    to={`/business-roles/${encodeURIComponent(r.role)}`}
+                    className="roleRowLink mutedLink"
+                  >
+                    {r.count}
+                  </NavLink>
+                </td>
+              </tr>
+            ))}
+          </tbody>
 
         </table>
       </div>
@@ -1233,7 +1252,7 @@ function BusinessRoleDetail() {
   const [err, setErr] = useState("");
 
 
-    const [meta, setMeta] = useState({ color: "#00b4ff", groups: [] });
+  const [meta, setMeta] = useState({ color: "#00b4ff", groups: [] });
   const [allGroups, setAllGroups] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -1244,50 +1263,50 @@ function BusinessRoleDetail() {
 
 
   const selectStyles = {
-  control: (base, state) => ({
-    ...base,
-    backgroundColor: "#111a2e",
-    borderColor: state.isFocused ? "rgba(106,166,255,0.55)" : "rgba(255,255,255,0.18)",
-    boxShadow: "none",
-    minHeight: 40
-  }),
-  valueContainer: (base) => ({ ...base, padding: "2px 10px" }),
-  singleValue: (base) => ({ ...base, color: "#e9eefc" }),
-  input: (base) => ({ ...base, color: "#e9eefc" }),
-  placeholder: (base) => ({ ...base, color: "rgba(233,238,252,0.65)" }),
-  
-  
-
-
-  menu: (base) => ({
-    ...base,
-    backgroundColor: "#111a2e",
-    border: "1px solid rgba(255,255,255,0.18)",
-    boxShadow: "0 18px 55px rgba(0,0,0,0.65)",
-    overflow: "hidden"
-  }),
-  menuList: (base) => ({
-    ...base,
-    backgroundColor: "#111a2e",
-    padding: 6
-  }),
-  option: (base, state) => ({
-    ...base,
-    backgroundColor: state.isSelected
-      ? "rgba(106,166,255,0.22)"
-      : state.isFocused
-        ? "rgba(106,166,255,0.14)"
-        : "#111a2e",
-    color: "#e9eefc",
-    borderRadius: 10,
-    margin: "2px 0"
-  }),
-
-};
+    control: (base, state) => ({
+      ...base,
+      backgroundColor: "#111a2e",
+      borderColor: state.isFocused ? "rgba(106,166,255,0.55)" : "rgba(255,255,255,0.18)",
+      boxShadow: "none",
+      minHeight: 40
+    }),
+    valueContainer: (base) => ({ ...base, padding: "2px 10px" }),
+    singleValue: (base) => ({ ...base, color: "#e9eefc" }),
+    input: (base) => ({ ...base, color: "#e9eefc" }),
+    placeholder: (base) => ({ ...base, color: "rgba(233,238,252,0.65)" }),
 
 
 
-      async function autoApplyHighConfidence(role, items, currentGroups) {
+
+    menu: (base) => ({
+      ...base,
+      backgroundColor: "#111a2e",
+      border: "1px solid rgba(255,255,255,0.18)",
+      boxShadow: "0 18px 55px rgba(0,0,0,0.65)",
+      overflow: "hidden"
+    }),
+    menuList: (base) => ({
+      ...base,
+      backgroundColor: "#111a2e",
+      padding: 6
+    }),
+    option: (base, state) => ({
+      ...base,
+      backgroundColor: state.isSelected
+        ? "rgba(106,166,255,0.22)"
+        : state.isFocused
+          ? "rgba(106,166,255,0.14)"
+          : "#111a2e",
+      color: "#e9eefc",
+      borderRadius: 10,
+      margin: "2px 0"
+    }),
+
+  };
+
+
+
+  async function autoApplyHighConfidence(role, items, currentGroups) {
     const already = new Set(currentGroups || []);
 
     const toApply = (items || [])
@@ -1309,58 +1328,58 @@ function BusinessRoleDetail() {
 
 
 
-    async function load() {
-      try {
-        setErr(""); setOk("");
-        const d = await api.businessRoleDetail(role);
-        const u = await api.users("");
-        const m = await api.businessRoleMeta(role);
-        const g = await api.adGroups();
-        setMeta({ color: m.color, groups: m.groups }),
+  async function load() {
+    try {
+      setErr(""); setOk("");
+      const d = await api.businessRoleDetail(role);
+      const u = await api.users("");
+      const m = await api.businessRoleMeta(role);
+      const g = await api.adGroups();
+      setMeta({ color: m.color, groups: m.groups }),
 
         setSuggErr("");
-        setSuggLoading(true);
-        let items = [];
-        try {
-          const s = await api.businessRoleSuggestions(role, 0.60, 50);
-          items = s.items || [];
-          setSuggestions(items);
-        } catch (e3) {
-          setSuggestions([]);
-          setSuggErr(String(e3?.message || e3));
-        } finally {
-          setSuggLoading(false);
-        }
-
-                if (!autoApplied) {
-          try {
-            const out = await autoApplyHighConfidence(role, items, m.groups || []);
-            if (out.applied > 0) {
-              setOk(`Auto-assegnati ${out.applied} gruppi (confidence ≥ 80%).`);
-              setAutoApplied(true);
-              await load(); // ricarica meta + suggestions aggiornate
-              return;
-            }
-          } catch (e4) {
-            setErr(String(e4?.message || e4));
-          } finally {
-            setAutoApplied(true);
-          }
-        }
-
-        setDetail(d);
-        setAllUsers(u.users || []);
-        setMeta({ color: m.color, groups: m.groups || [] });
-        setAllGroups(g.groups || []);
-      } catch (e) {
-        setErr(String(e.message || e));
+      setSuggLoading(true);
+      let items = [];
+      try {
+        const s = await api.businessRoleSuggestions(role, 0.60, 50);
+        items = s.items || [];
+        setSuggestions(items);
+      } catch (e3) {
+        setSuggestions([]);
+        setSuggErr(String(e3?.message || e3));
+      } finally {
+        setSuggLoading(false);
       }
+
+      if (!autoApplied) {
+        try {
+          const out = await autoApplyHighConfidence(role, items, m.groups || []);
+          if (out.applied > 0) {
+            setOk(`Auto-assegnati ${out.applied} gruppi (confidence ≥ 80%).`);
+            setAutoApplied(true);
+            await load(); // ricarica meta + suggestions aggiornate
+            return;
+          }
+        } catch (e4) {
+          setErr(String(e4?.message || e4));
+        } finally {
+          setAutoApplied(true);
+        }
+      }
+
+      setDetail(d);
+      setAllUsers(u.users || []);
+      setMeta({ color: m.color, groups: m.groups || [] });
+      setAllGroups(g.groups || []);
+    } catch (e) {
+      setErr(String(e.message || e));
     }
+  }
 
 
   useEffect(() => {
-  setAutoApplied(false);
-  load();
+    setAutoApplied(false);
+    load();
   }, [role]);
 
 
@@ -1386,9 +1405,9 @@ function BusinessRoleDetail() {
 
       <div className="panel">
         <div className="row" style={{ alignItems: "flex-end" }}>
-    <div style={{ width: 360 }}>
-  </div>
-  </div>
+          <div style={{ width: 360 }}>
+          </div>
+        </div>
 
         {ok && <div className="ok">{ok}</div>}
         {err && <div className="err">{err}</div>}
@@ -1424,13 +1443,13 @@ function BusinessRoleDetail() {
             <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Aggiungi utente</div>
             <Select
               isSearchable={true}
-                styles={selectStyles}
-                value={selectedUser}
-                onChange={setSelectedUser}
-                placeholder="Cerca utente..."
-                options={available.map(u => ({ value: u.username, label: u.username }))}
-                menuPortalTarget={document.body}
-                menuPosition="fixed"
+              styles={selectStyles}
+              value={selectedUser}
+              onChange={setSelectedUser}
+              placeholder="Cerca utente..."
+              options={available.map(u => ({ value: u.username, label: u.username }))}
+              menuPortalTarget={document.body}
+              menuPosition="fixed"
             />
           </div>
           <button
@@ -1519,61 +1538,61 @@ function BusinessRoleDetail() {
           </tbody>
         </table>
 
-            <hr className="sep" />
+        <hr className="sep" />
 
-<h3 style={{ marginTop: 0 }}>AI Suggestion (confidence &gt; 60%)</h3>
+        <h3 style={{ marginTop: 0 }}>AI Suggestion (confidence &gt; 60%)</h3>
 
-{suggLoading && <div style={{ color: "var(--muted)" }}>Caricamento suggestions…</div>}
-{suggErr && <div className="err">{suggErr}</div>}
+        {suggLoading && <div style={{ color: "var(--muted)" }}>Caricamento suggestions…</div>}
+        {suggErr && <div className="err">{suggErr}</div>}
 
-{!suggLoading && !suggErr && (
-  <table className="table">
-    <thead>
-      <tr>
-        <th>Group</th>
-        <th style={{ width: 140 }}>Confidence</th>
-        <th style={{ width: 140 }}></th>
-      </tr>
-    </thead>
-    <tbody>
-      {(suggestions || [])
-        // safety: se per qualche motivo arriva un gruppo già assegnato, non mostrarlo
-        .filter(x => !(meta.groups || []).includes(x.group))
-        .map((x) => (
-          <tr key={x.group}>
-            <td>{x.group}</td>
-            <td style={{ color: "var(--muted)" }}>
-              {Math.round((Number(x.confidence || 0) * 100))}%
-            </td>
-            <td>
-              <button
-                className="primary"
-                onClick={async () => {
-                  try {
-                    setErr(""); setOk("");
-                    // riusa il tuo endpoint standard di add group
-                    await api.businessRoleAddGroup(role, x.group);
-                    setOk("Gruppo assegnato dal suggerimento.");
-                    await load();
-                  } catch (e2) {
-                    setErr(String(e2.message || e2));
-                  }
-                }}
-              >
-                Select
-              </button>
-            </td>
-          </tr>
-        ))}
-    </tbody>
-  </table>
-)}
+        {!suggLoading && !suggErr && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Group</th>
+                <th style={{ width: 140 }}>Confidence</th>
+                <th style={{ width: 140 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(suggestions || [])
+                // safety: se per qualche motivo arriva un gruppo già assegnato, non mostrarlo
+                .filter(x => !(meta.groups || []).includes(x.group))
+                .map((x) => (
+                  <tr key={x.group}>
+                    <td>{x.group}</td>
+                    <td style={{ color: "var(--muted)" }}>
+                      {Math.round((Number(x.confidence || 0) * 100))}%
+                    </td>
+                    <td>
+                      <button
+                        className="primary"
+                        onClick={async () => {
+                          try {
+                            setErr(""); setOk("");
+                            // riusa il tuo endpoint standard di add group
+                            await api.businessRoleAddGroup(role, x.group);
+                            setOk("Gruppo assegnato dal suggerimento.");
+                            await load();
+                          } catch (e2) {
+                            setErr(String(e2.message || e2));
+                          }
+                        }}
+                      >
+                        Select
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        )}
 
-{!suggLoading && !suggErr && (suggestions || []).length === 0 && (
-  <div style={{ color: "var(--muted)" }}>
-    Nessun gruppo suggerito sopra soglia.
-  </div>
-)}
+        {!suggLoading && !suggErr && (suggestions || []).length === 0 && (
+          <div style={{ color: "var(--muted)" }}>
+            Nessun gruppo suggerito sopra soglia.
+          </div>
+        )}
 
 
 
@@ -1601,12 +1620,12 @@ export default function App() {
   const [roles, setRoles] = useState([]);
 
   useEffect(() => {
-  (async () => {
-    try { await api.me(); }
-    catch { clearToken(); }
-    setReady(true);
-  })();
-}, []);
+    (async () => {
+      try { await api.me(); }
+      catch { clearToken(); }
+      setReady(true);
+    })();
+  }, []);
 
 
   useEffect(() => {
@@ -1639,7 +1658,7 @@ export default function App() {
 
   return (
     <div className="layout">
-      <Sidebar onLogout={logout} roles={roles}  />
+      <Sidebar onLogout={logout} roles={roles} />
       <Routes>
         <Route path="/" element={<Analytics />} />
         <Route path="/analytics" element={<Analytics />} />

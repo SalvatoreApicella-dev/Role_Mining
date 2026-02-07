@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+const API_BASE = "";
+// const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 export function getToken() {
   return localStorage.getItem("rm_token") || "";
@@ -13,7 +14,9 @@ export function clearToken() {
 }
 
 export async function getConnector() {
-  const res = await fetch("/api/connector");
+  const res = await fetch(`${API_BASE}/api/config/connector`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -67,7 +70,7 @@ async function request(path, { method = "GET", body } = {}) {
     try {
       const data = await res.json();
       msg = data?.detail || msg;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
 
@@ -86,7 +89,7 @@ export const api = {
   login: (username, password) => request("/api/auth/login", { method: "POST", body: { username, password } }),
   me: () => request("/api/me"),
 
-    adGroups: () => request("/api/ad/groups"),
+  adGroups: () => request("/api/ad/groups"),
   businessRoleMeta: (role) => request(`/api/businessroles/${encodeURIComponent(role)}/meta`),
   businessRoleSuggestions,
 
@@ -97,12 +100,12 @@ export const api = {
   businessRoleRemoveGroup: (role, group) =>
     request(`/api/businessroles/${encodeURIComponent(role)}/groups/remove`, { method: "POST", body: { group } }),
 
-   overprivilegedUsers: (nclusters = 8, rolesupport = 0.1) =>
+  overprivilegedUsers: (nclusters = 8, rolesupport = 0.1) =>
     request(
       `/api/drilldown/overprivileged?nclusters=${encodeURIComponent(nclusters)}&rolesupport=${encodeURIComponent(rolesupport)}`
     ),
 
-    
+
 
   getConnector: () => request("/api/config/connector"),
   setConnector: (cfg) => request("/api/config/connector", { method: "POST", body: cfg }),
@@ -120,32 +123,32 @@ export const api = {
   logs: () => request("/api/logs"),
   businessRoles: () => request("/api/businessroles"),
   businessRoleCreate: (role) =>
-  request("/api/businessroles/create", { method: "POST", body: { role } }),
+    request("/api/businessroles/create", { method: "POST", body: { role } }),
   businessRoleDetail: (role) => request(`/api/businessroles/${encodeURIComponent(role)}`),
   businessRoleAddUser: (role, username) =>
     request(`/api/businessroles/${encodeURIComponent(role)}/add`, { method: "POST", body: { username } }),
 
   async get(path) {
-  const res = await fetch(path, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${getToken()}` },
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return await res.json();
-},
+    const res = await fetch(path, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+  },
 
-async post(path, body) {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${getToken()}`,
-    },
-    body: JSON.stringify(body ?? {}),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return await res.json();
-},
+  async post(path, body) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify(body ?? {}),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+  },
 
 
 };
@@ -180,7 +183,12 @@ export async function apiFetch(path, options = {}) {
 
 
 export async function getDuplicateDisplayNameConflicts() {
-  const r = await fetch("/api/ingest/conflicts/duplicate-displayname", {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const r = await fetch(`${API_BASE}/api/ingest/conflicts/duplicate-displayname`, {
+    headers,
     credentials: "include",
   });
   if (!r.ok) throw new Error(await r.text());
@@ -188,10 +196,14 @@ export async function getDuplicateDisplayNameConflicts() {
 }
 
 export async function chooseDuplicateDisplayName(displayName, candidateId) {
-  const r = await fetch("/api/ingest/conflicts/duplicate-displayname/choose", {
+  const headers = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const r = await fetch(`${API_BASE}/api/ingest/conflicts/duplicate-displayname/choose`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ displayName, candidateId }),
   });
   if (!r.ok) throw new Error(await r.text());

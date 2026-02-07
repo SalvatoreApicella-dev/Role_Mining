@@ -1,0 +1,2105 @@
+INFO:     127.0.0.1:52761 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65082 - "POST /api/auth/login HTTP/1.1" 200 OK
+DEBUG_MAPPING: alice.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci existing='IT' chosen='IT'
+DEBUG_MAPPING: alessandro.rizzi existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis existing='IT' chosen='IT'
+DEBUG_MAPPING: stefano.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: william.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: adriano.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: helena.russo existing='IT' chosen='IT'
+DEBUG_MAPPING: oscar.romano existing='IT' chosen='IT'
+DEBUG_MAPPING: walter.galli existing='IT' chosen='IT'
+DEBUG_MAPPING: diego.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: klara.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: valeria.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: cesare.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: jonas.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: quinto.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: xavier.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: enea.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: lea.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: rocco.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: yosef.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: fabio.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: nicol.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: vito.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: prova.accesso2 existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri2 existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo2 existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci2 existing='IT' chosen='IT'
+DEBUG_MAPPING: alice.rossi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis2 existing='IT' chosen='IT'
+DEBUG_MAPPING: bob.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini existing='HR' chosen='HR'
+DEBUG_MAPPING: zoe.carli existing='HR' chosen='HR'
+DEBUG_MAPPING: gabriele.rota existing='HR' chosen='HR'
+DEBUG_MAPPING: noemi.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: viola.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: caterina.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: jamal.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli2 existing='HR' chosen='HR'
+DEBUG_MAPPING: tania.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: beppe.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: ines.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: piero.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: wassim.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: diana.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: kamal.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: qadir.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: xia.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli3 existing='HR' chosen='HR'
+DEBUG_MAPPING: tarek.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: adele.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: bob.bianchi2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli4 existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini2 existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala2 existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri2 existing='HR' chosen='HR'
+DEBUG_MAPPING: paolo.bonolis existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ginevra.leone existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nicola.riva existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xenia.marini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: enrico.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: lucia.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: tommaso.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: alessia.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hugo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: samir.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: giorgia.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nereo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ursula.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: beatrice.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hanna.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: oreste.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: vania.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ciro.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: quinn.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marco.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: quirino.sala existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: yuri.lombardi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: fabiola.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: massimo.ricci existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ugo.ferri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: irene.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: nadia.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ulisse.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: arianna.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: hector.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olga.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: vittorio.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jade.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: pina.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: wojtek.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: dario.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olivia.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: uma.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: marco.conti2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: francesca.riva existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daniela.gatti existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: tiziana.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: bianca.parodi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: jessica.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: paola.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: erica.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rita.bassi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: yara.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daria.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ksenia.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rania.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: flavia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: mauro.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: sonia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: zuleika.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: greta.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rachele.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylen.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva3 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: davide.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana existing='OPS' chosen='OPS'
+DEBUG_MAPPING: lorenzo.pavan existing='OPS' chosen='OPS'
+DEBUG_MAPPING: umberto.ferri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: claudio.ferraro existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivano.de.luca existing='OPS' chosen='OPS'
+DEBUG_MAPPING: raffaele.villa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: xavier.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: filippo.costa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: omar.greco existing='OPS' chosen='OPS'
+DEBUG_MAPPING: wanda.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: edoardo.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: loris.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: sergio.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: zaira.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivo.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: tiziano.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: alina.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: hamid.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: pietro.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: widad.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: davide.romano2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: elena.greco existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: federico.basile existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: michela.berni existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: vera.bassi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: sabrina.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zaccaria.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: gaia.romano existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: paolo.ricci existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ximena.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: fiona.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: mina.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: tessa.neri existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: alberto.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: nina.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ubaldo.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: brenda.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: said.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zohra.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: elena.greco2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa3 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: questarigahaheadersbagliato existing='IT|VPN,Azure' chosen='IT|VPN,Azure'
+DEBUG_MAPPING: useruat existing='RoleUAT' chosen='DeptUAT'
+INFO:     127.0.0.1:65085 - "POST /api/import/csv HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56950 - "GET /api/users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62712 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62905 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57255 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60934 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56133 - "POST /api/auth/login HTTP/1.1" 200 OK
+DEBUG_MAPPING: alice.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci existing='IT' chosen='IT'
+DEBUG_MAPPING: alessandro.rizzi existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis existing='IT' chosen='IT'
+DEBUG_MAPPING: stefano.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: william.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: adriano.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: helena.russo existing='IT' chosen='IT'
+DEBUG_MAPPING: oscar.romano existing='IT' chosen='IT'
+DEBUG_MAPPING: walter.galli existing='IT' chosen='IT'
+DEBUG_MAPPING: diego.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: klara.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: valeria.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: cesare.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: jonas.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: quinto.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: xavier.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: enea.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: lea.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: rocco.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: yosef.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: fabio.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: nicol.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: vito.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: prova.accesso2 existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri2 existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo2 existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci2 existing='IT' chosen='IT'
+DEBUG_MAPPING: alice.rossi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis2 existing='IT' chosen='IT'
+DEBUG_MAPPING: bob.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini existing='HR' chosen='HR'
+DEBUG_MAPPING: zoe.carli existing='HR' chosen='HR'
+DEBUG_MAPPING: gabriele.rota existing='HR' chosen='HR'
+DEBUG_MAPPING: noemi.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: viola.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: caterina.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: jamal.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli2 existing='HR' chosen='HR'
+DEBUG_MAPPING: tania.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: beppe.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: ines.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: piero.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: wassim.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: diana.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: kamal.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: qadir.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: xia.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli3 existing='HR' chosen='HR'
+DEBUG_MAPPING: tarek.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: adele.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: bob.bianchi2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli4 existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini2 existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala2 existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri2 existing='HR' chosen='HR'
+DEBUG_MAPPING: paolo.bonolis existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ginevra.leone existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nicola.riva existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xenia.marini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: enrico.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: lucia.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: tommaso.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: alessia.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hugo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: samir.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: giorgia.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nereo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ursula.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: beatrice.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hanna.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: oreste.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: vania.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ciro.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: quinn.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marco.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: quirino.sala existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: yuri.lombardi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: fabiola.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: massimo.ricci existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ugo.ferri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: irene.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: nadia.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ulisse.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: arianna.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: hector.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olga.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: vittorio.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jade.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: pina.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: wojtek.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: dario.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olivia.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: uma.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: marco.conti2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: francesca.riva existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daniela.gatti existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: tiziana.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: bianca.parodi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: jessica.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: paola.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: erica.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rita.bassi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: yara.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daria.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ksenia.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rania.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: flavia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: mauro.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: sonia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: zuleika.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: greta.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rachele.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylen.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva3 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: davide.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana existing='OPS' chosen='OPS'
+DEBUG_MAPPING: lorenzo.pavan existing='OPS' chosen='OPS'
+DEBUG_MAPPING: umberto.ferri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: claudio.ferraro existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivano.de.luca existing='OPS' chosen='OPS'
+DEBUG_MAPPING: raffaele.villa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: xavier.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: filippo.costa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: omar.greco existing='OPS' chosen='OPS'
+DEBUG_MAPPING: wanda.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: edoardo.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: loris.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: sergio.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: zaira.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivo.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: tiziano.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: alina.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: hamid.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: pietro.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: widad.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: davide.romano2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: elena.greco existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: federico.basile existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: michela.berni existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: vera.bassi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: sabrina.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zaccaria.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: gaia.romano existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: paolo.ricci existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ximena.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: fiona.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: mina.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: tessa.neri existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: alberto.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: nina.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ubaldo.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: brenda.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: said.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zohra.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: elena.greco2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa3 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: questarigahaheadersbagliato existing='IT|VPN,Azure' chosen='IT|VPN,Azure'
+DEBUG_MAPPING: useruat existing='RoleUAT' chosen='DeptUAT'
+INFO:     127.0.0.1:59721 - "POST /api/import/csv HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57687 - "GET /api/users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54183 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50578 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65027 - "POST /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52716 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56074 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52076 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52078 - "POST /api/auth/login HTTP/1.1" 200 OK
+DEBUG_MAPPING: alice.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci existing='IT' chosen='IT'
+DEBUG_MAPPING: alessandro.rizzi existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis existing='IT' chosen='IT'
+DEBUG_MAPPING: stefano.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: william.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: adriano.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: helena.russo existing='IT' chosen='IT'
+DEBUG_MAPPING: oscar.romano existing='IT' chosen='IT'
+DEBUG_MAPPING: walter.galli existing='IT' chosen='IT'
+DEBUG_MAPPING: diego.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: klara.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: valeria.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: cesare.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: jonas.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: quinto.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: xavier.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: enea.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: lea.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: rocco.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: yosef.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: fabio.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: nicol.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: vito.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: prova.accesso2 existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri2 existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo2 existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci2 existing='IT' chosen='IT'
+DEBUG_MAPPING: alice.rossi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis2 existing='IT' chosen='IT'
+DEBUG_MAPPING: bob.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini existing='HR' chosen='HR'
+DEBUG_MAPPING: zoe.carli existing='HR' chosen='HR'
+DEBUG_MAPPING: gabriele.rota existing='HR' chosen='HR'
+DEBUG_MAPPING: noemi.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: viola.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: caterina.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: jamal.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli2 existing='HR' chosen='HR'
+DEBUG_MAPPING: tania.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: beppe.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: ines.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: piero.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: wassim.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: diana.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: kamal.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: qadir.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: xia.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli3 existing='HR' chosen='HR'
+DEBUG_MAPPING: tarek.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: adele.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: bob.bianchi2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli4 existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini2 existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala2 existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri2 existing='HR' chosen='HR'
+DEBUG_MAPPING: paolo.bonolis existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ginevra.leone existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nicola.riva existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xenia.marini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: enrico.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: lucia.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: tommaso.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: alessia.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hugo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: samir.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: giorgia.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nereo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ursula.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: beatrice.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hanna.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: oreste.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: vania.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ciro.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: quinn.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marco.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: quirino.sala existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: yuri.lombardi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: fabiola.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: massimo.ricci existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ugo.ferri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: irene.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: nadia.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ulisse.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: arianna.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: hector.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olga.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: vittorio.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jade.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: pina.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: wojtek.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: dario.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olivia.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: uma.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: marco.conti2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: francesca.riva existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daniela.gatti existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: tiziana.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: bianca.parodi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: jessica.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: paola.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: erica.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rita.bassi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: yara.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daria.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ksenia.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rania.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: flavia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: mauro.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: sonia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: zuleika.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: greta.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rachele.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylen.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva3 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: davide.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana existing='OPS' chosen='OPS'
+DEBUG_MAPPING: lorenzo.pavan existing='OPS' chosen='OPS'
+DEBUG_MAPPING: umberto.ferri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: claudio.ferraro existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivano.de.luca existing='OPS' chosen='OPS'
+DEBUG_MAPPING: raffaele.villa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: xavier.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: filippo.costa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: omar.greco existing='OPS' chosen='OPS'
+DEBUG_MAPPING: wanda.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: edoardo.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: loris.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: sergio.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: zaira.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivo.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: tiziano.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: alina.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: hamid.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: pietro.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: widad.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: davide.romano2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: elena.greco existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: federico.basile existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: michela.berni existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: vera.bassi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: sabrina.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zaccaria.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: gaia.romano existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: paolo.ricci existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ximena.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: fiona.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: mina.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: tessa.neri existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: alberto.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: nina.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ubaldo.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: brenda.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: said.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zohra.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: elena.greco2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa3 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: questarigahaheadersbagliato existing='IT|VPN,Azure' chosen='IT|VPN,Azure'
+DEBUG_MAPPING: useruat existing='RoleUAT' chosen='DeptUAT'
+INFO:     127.0.0.1:49543 - "POST /api/import/csv HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59542 - "GET /api/users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65337 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65339 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49744 - "POST /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54499 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:60558 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58570 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60912 - "POST /api/auth/login HTTP/1.1" 200 OK
+DEBUG_MAPPING: alice.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci existing='IT' chosen='IT'
+DEBUG_MAPPING: alessandro.rizzi existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis existing='IT' chosen='IT'
+DEBUG_MAPPING: stefano.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: william.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: adriano.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: helena.russo existing='IT' chosen='IT'
+DEBUG_MAPPING: oscar.romano existing='IT' chosen='IT'
+DEBUG_MAPPING: walter.galli existing='IT' chosen='IT'
+DEBUG_MAPPING: diego.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: klara.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: valeria.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: cesare.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: jonas.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: quinto.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: xavier.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: enea.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: lea.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: rocco.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: yosef.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: fabio.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: nicol.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: vito.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: prova.accesso2 existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri2 existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo2 existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci2 existing='IT' chosen='IT'
+DEBUG_MAPPING: alice.rossi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis2 existing='IT' chosen='IT'
+DEBUG_MAPPING: bob.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini existing='HR' chosen='HR'
+DEBUG_MAPPING: zoe.carli existing='HR' chosen='HR'
+DEBUG_MAPPING: gabriele.rota existing='HR' chosen='HR'
+DEBUG_MAPPING: noemi.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: viola.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: caterina.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: jamal.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli2 existing='HR' chosen='HR'
+DEBUG_MAPPING: tania.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: beppe.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: ines.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: piero.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: wassim.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: diana.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: kamal.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: qadir.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: xia.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli3 existing='HR' chosen='HR'
+DEBUG_MAPPING: tarek.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: adele.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: bob.bianchi2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli4 existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini2 existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala2 existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri2 existing='HR' chosen='HR'
+DEBUG_MAPPING: paolo.bonolis existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ginevra.leone existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nicola.riva existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xenia.marini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: enrico.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: lucia.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: tommaso.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: alessia.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hugo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: samir.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: giorgia.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nereo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ursula.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: beatrice.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hanna.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: oreste.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: vania.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ciro.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: quinn.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marco.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: quirino.sala existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: yuri.lombardi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: fabiola.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: massimo.ricci existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ugo.ferri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: irene.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: nadia.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ulisse.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: arianna.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: hector.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olga.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: vittorio.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jade.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: pina.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: wojtek.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: dario.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olivia.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: uma.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: marco.conti2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: francesca.riva existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daniela.gatti existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: tiziana.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: bianca.parodi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: jessica.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: paola.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: erica.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rita.bassi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: yara.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daria.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ksenia.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rania.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: flavia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: mauro.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: sonia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: zuleika.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: greta.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rachele.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylen.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva3 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: davide.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana existing='OPS' chosen='OPS'
+DEBUG_MAPPING: lorenzo.pavan existing='OPS' chosen='OPS'
+DEBUG_MAPPING: umberto.ferri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: claudio.ferraro existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivano.de.luca existing='OPS' chosen='OPS'
+DEBUG_MAPPING: raffaele.villa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: xavier.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: filippo.costa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: omar.greco existing='OPS' chosen='OPS'
+DEBUG_MAPPING: wanda.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: edoardo.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: loris.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: sergio.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: zaira.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivo.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: tiziano.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: alina.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: hamid.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: pietro.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: widad.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: davide.romano2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: elena.greco existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: federico.basile existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: michela.berni existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: vera.bassi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: sabrina.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zaccaria.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: gaia.romano existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: paolo.ricci existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ximena.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: fiona.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: mina.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: tessa.neri existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: alberto.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: nina.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ubaldo.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: brenda.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: said.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zohra.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: elena.greco2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa3 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: questarigahaheadersbagliato existing='IT|VPN,Azure' chosen='IT|VPN,Azure'
+DEBUG_MAPPING: useruat existing='RoleUAT' chosen='DeptUAT'
+INFO:     127.0.0.1:60916 - "POST /api/import/csv HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50566 - "GET /api/users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56044 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56454 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56457 - "POST /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52395 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:64226 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50390 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50393 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50394 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50395 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50397 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49779 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60765 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58050 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58051 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58052 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58053 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58054 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58959 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54499 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56588 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60000 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58632 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60290 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53865 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64750 - "GET /api/ingest/conflicts/duplicate-displayname HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "GET /api/ingest/conflicts/duplicate-displayname HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60396 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63699 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60276 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58495 - "GET /api/config/connector HTTP/1.1" 200 OK
+DEBUG_MAPPING: alice.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci existing='IT' chosen='IT'
+DEBUG_MAPPING: alessandro.rizzi existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis existing='IT' chosen='IT'
+DEBUG_MAPPING: stefano.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: william.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: adriano.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: helena.russo existing='IT' chosen='IT'
+DEBUG_MAPPING: oscar.romano existing='IT' chosen='IT'
+DEBUG_MAPPING: walter.galli existing='IT' chosen='IT'
+DEBUG_MAPPING: diego.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: klara.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: valeria.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: cesare.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: jonas.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: quinto.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: xavier.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: enea.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: lea.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: rocco.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: yosef.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: fabio.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: nicol.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: vito.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: prova.accesso2 existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri2 existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo2 existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci2 existing='IT' chosen='IT'
+DEBUG_MAPPING: alice.rossi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis2 existing='IT' chosen='IT'
+DEBUG_MAPPING: bob.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini existing='HR' chosen='HR'
+DEBUG_MAPPING: zoe.carli existing='HR' chosen='HR'
+DEBUG_MAPPING: gabriele.rota existing='HR' chosen='HR'
+DEBUG_MAPPING: noemi.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: viola.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: caterina.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: jamal.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli2 existing='HR' chosen='HR'
+DEBUG_MAPPING: tania.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: beppe.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: ines.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: piero.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: wassim.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: diana.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: kamal.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: qadir.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: xia.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli3 existing='HR' chosen='HR'
+DEBUG_MAPPING: tarek.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: adele.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: bob.bianchi2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli4 existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini2 existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala2 existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri2 existing='HR' chosen='HR'
+DEBUG_MAPPING: paolo.bonolis existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ginevra.leone existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nicola.riva existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xenia.marini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: enrico.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: lucia.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: tommaso.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: alessia.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hugo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: samir.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: giorgia.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nereo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ursula.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: beatrice.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hanna.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: oreste.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: vania.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ciro.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: quinn.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marco.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: quirino.sala existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: yuri.lombardi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: fabiola.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: massimo.ricci existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ugo.ferri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: irene.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: nadia.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ulisse.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: arianna.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: hector.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olga.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: vittorio.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jade.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: pina.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: wojtek.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: dario.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olivia.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: uma.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: marco.conti2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: francesca.riva existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daniela.gatti existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: tiziana.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: bianca.parodi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: jessica.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: paola.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: erica.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rita.bassi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: yara.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daria.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ksenia.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rania.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: flavia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: mauro.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: sonia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: zuleika.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: greta.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rachele.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylen.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva3 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: davide.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana existing='OPS' chosen='OPS'
+DEBUG_MAPPING: lorenzo.pavan existing='OPS' chosen='OPS'
+DEBUG_MAPPING: umberto.ferri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: claudio.ferraro existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivano.de.luca existing='OPS' chosen='OPS'
+DEBUG_MAPPING: raffaele.villa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: xavier.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: filippo.costa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: omar.greco existing='OPS' chosen='OPS'
+DEBUG_MAPPING: wanda.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: edoardo.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: loris.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: sergio.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: zaira.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivo.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: tiziano.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: alina.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: hamid.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: pietro.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: widad.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: davide.romano2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: elena.greco existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: federico.basile existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: michela.berni existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: vera.bassi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: sabrina.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zaccaria.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: gaia.romano existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: paolo.ricci existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ximena.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: fiona.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: mina.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: tessa.neri existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: alberto.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: nina.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ubaldo.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: brenda.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: said.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zohra.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: elena.greco2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa3 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: questarigahaheadersbagliato existing='IT|VPN,Azure' chosen='IT|VPN,Azure'
+DEBUG_MAPPING: useruat existing='RoleUAT' chosen='DeptUAT'
+INFO:     127.0.0.1:62010 - "POST /api/import/csv HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62341 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51148 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54068 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60446 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52575 - "GET /api/ingest/conflicts/duplicate-displayname HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53828 - "GET /api/ingest/conflicts/duplicate-displayname HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51531 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63699 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53261 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60684 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60683 - "GET /api/kpi/drilldown?metric=overprivileged HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60682 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57183 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57182 - "GET /api/kpi/drilldown?metric=overprivileged HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56752 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61226 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64835 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52719 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54207 - "GET /api/kpi/drilldown?metric=ai-detection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54208 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54209 - "GET /api/kpi/drilldown?metric=ai-detection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51631 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52985 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59370 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57924 - "GET /api/businessroles/IT HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64100 - "GET /api/businessroles/IT HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56737 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56738 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51465 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51439 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56556 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60470 - "GET /api/businessroles/IT/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51802 - "GET /api/businessroles/IT/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58000 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59307 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54906 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49458 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63770 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51252 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56351 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49956 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49955 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50687 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55524 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55055 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65484 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55702 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49592 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65531 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51445 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62581 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62580 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62579 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53500 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63006 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53832 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53831 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53830 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56382 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57828 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54202 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54201 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54200 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54842 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61295 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51438 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51439 - "GET /api/businessroles/IT HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64703 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55309 - "POST /api/businessroles/IT/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51437 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55441 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63602 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63600 - "GET /api/businessroles/IT HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63601 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53992 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57802 - "GET /api/businessroles/IT/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60321 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60322 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64586 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64585 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60396 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62915 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62916 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57200 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59445 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55276 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49220 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59444 - "GET /api/businessroles/IT/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58363 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62149 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54515 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50843 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62518 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50317 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54210 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49268 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53054 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56875 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54207 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63968 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57374 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60025 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50866 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49858 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62416 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51520 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51723 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58280 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50201 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51693 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61792 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54793 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49909 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63299 - "POST /api/businessroles/FINANCE/groups/remove HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63935 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53676 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54333 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56031 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62428 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60747 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56030 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63208 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49680 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52532 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54134 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51143 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54893 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54890 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54888 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54892 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54889 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54891 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58981 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58982 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58984 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58985 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58983 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58980 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63200 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60942 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51657 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60939 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60941 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60940 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64676 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59753 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59756 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59754 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59755 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59757 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61422 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54066 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54065 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54067 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54068 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54069 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57439 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51503 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63060 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50686 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55324 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52874 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49199 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64033 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64031 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64032 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64029 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64030 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50848 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50272 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50275 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50271 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50274 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50273 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57429 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61572 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65175 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65176 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65177 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65174 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65178 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65179 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52658 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52659 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52661 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52662 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52657 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52660 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62950 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57997 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62876 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55635 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60803 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53477 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59045 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51296 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62309 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53783 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53782 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53784 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53785 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53786 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53787 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57031 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50206 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50208 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50207 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50209 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50210 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49161 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56513 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56514 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56515 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56516 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56517 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65413 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65414 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65415 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65416 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65417 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65412 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63029 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55614 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55615 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55616 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55617 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55618 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50967 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55862 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50966 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55724 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55725 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51545 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53693 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53694 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52728 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52725 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52726 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52727 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63884 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63885 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52267 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52268 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52269 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52270 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50889 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50890 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55937 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55932 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55936 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55933 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55935 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55934 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58001 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58000 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58002 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58004 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58005 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58003 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51116 - "GET /api/users/useruat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52814 - "POST /api/users/useruat/update HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65368 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59438 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54352 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49434 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63162 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65068 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65069 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65070 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65072 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65071 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49816 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57813 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57816 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57814 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57812 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57815 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63390 - "GET /api/users/useruat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55755 - "POST /api/users/useruat/update HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53182 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56646 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53674 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58163 - "GET /api/users/alice.rossi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49462 - "POST /api/users/alice.rossi/update HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49461 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51537 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51538 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51539 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51541 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51540 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60658 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59507 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59502 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59505 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59506 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59503 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59504 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62083 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62082 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56991 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63444 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54079 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54467 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54466 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54468 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54469 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54470 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63031 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54469 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54472 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54468 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54471 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54470 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53889 - "GET /api/users/alice.rossi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52954 - "POST /api/users/alice.rossi/update HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64885 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58292 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55765 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57918 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59439 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58518 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58521 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58519 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58520 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58517 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63479 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53591 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53590 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53592 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53594 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53593 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49972 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65011 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53148 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63960 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63961 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58189 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58190 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60128 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62513 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62514 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50061 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61079 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61078 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49636 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49637 - "POST /api/businessroles/FINANCE/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59471 - "POST /api/businessroles/FINANCE/color HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64819 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49304 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61708 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59285 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58208 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60129 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53813 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50306 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58909 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49172 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50202 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49173 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56783 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55795 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56659 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49673 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62484 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62486 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62487 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62485 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62488 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57393 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61517 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61520 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61516 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61519 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61518 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56839 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60224 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54582 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54577 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54579 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54580 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54581 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54578 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52384 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64893 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64894 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64895 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64896 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64897 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56083 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57336 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64300 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51069 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55234 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58715 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58716 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60468 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51888 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57940 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62429 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62425 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62428 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62426 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62427 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57143 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57564 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53369 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53368 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53370 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53371 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60286 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55953 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55951 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55950 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55949 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55952 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57958 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65368 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65371 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65367 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65369 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65370 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56772 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53204 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53205 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53206 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53207 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64679 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54151 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57494 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64678 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52989 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59173 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59174 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55757 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52902 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52901 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52899 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52900 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52903 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50954 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55822 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55825 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55821 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55824 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55823 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53318 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57816 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57925 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53865 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53862 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53863 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53864 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53861 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61253 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51772 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51775 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51774 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51771 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51773 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51000 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59786 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64311 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56227 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56758 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51482 - "GET /api/users?q=gruppo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51860 - "GET /api/users?q=gruppo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54930 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61731 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52124 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62892 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62893 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62894 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59663 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58108 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65424 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63268 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49314 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49312 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61791 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61792 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49313 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53435 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53432 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53433 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53431 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53430 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53434 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58523 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58526 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58524 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58528 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58525 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58527 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58400 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58395 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58397 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58399 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58396 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58398 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61509 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50957 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53377 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55818 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61354 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61353 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61421 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55071 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50899 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55880 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52929 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52933 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52930 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52932 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52931 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64299 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57125 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57123 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57124 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57121 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57122 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54545 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52153 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54458 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54455 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54453 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54456 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54457 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54454 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53950 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53954 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53951 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53952 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53953 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53949 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50565 - "GET /api/users/alice.rossi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51265 - "POST /api/users/alice.rossi/update HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65517 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57783 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60206 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61816 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60115 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60119 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60114 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60117 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60118 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60116 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53001 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53005 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53003 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53004 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53006 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53002 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49221 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51010 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61799 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53148 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51411 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51796 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61456 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61457 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61649 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58438 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58437 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51406 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53760 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59580 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49462 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59694 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55164 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64464 - "GET /api/businessroles/FINANCE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59467 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59468 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57279 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53150 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53149 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55342 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55341 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51816 - "GET /api/businessroles/FINANCE/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64575 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51744 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51407 - "GET /api/businessroles/LEGAL HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63094 - "GET /api/businessroles/LEGAL HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57717 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57718 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50487 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50862 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50863 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63605 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63606 - "GET /api/businessroles/LEGAL/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52904 - "GET /api/businessroles/LEGAL/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63152 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63153 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57750 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49499 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54674 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59365 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52082 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55504 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51890 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55711 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55503 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53413 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53885 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49440 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55020 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60972 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57173 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52775 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49539 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52774 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50855 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58995 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60773 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62418 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62416 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62417 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62415 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49673 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64327 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64704 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64703 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64706 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64705 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57341 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52303 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60657 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60656 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60654 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60655 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58759 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57489 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63196 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57301 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57302 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60589 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50158 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58447 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64728 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51349 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51348 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56576 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60519 - "POST /api/businessroles/LEGAL/groups/add HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65458 - "GET /api/businessroles/LEGAL HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56206 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56205 - "GET /api/businessroles/LEGAL HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50258 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50259 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50061 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61054 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61055 - "GET /api/businessroles/LEGAL/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61611 - "GET /api/ad/groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52716 - "GET /api/businessroles/LEGAL/suggestions?min_conf=0.6&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57321 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57320 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57322 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57323 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53013 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57324 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55554 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55364 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57894 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57895 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64022 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49869 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49870 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58495 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58497 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58496 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58499 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58500 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58498 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59037 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59032 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59034 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59033 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59036 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59035 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57576 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57577 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57574 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57575 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57573 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57572 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57335 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57339 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57338 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57336 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57337 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57340 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58386 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58387 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58388 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58389 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59254 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55967 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64981 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64982 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59253 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53290 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53291 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50386 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54167 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54168 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54169 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54170 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54171 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63485 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60811 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60815 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60814 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60813 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60812 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62102 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55826 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64578 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64573 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64575 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64577 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64574 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64576 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62947 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62948 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62949 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62950 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62951 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62946 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55816 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55043 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60248 - "GET /api/users/prova.accesso HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60974 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60973 - "GET /api/users/prova.accesso HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64028 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62052 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58317 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60454 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65010 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51867 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53639 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53638 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56005 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64575 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50415 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52599 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59172 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59170 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59171 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59169 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59168 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52988 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54753 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63719 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63718 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63720 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63721 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52339 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61095 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56557 - "GET /api/businessroles/DeptUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56559 - "GET /api/businessroles/HR/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56558 - "GET /api/businessroles/FINANCE/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56560 - "GET /api/businessroles/IT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56561 - "GET /api/businessroles/IT%7CVPN%2CAzure/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56562 - "GET /api/businessroles/LEGAL/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52547 - "GET /api/businessroles/SALES/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52548 - "GET /api/businessroles/Unassigned/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52545 - "GET /api/businessroles/PERSIST_TEST/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52543 - "GET /api/businessroles/MARKETING/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52544 - "GET /api/businessroles/OPS/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52546 - "GET /api/businessroles/RoleUAT/meta HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58725 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51521 - "GET /api/users?q= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61076 - "GET /api/users/alice.rossi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64844 - "GET /api/users/alice.rossi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64845 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56198 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58976 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61759 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53655 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53656 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53657 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53660 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53659 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58788 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:50880 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61328 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53107 - "GET /api/ad/extract HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:58019 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error
+DEBUG_MAPPING: alice.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci existing='IT' chosen='IT'
+DEBUG_MAPPING: alessandro.rizzi existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis existing='IT' chosen='IT'
+DEBUG_MAPPING: stefano.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: william.colombo existing='IT' chosen='IT'
+DEBUG_MAPPING: adriano.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: helena.russo existing='IT' chosen='IT'
+DEBUG_MAPPING: oscar.romano existing='IT' chosen='IT'
+DEBUG_MAPPING: walter.galli existing='IT' chosen='IT'
+DEBUG_MAPPING: diego.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: klara.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: valeria.greco existing='IT' chosen='IT'
+DEBUG_MAPPING: cesare.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: jonas.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: quinto.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: xavier.neri existing='IT' chosen='IT'
+DEBUG_MAPPING: enea.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: lea.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: rocco.verdi existing='IT' chosen='IT'
+DEBUG_MAPPING: yosef.bianchi existing='IT' chosen='IT'
+DEBUG_MAPPING: fabio.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: nicol.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: vito.rossi existing='IT' chosen='IT'
+DEBUG_MAPPING: prova.accesso2 existing='IT' chosen='IT'
+DEBUG_MAPPING: giulia.ferri2 existing='IT' chosen='IT'
+DEBUG_MAPPING: matteo.colombo2 existing='IT' chosen='IT'
+DEBUG_MAPPING: andrea.ricci2 existing='IT' chosen='IT'
+DEBUG_MAPPING: alice.rossi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: hassan.el.idrissi2 existing='IT' chosen='IT'
+DEBUG_MAPPING: oriana.de.santis2 existing='IT' chosen='IT'
+DEBUG_MAPPING: bob.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini existing='HR' chosen='HR'
+DEBUG_MAPPING: zoe.carli existing='HR' chosen='HR'
+DEBUG_MAPPING: gabriele.rota existing='HR' chosen='HR'
+DEBUG_MAPPING: noemi.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: viola.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: caterina.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: jamal.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli2 existing='HR' chosen='HR'
+DEBUG_MAPPING: tania.conti existing='HR' chosen='HR'
+DEBUG_MAPPING: beppe.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: ines.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: piero.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: wassim.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: diana.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: kamal.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: qadir.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: xia.rossi existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri existing='HR' chosen='HR'
+DEBUG_MAPPING: ilaria.monti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli3 existing='HR' chosen='HR'
+DEBUG_MAPPING: tarek.verdi existing='HR' chosen='HR'
+DEBUG_MAPPING: adele.bianchi existing='HR' chosen='HR'
+DEBUG_MAPPING: valentina.moretti2 existing='HR' chosen='HR'
+DEBUG_MAPPING: bob.bianchi2 existing='HR' chosen='HR'
+DEBUG_MAPPING: luca.galli4 existing='HR' chosen='HR'
+DEBUG_MAPPING: rosa.valentini2 existing='HR' chosen='HR'
+DEBUG_MAPPING: beatrice.sala2 existing='HR' chosen='HR'
+DEBUG_MAPPING: elisa.neri2 existing='HR' chosen='HR'
+DEBUG_MAPPING: paolo.bonolis existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ginevra.leone existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nicola.riva existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xenia.marini existing='SALES' chosen='SALES'
+DEBUG_MAPPING: enrico.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: lucia.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: tommaso.costa existing='SALES' chosen='SALES'
+DEBUG_MAPPING: alessia.galli existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hugo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: samir.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: giorgia.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: nereo.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ursula.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: beatrice.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: hanna.rossi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: oreste.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: vania.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: ciro.bianchi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini3 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: quinn.neri existing='SALES' chosen='SALES'
+DEBUG_MAPPING: xeno.verdi existing='SALES' chosen='SALES'
+DEBUG_MAPPING: sara.neri2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: simone.costa2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: paolo.bonolis4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marta.pini4 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: zeno.verdi2 existing='SALES' chosen='SALES'
+DEBUG_MAPPING: marco.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: quirino.sala existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: yuri.lombardi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: fabiola.conti existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: massimo.ricci existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ugo.ferri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: irene.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: nadia.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: ulisse.romano existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: arianna.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: hector.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olga.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: vittorio.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jade.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: pina.rossi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: wojtek.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: dario.verdi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: jacopo.serra2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: olivia.bianchi existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: uma.neri existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: bruno.rossi2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: carlo.fabbri2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: marco.conti2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: chiara.de.luca2 existing='FINANCE' chosen='FINANCE'
+DEBUG_MAPPING: francesca.riva existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daniela.gatti existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: tiziana.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: bianca.parodi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: jessica.rizzi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: paola.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.greco existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: erica.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rita.bassi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: yara.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: daria.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ksenia.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rania.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylenia.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: flavia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: mauro.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: sonia.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: zuleika.verdi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: greta.bianchi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: rachele.rossi existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: ylen.neri existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: francesca.riva3 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: katia.piras2 existing='MARKETING' chosen='MARKETING'
+DEBUG_MAPPING: davide.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana existing='OPS' chosen='OPS'
+DEBUG_MAPPING: lorenzo.pavan existing='OPS' chosen='OPS'
+DEBUG_MAPPING: umberto.ferri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: claudio.ferraro existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivano.de.luca existing='OPS' chosen='OPS'
+DEBUG_MAPPING: raffaele.villa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: xavier.romano existing='OPS' chosen='OPS'
+DEBUG_MAPPING: filippo.costa existing='OPS' chosen='OPS'
+DEBUG_MAPPING: omar.greco existing='OPS' chosen='OPS'
+DEBUG_MAPPING: wanda.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: edoardo.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: loris.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: sergio.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: zaira.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: ivo.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: tiziano.rossi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: alina.neri existing='OPS' chosen='OPS'
+DEBUG_MAPPING: hamid.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: pietro.verdi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: widad.bianchi existing='OPS' chosen='OPS'
+DEBUG_MAPPING: davide.romano2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: federica.barbieri2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: emanuele.fontana2 existing='OPS' chosen='OPS'
+DEBUG_MAPPING: elena.greco existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: federico.basile existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: michela.berni existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: vera.bassi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: sabrina.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zaccaria.conti existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: gaia.romano existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: paolo.ricci existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ximena.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: fiona.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: mina.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: tessa.neri existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: alberto.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: nina.verdi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: ubaldo.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: brenda.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: kevin.esposito2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: said.bianchi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: zohra.rossi existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: debora.vitale2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: elena.greco2 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: giorgio.villa3 existing='LEGAL' chosen='LEGAL'
+DEBUG_MAPPING: questarigahaheadersbagliato existing='IT|VPN,Azure' chosen='IT|VPN,Azure'
+DEBUG_MAPPING: useruat existing='RoleUAT' chosen='DeptUAT'
+INFO:     127.0.0.1:62300 - "POST /api/import/csv HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50174 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59595 - "POST /api/auth/login HTTP/1.1" 422 Unprocessable Content
+INFO:     127.0.0.1:59595 - "POST /api/ad/extract HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55399 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55399 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51577 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51578 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51579 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51580 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51582 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51581 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57904 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49788 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54877 - "POST /api/ad/extract HTTP/1.1" 500 Internal Server Error

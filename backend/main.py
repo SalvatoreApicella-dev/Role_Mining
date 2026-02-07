@@ -21,7 +21,8 @@ except Exception:
 
 
 APP_TITLE = "Role Mining API"
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
+import secrets
+JWT_SECRET = os.getenv("JWT_SECRET") or secrets.token_hex(32)
 APP_LOGIN_USER = os.getenv("APP_LOGIN_USER", "admin")
 APP_LOGIN_PASS = os.getenv("APP_LOGIN_PASS", "admin123")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "240"))
@@ -88,6 +89,9 @@ def build_overprivileged_items(matrix: dict, top_pct: float = 10.0) -> dict:
     return {"threshold": 1, "items": items}
 
 import random
+
+# In-memory cache for BRDB (not persisted to storage.json to keep it lean)
+BRDB_CACHE: Dict[str, Dict[str, Any]] = {}
 
 def generate_unique_color(existing_colors):
     """Genera un colore RRGGBB univoco rispetto a quelli esistenti"""
@@ -226,86 +230,14 @@ def build_cluster_quality_items(clusters: list, matrix: dict) -> list[dict]:
 
 
 # ----------------------------
-# In-memory "DB"
+# Persistent Storage (replaces in-memory state)
 # ----------------------------
+from app.db.storage import get_store, init_default_state
 
+# Initialize persistent storage
+state = get_store()
+init_default_state()
 
-
-
-state: Dict[str, Any] = {
-    "connector": {
-        "server": "mock",
-        "bind_user": "",
-        "bind_password": "",
-        "base_dn": "",
-        "auth": "SIMPLE",  # SIMPLE | NTLM
-    },
-    "last_extract": {
-        "ou": "",
-        "users": [],   # [{username, displayName, groups:[...]}]
-        "groups": [],  # list of unique groups
-        "ts": None,
-    },
-    "last_mining": {
-        "clusters": [],  # [{clusterId, members:[usernames], roleGroups:[...], purity}]
-        "matrix": {},    # {username: {group:0/1}}
-        "kpi": {},
-        "ts": None,
-    },
-    "logs": [],  # [{ts, level, message}]
-    
-}
-
-# --- Canonical keys (one source of truth) ---
-state.setdefault("role_meta", {})
-state.setdefault("business_roles", set())
-state.setdefault("user_business_role", {})
-
-# Stats unificati per qualità import (AD/CSV/XLSX)
-state.setdefault("last_ingest_stats", {
-    "source": None,
-    "rowsTotal": 0,
-    "rowsKept": 0,
-    "duplicateDisplayName": 0,
-    "missingDepartment": 0,
-    "missingBusinessRole": 0,
-    "missingDisplayName": 0,
-    "missingUsername": 0,
-    "ts": None,
-})
-
-# Back-compat (se ti è rimasto codice vecchio in giro)
-state["rolemeta"] = state["role_meta"]
-state["businessroles"] = state["business_roles"]
-state["userbusinessrole"] = state["user_business_role"]
-
-
-state.setdefault("last_rolemining_result", None)
-state.setdefault("ingest_sources", {})          # es: {"ad":[...], "csv":[...], "xlsx":[...]}
-state.setdefault("ingest_candidates", [])       # flatten di ingest_sources
-state.setdefault("choice_by_displayName", {})   # displayName -> candidateId scelto
-state.setdefault("mining_dirty", True)
-state.setdefault("last_mining_params", {"n_clusters": None, "role_support": 0.6})
-state.setdefault("last_rejects", {"source": "ad|csv", "reason": "...", "user": {...}, "ts": "..."})
-
-# ----------------------------
-# Internal DB: auto-mapping Group -> BusinessRole
-# ----------------------------
-state.setdefault("brdb_group_stats", {})   # group -> {BR: count}
-state.setdefault("brdb_token_stats", {})   # token -> {BR: count}
-state.setdefault("brdb_cache", {})         # group -> {role, confidence, evidence, ts}
-state.setdefault("brdb_ready", False)      # flag rebuild
-
-
-# --- Business Roles (in-memory) ---
-state["user_business_role"] = {
-    "alice": "IT",
-    "bob": "IT",
-    "carol": "IT",
-    "dave": "IT",
-    "erin": "HR",
-    "frank": "HR",
-}
 
 def apply_business_roles(users: List[Dict[str, Any]]) -> None:
     """Add businessRole field to each user based on state mapping."""
@@ -370,9 +302,10 @@ def brdb_rebuild() -> None:
     - user_business_role + last_extract.users(groups)
     - role_meta (template BR->groups) con peso maggiore
     """
+    global BRDB_CACHE
     state.setdefault("brdb_group_stats", {})
     state.setdefault("brdb_token_stats", {})
-    state.setdefault("brdb_cache", {})
+    BRDB_CACHE = {}
 
     group_stats: Dict[str, Dict[str, int]] = {}
     token_stats: Dict[str, Dict[str, int]] = {}
@@ -403,7 +336,7 @@ def brdb_rebuild() -> None:
 
     state["brdb_group_stats"] = group_stats
     state["brdb_token_stats"] = token_stats
-    state["brdb_cache"] = {}
+    BRDB_CACHE = {}
     state["brdb_ready"] = True
 
 def brdb_ensure_ready() -> None:
@@ -422,9 +355,9 @@ def brdb_infer_group(group: str) -> Dict[str, Any]:
     if not g0:
         return {"role": "Unassigned", "confidence": 0.0, "evidence": {"reason": "empty_group"}}
 
-    cache = state.get("brdb_cache") or {}
-    if g0 in cache:
-        return cache[g0]
+    global BRDB_CACHE
+    if g0 in BRDB_CACHE:
+        return BRDB_CACHE[g0]
 
     group_stats = (state.get("brdb_group_stats") or {}).get(g0) or {}
     token_stats = state.get("brdb_token_stats") or {}
@@ -449,7 +382,7 @@ def brdb_infer_group(group: str) -> Dict[str, Any]:
 
     if not scores:
         out = {"role": "Unassigned", "confidence": 0.0, "evidence": {"reason": "no_stats"}}
-        state["brdb_cache"][g0] = out
+        BRDB_CACHE[g0] = out
         return out
 
     best_role, best_score = max(scores.items(), key=lambda x: x[1])
@@ -466,7 +399,7 @@ def brdb_infer_group(group: str) -> Dict[str, Any]:
         },
         "ts": datetime.now(timezone.utc).isoformat(),
     }
-    state["brdb_cache"][g0] = out
+    BRDB_CACHE[g0] = out
     return out
 
 from collections import defaultdict
@@ -487,7 +420,7 @@ def _jaccard(a: set[str], b: set[str]) -> float:
         return 1.0
     return len(a & b) / max(1, len(a | b))
 
-def apply_department_mapping(users: List[Dict[str, Any]]) -> None:
+def apply_department_mapping(users: List[Dict[str, Any]], only_depts: Optional[set[str]] = None) -> None:
     # Prepara strutture coerenti
     state.setdefault("user_business_role", {})
     state.setdefault("role_meta", {})
@@ -495,7 +428,14 @@ def apply_department_mapping(users: List[Dict[str, Any]]) -> None:
     state.setdefault("dept_to_role", {})          # dept -> canonical BR
     state.setdefault("dept_role_analysis", {})    # dept -> evidence
 
+
+    # Global rebuild is still useful for stats, but we can do it conditionally?
+    # For now, keep it global as stats depend on all users.
+    # We could optimize brdb_rebuild() too if needed.
     brdb_rebuild()
+
+    targets = only_depts
+
 
     by_dept = defaultdict(list)
     for u in users or []:
@@ -509,6 +449,9 @@ def apply_department_mapping(users: List[Dict[str, Any]]) -> None:
     dept_analysis = state["dept_role_analysis"]
 
     for dept, members in by_dept.items():
+        if targets and dept not in targets:
+            continue
+
         # 1) Baseline deterministica: BR = dept
         _ensure_role_registered(dept)
 
@@ -571,7 +514,13 @@ def apply_department_mapping(users: List[Dict[str, Any]]) -> None:
         for u in members:
             uname = u.get("username")
             if uname:
-                user_br[uname] = chosen_role
+                existing_br = (u.get("businessRole") or "").strip()
+                # log("INFO", f"DEBUG_MAPPING: {uname} existing='{existing_br}' chosen='{chosen_role}'")
+
+                if existing_br and existing_br != "Unassigned":
+                    user_br[uname] = existing_br
+                else:
+                    user_br[uname] = chosen_role
 
     # applica mapping sugli oggetti utente
     apply_business_roles(users)
@@ -829,14 +778,28 @@ def replace_last_extract_from_connector(new_users: List[Dict[str, Any]], ou: str
     # Non toccare qui user_business_role: lo ricreiamo dopo con l'auto-assegnazione
     state["mining_dirty"] = True
 
-def rerun_auto_business_roles_after_connector(users: List[Dict[str, Any]]) -> None:
+def rerun_auto_business_roles_after_connector(users: List[Dict[str, Any]], only_depts: Optional[set[str]] = None) -> None:
     # reset mapping
-    state["user_business_role"] = {}
-    for u in (users or []):
-        u["businessRole"] = None
+    # If doing partial update, do NOT wipe user_business_role completely!
+    if not only_depts:
+        # Full rebuild
+        state["user_business_role"] = {}
+    else:
+        # Partial update: we only touch 'only_depts'.
+        # However, to be safe, we might just update keys for users in those depts.
+        # But apply_department_mapping writes to user_business_role.
+        pass
+
+    
+    # Do NOT wipe existing business roles on the user objects themselves,
+    # otherwise we lose the value we just imported from CSV/Connector.
+    # for u in (users or []):
+    #     u["businessRole"] = None
+
 
     # ricostruisci mapping usando dept + analisi merge
-    apply_department_mapping(users)
+    apply_department_mapping(users, only_depts=only_depts)
+
 
     state["mining_dirty"] = True
 
@@ -900,12 +863,7 @@ def _mk_candidate(*, source: str, candidate_id: str, display_name: str,
         "rawLine": raw or "",
     }
 
-def rebuild_ingest_candidates() -> None:
-    src = state.get("ingest_sources") or {}
-    flat = []
-    for _, items in src.items():
-        flat.extend(items or [])
-    state["ingest_candidates"] = flat
+
 
 def apply_choice_for_displayname(display_name: str,
                                  chosen_business_role: str | None,
@@ -956,6 +914,8 @@ class ConnectorConfig(BaseModel):
     bind_password: str = Field("", description="Password bind")
     base_dn: str = Field("", description="Base DN (es: DC=example,DC=local)")
     auth: str = Field("SIMPLE", description="SIMPLE oppure NTLM")
+    port: int = Field(389, description="LDAP Port")
+    use_ssl: bool = Field(False, description="Use SSL/LDAPS")
 
 
 class ExtractRequest(BaseModel):
@@ -1014,81 +974,131 @@ def mock_users() -> List[Dict[str, Any]]:
         {"username": "erin", "displayName": "Erin Gialli", "groups": ["Sales", "AllEmployees", "CRM"]},
         {"username": "frank", "displayName": "Frank Blu", "groups": ["Sales", "AllEmployees", "CRM", "DiscountApproval"]},
     ]
-def _mk_ldap_server(cfg: Dict[str, Any]) -> Server:
+def _mk_ldap_server(cfg: Dict[str, Any]):
     raw = (cfg.get("server") or "").strip()
     if not raw:
         raise HTTPException(status_code=400, detail="Configura server LDAP")
     host = raw.replace("ldaps://", "").replace("ldap://", "").split(":")[0]
 
-    # Self-signed Samba: come LDAPTLS_REQCERT=never
-    tls = Tls(validate=ssl.CERT_NONE)
-
-    return Server(host, port=636, use_ssl=True, tls=tls, get_info=NONE)
-
-
-def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
-    if MOCK_AD or state["connector"]["server"] == "mock":
-        # Ignora OU, ritorna dataset di test
-        return mock_users()
-
     if Connection is None:
         raise HTTPException(status_code=500, detail="ldap3 non disponibile")
 
-    cfg = state["connector"]
-    if not cfg["server"] or not cfg["bind_user"] or not cfg["bind_password"]:
+    # Use configured port or default to 389/636 based on SSL
+    port = int(cfg.get("port") or 389)
+    use_ssl = bool(cfg.get("use_ssl") or False)
+    
+    return Server(host, port=port, use_ssl=use_ssl, get_info=NONE, connect_timeout=15)
+
+
+
+
+
+def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
+    if MOCK_AD or state.get("connector", {}).get("server") == "mock":
+        # Ignora OU, ritorna dataset di test
+        log("INFO", "Using MOCK AD extract")
+        return mock_users()
+
+    if Connection is None:
+        raise HTTPException(status_code=500, detail="ldap3 library not installed or failed to import")
+
+    cfg = state.get("connector", {})
+    if not cfg.get("server") or not cfg.get("bind_user") or not cfg.get("bind_password"):
         raise HTTPException(status_code=400, detail="Configura server/bind_user/bind_password in Connettori")
 
-    server = _mk_ldap_server(cfg)
-    auth_mode = cfg.get("auth", "SIMPLE").upper()
-    if auth_mode == "NTLM":
-        conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=NTLM, auto_bind=True)
-    else:
-        conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=SIMPLE, auto_bind=True)
+    log("INFO", f"Connecting to LDAP server: {cfg['server']} as {cfg['bind_user']}")
+    
+    conn = None
+    try:
+        server = _mk_ldap_server(cfg)
+        auth_mode = cfg.get("auth", "SIMPLE").upper()
+        
+        try:
+            if auth_mode == "NTLM":
+                conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=NTLM, auto_bind=True)
+            else:
+                conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=SIMPLE, auto_bind=True)
+        except Exception as e:
+            error_msg = str(e)
+            log("ERROR", f"LDAP Connection failed: {error_msg}")
+            if "timeout" in error_msg.lower():
+                 raise HTTPException(status_code=504, detail=f"Timeout connettendosi al server LDAP {cfg['server']}")
+            raise HTTPException(status_code=503, detail=f"Impossibile connettersi al server LDAP {cfg['server']}:389 - {error_msg}")
 
-    # objectClass=user può includere account tecnici: in produzione aggiungere filtri più stretti
-    search_filter = "(&(objectClass=user)(sAMAccountName=*))"
-    attrs = ["sAMAccountName", "displayName", "memberOf", "department", "lastLogonTimestamp"]
+        # objectClass=user può includere account tecnici: in produzione aggiungere filtri più stretti
+        search_filter = "(&(objectClass=user)(sAMAccountName=*))"
+        attrs = ["sAMAccountName", "displayName", "memberOf", "department", "lastLogonTimestamp"]
+        
+        log("INFO", f"Searching LDAP base='{ou_dn}' filter='{search_filter}'")
 
-    ok = conn.search(search_base=ou_dn, search_filter=search_filter, attributes=attrs)
-    if not ok:
-        conn.unbind()
-        raise HTTPException(status_code=500, detail=f"LDAP search failed: {conn.result}")
+        if not conn.search(search_base=ou_dn, search_filter=search_filter, attributes=attrs):
+             log("ERROR", f"LDAP search returned False. Result: {conn.result}")
+             raise HTTPException(status_code=500, detail=f"LDAP search failed: {conn.result}")
+        
+        log("INFO", f"LDAP search found {len(conn.entries)} entries. Parsing...")
+        
+        users: List[Dict[str, Any]] = []
+        for entry in conn.entries:
+            try:
+                d = entry.entry_attributes_as_dict
+                
+                # Safe attribute extraction
+                sAM = d.get("sAMAccountName") or []
+                username = str(sAM[0]).strip() if sAM else ""
+                
+                disp = d.get("displayName") or []
+                display = str(disp[0]).strip() if disp else ""
+                
+                member_of = d.get("memberOf") or []
+                groups = []
+                for dn in member_of:
+                    # Parse CN= from DN roughly
+                    dn_str = str(dn)
+                    # CN=Group Name,OU=...
+                    # simple parse: find first CN= part
+                    parts = dn_str.split(",")
+                    cn = dn_str
+                    for p in parts:
+                        p = p.strip()
+                        if p.upper().startswith("CN="):
+                            cn = p[3:]
+                            break
+                    groups.append(cn)
+                
+                dept = d.get("department") or []
+                department = str(dept[0]).strip() if dept else None
+                
+                llt = d.get("lastLogonTimestamp")
+                last_login = str(llt[0]).strip() if (llt and llt[0]) else None
 
-    users: List[Dict[str, Any]] = []
-    for entry in conn.entries:
-        d = entry.entry_attributes_as_dict
-        username = (d.get("sAMAccountName") or [""])[0]
-        display = (d.get("displayName") or [""])[0]
-        member_of = d.get("memberOf") or []
+                if username:
+                    users.append({
+                        "username": username,
+                        "displayName": display or username,
+                        "groups": sorted(set(groups)),
+                        "department": department,
+                        "lastLogin": last_login,
+                    })
+            except Exception as entry_ex:
+                # Log but continue processing other users
+                log("WARNING", f"Error parsing LDAP entry: {entry_ex}. Entry: {str(entry)[:100]}...")
+                continue
+                
+        log("INFO", f"LDAP extraction complete. Parsed {len(users)} users.")
+        return users
 
-        groups = []
-        for dn in member_of:
-            parts = str(dn).split(",")
-            cn = next((p[3:] for p in parts if p.upper().startswith("CN=")), str(dn))
-            groups.append(cn)
-
-        dept = d.get("department") or [""]
-        department = (dept[0] if isinstance(dept, list) else (dept or "")).strip() or None
-
-        llt = d.get("lastLogonTimestamp")
-        llt0 = llt[0] if isinstance(llt, list) and llt else llt
-        last_login = str(llt0).strip() if llt0 is not None else None
-
-        if username:
-            users.append({
-                "username": username,
-                "displayName": display or username,
-                "groups": sorted(set(groups)),
-                "department": department,
-                "lastLogin": last_login,
-            })
-
-
-
-
-
-    conn.unbind()
-    return users
+    except HTTPException:
+        raise
+    except Exception as e:
+        log("ERROR", f"Unexpected error in extract_from_ldap: {e}")
+        # traceback would be good here but keeping it simple
+        raise HTTPException(status_code=500, detail=f"Errore interno durante estrazione LDAP: {str(e)}")
+    finally:
+        if conn:
+            try:
+                conn.unbind()
+            except:
+                pass
 
 
 # ----------------------------
@@ -1532,8 +1542,6 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
 
     
     users = extract_from_ldap(req.ou)
-    # BRDB: rebuild leggero (si basa su stato corrente: last_extract + role_meta + mapping)
-    brdb_rebuild()
 
     # 1) Costruisci candidati AD
     ad_candidates = []
@@ -1549,26 +1557,24 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
             )
         )
 
-    # 2) DB di sistema: append/upsert
-    # _merge_users_into_last_extract(users, ou=req.ou)
+    # 2) DB di sistema: filter, replace, auto-assign
     users = filter_and_dedupe_connector_users(users, source="ad")
     replace_last_extract_from_connector(users, ou=req.ou, source="ad")
+    
+    # rerun_auto_business_roles_after_connector already calls rerun_auto_business_roles_after_connector
+    # which calls brdb_rebuild and apply_department_mapping.
     rerun_auto_business_roles_after_connector(state["last_extract"]["users"])
     new_brs = sync_roles_from_users(state["last_extract"]["users"])
 
-
-
-    # 3) Ingest sources: aggiorna solo lo slice AD (non distruggere gli altri)
-    state.setdefault("ingest_sources", {})
-    state["ingest_sources"]["ad"] = ad_candidates
-
-    # NON fare questo:
-    # state["ingest_sources"] = {"ad": ad_candidates}
-    # state["choice_by_displayName"] = {}
+    # 3) Batch updates to state to minimize disk I/O
+    updates = {
+        "ingest_sources": {**state.get("ingest_sources", {}), "ad": ad_candidates},
+        "mining_dirty": True
+    }
+    state.update(updates)
 
     rebuild_ingest_candidates()
     apply_duplicate_displayname_resolution()
-    state["mining_dirty"] = True
 
     return ExtractResponse(
         ou=state["last_extract"]["ou"],
@@ -1711,7 +1717,7 @@ def kpi_drilldown(metric: str, username: str = Depends(require_auth)):
         # se ti serve davvero: return {"metric": metric, "items": build_cluster_quality_items(clusters, matrix)}
         return {
             "metric": "cluster-quality",
-            "items": build_cluster_quality_items(...),
+            "items": build_cluster_quality_items(clusters, matrix),
             "rejects": state.get("last_rejects") or []
             }
 
@@ -1968,13 +1974,12 @@ def choose_csv_duplicate_row(body: ChooseCsvRowRequest, username: str = Depends(
     roles = rec.get("roles") or []
 
     uobj = next((u for u in users if (u.get("displayName") or "").strip() == dn_clean), None)
-    
-    if department:
-        uobj["department"] = department
-
-    
     if not uobj:
         raise HTTPException(status_code=400, detail="User not found in last_extract")
+
+    dept = rec.get("department")
+    if dept:
+        uobj["department"] = dept
 
     uobj["groups"] = sorted(set(roles))
     if br:
@@ -1994,10 +1999,14 @@ def businessrole_detail(role: str, username: str = Depends(require_auth)):
     return {"role": role, "users": members}
 
 @app.get("/api/ingest/conflicts/duplicate-displayname")
-def conflicts_duplicate_displayname():
+def conflicts_duplicate_displayname(username: str = Depends(require_auth)):
+    """
+    Ritorna la lista dei displayName che hanno più di un candidato (conflitto).
+    """
     candidates = state.get("ingest_candidates") or []
     by_dn = defaultdict(list)
     for c in candidates:
+        if not c: continue
         dn = (c.get("displayName") or "").strip()
         if dn:
             by_dn[dn].append(c)
@@ -2041,26 +2050,9 @@ def choose_duplicate(body: ChooseDuplicateRequest):
 
 @app.get("/api/ingest/conflicts/{kind}")
 def ingest_conflicts(kind: str, username: str = Depends(require_auth)):
-    # kind: "duplicate-displayname", "missing-businessrole", ecc.
-    candidates = state.get("ingest_candidates") or []
-
-    if kind != "duplicate-displayname":
-        raise HTTPException(status_code=404, detail="Unknown conflict kind")
-
-    by_dn = defaultdict(list)
-    for c in candidates:
-        dn = (c.get("displayName") or "").strip()
-        if dn:
-            by_dn[dn].append(c)
-
-    items = []
-    for dn, rows in by_dn.items():
-        if len(rows) > 1:
-            chosen = (state.get("choice_by_displayName") or {}).get(dn)
-            items.append({"displayName": dn, "chosenCandidateId": chosen, "rows": rows})
-
-    items.sort(key=lambda x: len(x["rows"]), reverse=True)
-    return {"kind": kind, "items": items}
+    if kind == "duplicate-displayname":
+        return conflicts_duplicate_displayname(username)
+    raise HTTPException(status_code=404, detail="Unknown conflict kind")
 
 class ChooseConflictRequest(BaseModel):
     kind: str                   # "duplicate-displayname"
@@ -2186,7 +2178,6 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     if reader.fieldnames:
         reader.fieldnames = [h.strip() for h in reader.fieldnames if h is not None]
 
-    # minimo indispensabile
     if not reader.fieldnames:
         raise HTTPException(status_code=400, detail="CSV senza header")
 
@@ -2197,7 +2188,6 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             detail=f"Headers richiesti: ['DisplayName']; trovati: {reader.fieldnames}",
         )
 
-    # ---------- helpers robusti ----------
     def _norm_header(h: str) -> str:
         return (h or "").strip().lower()
 
@@ -2215,9 +2205,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     }
 
     def _extract_csv_fields(row: dict) -> tuple[str, str, str, str, str]:
-        # view case-insensitive
         row_ci = {_norm_header(k): v for k, v in (row or {}).items()}
-
         dnraw = _get_any(row_ci, CSV_KEYS["displayName"])
         deptraw = _get_any(row_ci, CSV_KEYS["department"])
         brraw = _get_any(row_ci, CSV_KEYS["businessRole"])
@@ -2228,41 +2216,34 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         br = (brraw or "").strip()
         roles = (rolesraw or "").strip()
 
-        # tollera righe sbagliate tipo: "Alice Rossi,IT;VPN,GitLab"
         if (not dept) and dn and ("," in dn):
             dn, dept = [x.strip() for x in dn.split(",", 1)]
 
-        # fallback intelligente: se non c'è BR esplicito usa Department come BR
         if not br:
             br = dept
 
         return dnraw, dn, dept, br, roles
 
-    # ---------- reset slice CSV ingest ----------
     state.setdefault("ingest_sources", {})
-    state["ingest_sources"]["csv"] = []  # replace slice CSV
-
+    state["ingest_sources"]["csv"] = []
     state["last_csv_rows"] = []
     state["csv_choice_by_dn"] = {}
     state["csv_rows_by_dn"] = defaultdict(list)
 
-    # ---------- stats ingest (righe) ----------
     csv_rows_total = 0
     csv_dup_dn_rows = 0
     csv_missing_displayname = 0
     csv_missing_department = 0
-    csv_missing_businessrole = 0  # dopo fallback BR=dept
+    csv_missing_businessrole = 0
     csv_missing_roles = 0
 
     seen_dn_raw = set()
-
     new_users: List[Dict[str, Any]] = []
     seen_usernames: set[str] = set()
 
     for row in reader:
         csv_rows_total += 1
         row_id = f"csv:{csv_rows_total}"
-
         dnraw, dn, dept, br, roles = _extract_csv_fields(row)
 
         if not dn:
@@ -2276,7 +2257,6 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
 
         if not dept:
             csv_missing_department += 1
-
         if not br:
             csv_missing_businessrole += 1
 
@@ -2284,7 +2264,6 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         if not parsed_roles:
             csv_missing_roles += 1
 
-        # username stabile e deduplicato
         base = _slug_username(dn)
         uname = base
         i = 2
@@ -2325,69 +2304,41 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             raw=rec["rawLine"],
         )
         state["ingest_sources"]["csv"].append(candidate)
-
         state.setdefault("choice_by_displayName", {})
         state["choice_by_displayName"].setdefault(candidate["displayName"], candidate["candidateId"])
 
-    # ---------- REPLACE: dedupe + last_extract ----------
-    # ---------- MERGE con existing (AD + prev CSV) ----------
-        existing_users_list = state.get("last_extract", {}).get("users", [])
-        existing_users_dict = {
-            user.get("username", _slug_username(user.get("displayName", f"user_{i}"))): user
-            for i, user in enumerate(existing_users_list)
-        }
+    # Merge with existing users
+    existing_users_list = state.get("last_extract", {}).get("users", [])
+    existing_users_dict = { u.get("username"): u for u in existing_users_list if u.get("username") }
 
-        added_users = 0
-        updated_users = 0
-        created_brs = set()
+    added_users = 0
+    updated_users = 0
+    created_brs_count = 0
 
-        for user in new_users:
-            uname = user["username"]
-            if uname in existing_users_dict:
-                # MERGE: append gruppi unici, aggiorna BR/dept
-                existing_users_dict[uname]["groups"] = sorted(
-                    set(existing_users_dict[uname].get("groups", []) + user["groups"])
-                )
-                if user.get("businessRole"):
-                    existing_users_dict[uname]["businessRole"] = user["businessRole"]
-                if user.get("department"):
-                    existing_users_dict[uname]["department"] = user["department"]
-                updated_users += 1
-            else:
-                existing_users_dict[uname] = user.copy()  # evita mutazioni
-                added_users += 1
-            
+    for user in new_users:
+        uname = user["username"]
+        if uname in existing_users_dict:
+            existing_users_dict[uname]["groups"] = sorted(set(existing_users_dict[uname].get("groups", []) + user["groups"]))
             if user.get("businessRole"):
-                created_brs.add(user["businessRole"])
+                existing_users_dict[uname]["businessRole"] = user["businessRole"]
+            if user.get("department"):
+                existing_users_dict[uname]["department"] = user["department"]
+            updated_users += 1
+        else:
+            existing_users_dict[uname] = user.copy()
+            added_users += 1
 
-        # Lista finale merged (compatibile con tuo codice)
-        merged_users = list(existing_users_dict.values())
+    merged_users = list(existing_users_dict.values())
+    state["last_extract"]["users"] = merged_users
+    state["last_extract"]["groups"] = recompute_groups_from_users(merged_users)
+    state["last_extract"]["ou"] = "MERGED"
+    state["last_extract"]["ts"] = time.time()
 
-        # Salva in state
-        state["last_extract"]["users"] = merged_users
-        if 'recompute_groups_from_users' in globals():
-            state["last_extract"]["groups"] = recompute_groups_from_users(merged_users)
-        state["last_extract"]["ou"] = "MERGED"
-        state["last_extract"]["ts"] = time.time()
+    touched_depts = { u.get("department") for u in new_users if u.get("department") }
+    rerun_auto_business_roles_after_connector(merged_users, only_depts=touched_depts)
 
-        # Stats UPDATE (sovrascrivi quelle vecchie)
-        state["last_ingest_stats"] = {
-            **state.get("last_ingest_stats", {}),
-            "rowsKept": len(merged_users),
-            "addedUsers": added_users,
-            "updatedUsers": updated_users,
-            "newBusinessRoles": len(created_brs),
-            "source": "csv_merged"
-        }
+    new_brs = sync_roles_from_users(merged_users)
 
-
-    # auto-assegnazione BR post-import (dept, rolemeta, brdb...)
-    rerun_auto_business_roles_after_connector(state["last_extract"]["users"])
-
-    # registra BR trovati sugli utenti in role_meta/business_roles
-    new_brs = sync_roles_from_users(state["last_extract"]["users"])
-
-    # stats qualità import (per clusterQuality)
     state["last_ingest_stats"] = {
         "source": "csv",
         "rowsTotal": csv_rows_total,
@@ -2401,7 +2352,6 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
-    # tieni anche last_csv_stats se la UI ancora lo usa
     state["last_csv_stats"] = {
         "csvRowsTotal": csv_rows_total,
         "csvRowsMissingBR": csv_missing_businessrole,
@@ -2414,33 +2364,14 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     apply_duplicate_displayname_resolution()
     state["mining_dirty"] = True
 
-    log(
-        "INFO",
-        f"CSV import by {username}: rows={csv_rows_total}, kept={len(merged_users)}, "
-        f"dupRows={csv_dup_dn_rows}, missingDept={csv_missing_department}, "
-        f"missingBR={csv_missing_businessrole}, missingRoles={csv_missing_roles}, newBRs={new_brs}"
-    )
-
     return {
-    "ok": True,
-    "addedUsers": added_users,
-    "updatedUsers": updated_users,
-    "totalUsers": len(merged_users),
-
-    # numeriche "stabili" (quelle che il frontend userà)
-    "rowsTotal": int(csv_rows_total),
-    "rowsKept": int(len(existing_users_dict)),
-    "newBusinessRoles": int(new_brs),
-
-    # back-compat (se in giro hai ancora frontend/pezzi vecchi)
-    "csvRowsTotal": int(csv_rows_total),
-    "csvRowsMissingBR": int(csv_missing_businessrole),
-    "csvDuplicateDisplayNameRows": int(csv_dup_dn_rows),
-
-    # opzionali ma utili per messaggio UI e debug
-    "created_users": int(max(0, len(existing_users_dict))),   # qui puoi mettere un contatore reale se lo calcoli
-    "assigned_users": int(max(0, len(existing_users_dict))),  # idem: se assegni sempre un BR post-fallback, coincide
-}
+        "ok": True,
+        "addedUsers": added_users,
+        "updatedUsers": updated_users,
+        "totalUsers": len(merged_users),
+        "rowsTotal": csv_rows_total,
+        "newBusinessRoles": new_brs,
+    }
 
 
 
@@ -2482,6 +2413,59 @@ def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: 
     if not displayname:
         return {"skipped": True}
 
+    # Username stabile
+    uname = _slug_username(displayname)
+    
+    # Gruppi
+    groups = [g.strip() for g in (ruoli or "").split(",") if g.strip()]
+    
+    # User object
+    user = {
+        "username": uname,
+        "displayName": displayname,
+        "groups": groups,
+        "department": department or None,
+        "businessRole": businessrole or None,
+        "excluded": False,
+    }
+    
+    # Merge logic (simplified for single row)
+    last_extract = state.setdefault("last_extract", {"users": [], "groups": [], "ou": "IMPORT", "ts": None})
+    users = last_extract.get("users", [])
+    
+    existing = next((u for u in users if u.get("username") == uname), None)
+    created_user = False
+    created_role = False
+    added_groups = 0
+    
+    if existing:
+        old_groups = set(existing.get("groups") or [])
+        new_groups = set(groups)
+        added_groups = len(new_groups - old_groups)
+        existing["groups"] = sorted(old_groups | new_groups)
+        if businessrole:
+            existing["businessRole"] = businessrole
+        if department:
+            existing["department"] = department
+    else:
+        users.append(user)
+        created_user = True
+        added_groups = len(groups)
+        
+    if businessrole:
+        business_roles = state.setdefault("business_roles", set())
+        if businessrole not in business_roles:
+            _ensure_role_registered(businessrole)
+            created_role = True
+
+    state["mining_dirty"] = True
+    return {
+        "ok": True,
+        "created_user": created_user,
+        "created_role": created_role,
+        "added_groups": added_groups
+    }
+
 
 @app.post("/api/import/xlsx")
 async def import_xlsx(file: UploadFile = File(...), username: str = Depends(require_auth)):
@@ -2510,7 +2494,7 @@ async def import_xlsx(file: UploadFile = File(...), username: str = Depends(requ
         br = r[cols["BusinessRole"]] if cols["BusinessRole"] < len(r) else ""
         ru = r[cols["Ruoli"]] if cols["Ruoli"] < len(r) else ""
 
-        out = _apply_import_row(str(dn or ""), str(br or ""), str(ru or ""))
+        out = applyimportrow(str(dn or ""), str(br or ""), str(ru or ""))
         if out.get("skipped"):
             continue
         created_users += 1 if out.get("created_user") else 0
