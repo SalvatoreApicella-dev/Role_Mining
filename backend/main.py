@@ -340,10 +340,7 @@ def sync_roles_from_users(users: List[Dict[str, Any]]) -> int:
 # =============================================================================
 # BRDB (NO AI): learning DB + inference engine
 # =============================================================================
-from collections import defaultdict
-from datetime import datetime, timezone
-import re
-from typing import Dict, Any, List, Tuple
+# (imports already at top of file)
 
 BRDB_MIN_CONF = 0.70  # soglia per auto-assegnare
 
@@ -473,8 +470,7 @@ def brdb_infer_group(group: str) -> Dict[str, Any]:
     BRDB_CACHE[g0] = out
     return out
 
-from collections import defaultdict
-import random
+# (imports already at top of file)
 
 DEPT_MINCONF = 0.80
 DEPT_GROUP_SUPPORT = 0.60
@@ -482,8 +478,6 @@ DEPT_GROUP_SUPPORT = 0.60
 def ensure_role_registered(role: str) -> None:
     _ensure_role_registered(role)
 
-DEPT_GROUP_SUPPORT = 0.60
-DEPT_MINCONF = 0.80
 DEPT_MERGE_JACCARD = 0.55  # soglia similarità gruppi dept vs BR template
 
 def _jaccard(a: set[str], b: set[str]) -> float:
@@ -790,7 +784,7 @@ def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: s
     return chosen
 
 
-from datetime import datetime, timezone
+# (datetime import already at top of file)
 
 def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
     state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
@@ -937,8 +931,7 @@ def rerun_auto_business_roles_after_connector(users: List[Dict[str, Any]], only_
 
     state["mining_dirty"] = True
 
-import numpy as np
-from typing import Any, Dict, List, Optional
+# (numpy and typing imports already at top of file)
 
 def compute_over_threshold(matrix: Dict[str, Dict[str, int]], pct: float = 0.10) -> Optional[int]:
     if not matrix:
@@ -986,16 +979,7 @@ def active_users(users: list[dict]) -> list[dict]:
 def recompute_groups_from_users(users: list[dict]) -> list[str]:
     return sorted({g for u in active_users(users) for g in (u.get("groups") or [])})
 
-def _mk_candidate(*, source: str, candidate_id: str, display_name: str,
-                  business_role: str, roles: list[str], raw: str) -> dict:
-    return {
-        "candidateId": candidate_id,
-        "source": source,
-        "displayName": (display_name or "").strip(),
-        "businessRole": (business_role or "").strip(),
-        "roles": roles or [],
-        "rawLine": raw or "",
-    }
+# (_mk_candidate already defined at line 643)
 
 
 
@@ -1276,23 +1260,8 @@ def compute_purity(cluster_members_idx: List[int], X: np.ndarray) -> float:
     freq = sub.mean(axis=0)  # 0..1
     return float(freq.max())  # quanto un "gruppo dominante" spiega il cluster
 
-import re
-from collections import defaultdict
-
-_BROAD_MARKERS = {"all", "tutti", "tutte", "full", "global", "everyone", "any"}
-
-def _tokens(s: str) -> list[str]:
-    s = (s or "").lower()
-    s = re.sub(r"[^a-z0-9]+", " ", s)
-    return [t for t in s.split() if t]
-
-def _family_key(role_name: str) -> str:
-    toks = _tokens(role_name)
-    return toks[0] if toks else ""
-
-def _is_broad(role_name: str) -> bool:
-    toks = set(_tokens(role_name))
-    return any(m in toks for m in _BROAD_MARKERS)
+# (_tokens, _family_key, _is_broad already defined at lines 96-109)
+# (BROAD_MARKERS defined at line 94)
 
 def compute_ai_detection(matrix: dict) -> dict:
     total_assignments = 0
@@ -1913,8 +1882,7 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks, username: str 
     raise HTTPException(status_code=404, detail="Unknown metric")
 
 
-from fastapi import FastAPI
-from typing import Any, Dict, List, Optional
+# (FastAPI and typing imports already at top of file)
 
 # helper: costruisce righe per UI (tutti gli utenti)
 def build_overprivileged_rows(matrix: Dict[str, Dict[str, int]], threshold: Optional[int]) -> List[Dict[str, Any]]:
@@ -2303,7 +2271,7 @@ def _slug_username(display_name: str) -> str:
     return s or "user"
 
 
-DEPT_MINCONF = 0.80
+# (DEPT_MINCONF already defined at line 479)
 
 def _ensure_role_registered(role: str) -> None:
     role = (role or "").strip()
@@ -2643,13 +2611,8 @@ def apply_all_choices_to_last_extract() -> None:
 
 
 
-def _slug_username(display_name: str) -> str:
-    s = (display_name or "").strip().lower()
-    s = re.sub(r"\s+", ".", s)
-    s = re.sub(r"[^a-z0-9._-]", "", s)
-    return s or "user"
-
-from datetime import datetime, timezone
+# (_slug_username already defined at line 2299)
+# (datetime import already at top of file)
 
 def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: str = ""):
     displayname = (displayname or "").strip()
