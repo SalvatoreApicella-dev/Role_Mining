@@ -4,5 +4,11 @@
     "field": "JobTitle",
     "regex": "^WC+",
     "created_at": "2026-02-10T11:22:04.979582"
+  },
+  {
+    "account_type": "Service",
+    "field": "display_name",
+    "regex": "^User+",
+    "created_at": "2026-02-10T14:31:52.475877"
   }
 ]

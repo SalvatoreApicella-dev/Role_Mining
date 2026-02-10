@@ -19,10 +19,7 @@ export default function KpiDrilldownPage() {
       setData(null);
 
       try {
-        const res =
-          metric === "cluster-quality"
-            ? await getDuplicateDisplayNameConflicts()
-            : await api.kpiDrilldown(metric); // <-- invece di fetch diretto
+        const res = await api.kpiDrilldown(metric);
 
         if (!cancelled) setData(res);
       } catch (e) {
@@ -93,82 +90,61 @@ export default function KpiDrilldownPage() {
       )}
 
       {metric === "cluster-quality" && data && (
-        <div
-          className="panel"
-          style={{
-            position: "relative",
-            zIndex: 999999,
-            pointerEvents: "auto",
-          }}
-        >
-          <table className="table" style={{ pointerEvents: "auto" }}>
-            <thead>
-              <tr>
-                <th>DisplayName</th>
-                <th>BusinessRole</th>
-                <th>Ruoli</th>
-                <th></th>
-              </tr>
-            </thead>
+        <div className="panel">
+          <div style={{ marginBottom: 20 }}>
+            <h3>Data Quality Summary</h3>
+            <div style={{ display: "flex", gap: 20 }}>
+              <div>Total Rows: {data.stats?.rowsTotal || 0}</div>
+              <div style={{ color: "#f43f5e" }}>Duplicates: {data.stats?.duplicateDisplayName || 0}</div>
+              <div style={{ color: "#f43f5e" }}>Missing Dept: {data.stats?.missingDepartment || 0}</div>
+            </div>
+          </div>
 
-            <tbody>
-              {(data.items || []).flatMap((grp) =>
-                (grp.rows || []).flatMap((r) => {
-                  const selected = grp.chosenCandidateId === r.candidateId;
-
-                  const doChoose = async () => {
-                    setErr("");
-                    try {
-                      await chooseDuplicateDisplayName(grp.displayName, r.candidateId);
-                      const refreshed = await getDuplicateDisplayNameConflicts();
-                      setData(refreshed);
-                    } catch (e) {
-                      setErr(String(e));
-                    }
-                  };
-
-                  return [
-                    <tr
-                      key={`main-${grp.displayName}-${r.candidateId}`}
-                      onClick={doChoose}
-                      style={{
-                        cursor: "pointer",
-                        background: selected ? "rgba(106,166,255,0.15)" : "transparent",
-                      }}
-                    >
-                      <td>{r.displayName}</td>
-                      <td>{r.businessRole}</td>
-                      <td style={{ color: "var(--muted)" }}>
-                        {(r.roles || []).join(", ")}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          style={{
-                            pointerEvents: "auto",
-                            position: "relative",
-                            zIndex: 1000000,
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            doChoose();
-                          }}
-                        >
-                          Seleziona
-                        </button>
-                      </td>
-                    </tr>,
-
-                    <tr key={`raw-${grp.displayName}-${r.candidateId}`}>
-                      <td colSpan={4} style={{ color: "var(--muted)", fontSize: 12 }}>
-                        {r.rawLine}
-                      </td>
-                    </tr>,
-                  ];
-                })
+          {(data.items || []).map((section, idx) => (
+            <div key={idx} style={{ marginBottom: 24 }}>
+              <h4 style={{ color: "var(--muted)" }}>{section.type} ({section.count})</h4>
+              {section.count > 0 ? (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Identifier</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(section.users || []).map((u, i) => (
+                      <tr key={i}>
+                        <td>{typeof u === 'string' ? u : (u.displayName || u.username || JSON.stringify(u))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p style={{ color: "#10b981", fontSize: 13 }}>No issues found</p>
               )}
-            </tbody>
-          </table>
+            </div>
+          ))}
+
+          {data.rejects?.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <h4 style={{ color: "#ef4444" }}>Rejected Rows</h4>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rejects.map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.username}</td>
+                      <td>{r.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

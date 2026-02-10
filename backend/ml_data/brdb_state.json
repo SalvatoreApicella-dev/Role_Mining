@@ -3,7 +3,7 @@
     "Manager": {
       "VPN_GLOBAL": 95.0,
       "DEPT_BASE_Operations": 34.0,
-      "BASE_ACCESS_ALL": 293.0,
+      "BASE_ACCESS_ALL": 294.0,
       "PAYROLL_EXPORT_TOOL": 49.0,
       "VPN_IT": 95.0,
       "ADMIN_CONSOLE_ACCESS": 42.0,
@@ -89,7 +89,7 @@
       "PAYROLL_EXPORT_TOOL": 37.0,
       "VPN_IT": 76.0,
       "DEPT_BASE_Support": 31.0,
-      "ADMIN_CONSOLE_ACCESS": 37.0,
+      "ADMIN_CONSOLE_ACCESS": 39.0,
       "KUBERNETES_CLUSTER_ADMIN": 8.0,
       "DEPT_Sales_BASE": 54.0,
       "ROLE_Developer_BASE": 235.0,
@@ -207,7 +207,7 @@
       "ADMIN_CONSOLE_ACCESS": 6.0
     },
     "Analyst": {
-      "VPN_GLOBAL": 82.0,
+      "VPN_GLOBAL": 84.0,
       "DEPT_BASE_Sales": 41.0,
       "BASE_ACCESS_ALL": 271.0,
       "ROLE_BASE_Analyst": 271.0,
@@ -310,6 +310,15 @@
       "DEPT_BASE_HR": 35.0,
       "DEPT_BASE_Sales": 31.0,
       "KUBERNETES_CLUSTER_ADMIN": 5.0
+    },
+    "HR": {
+      "Guest": 1.0
+    },
+    "IT": {
+      "Dev": 1.0
+    },
+    "Sales": {
+      "Admin": 1.0
     }
   },
   "group_role_primary": {
@@ -474,7 +483,10 @@
     "UNIQUE_PERM_968": "Clerk",
     "UNIQUE_PERM_976": "Clerk",
     "UNIQUE_PERM_984": "Analyst",
-    "UNIQUE_PERM_992": "Developer"
+    "UNIQUE_PERM_992": "Developer",
+    "Guest": "HR",
+    "Dev": "IT",
+    "Admin": "Sales"
   },
-  "total_assignments": 3000
+  "total_assignments": 3008
 }

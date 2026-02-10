@@ -1,0 +1,6 @@
+displayName;department;businessRole;lastLogin;accountType;groups
+Stale User One;Sales;Analyst;2023-01-15;Internal;VPN_GLOBAL;BASE_ACCESS_ALL
+Stale User Two;IT;Developer;2022-11-20;Internal;ADMIN_CONSOLE_ACCESS;VPN_IT
+Stale User Three;HR;Manager;2023-05-10;Internal;BASE_ACCESS_ALL
+Active User One;Sales;Analyst;2026-02-01;Internal;VPN_GLOBAL
+Active User Two;IT;Developer;2026-02-05;Internal;ADMIN_CONSOLE_ACCESS

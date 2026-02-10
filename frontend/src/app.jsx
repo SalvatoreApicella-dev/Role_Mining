@@ -12,6 +12,7 @@ import React, { useEffect, useMemo, useRef, useState, Suspense, lazy } from "rea
 // Lazy Load Pages
 const KpiDrilldownPage = lazy(() => import("./pages/KpiDrilldownPage"));
 const OverprivilegedPage = lazy(() => import("./pages/OverprivilegedPage"));
+const ModelQualityPage = lazy(() => import("./pages/ModelQualityPage"));
 const AiDetectionPage = lazy(() => import("./pages/AiDetectionPage"));
 const AiTrainingPage = lazy(() => import("./pages/AiTrainingPage"));
 
@@ -123,14 +124,14 @@ function Login() {
 
 function Analytics() {
 
-  const [kpi, setKpi] = useState({ totalUsers: 0, clusterQuality: 0, overprivilegedPct: 0, aiDetection: 0 });
+  const [kpi, setKpi] = useState({ totalUsers: 0, clusterQuality: 0, modelQuality: 0, aiDetection: 0 });
   const [err, setErr] = useState("");
 
   const navigate = useNavigate();
 
   const kpiRouteByLabel = {
     "Cluster Quality": "/kpi/cluster-quality",
-    "Overprivileged %": "/overprivileged-users",   // <-- qui
+    "Model Quality": "/model-quality",
     "AI Detection": "/ai-detection",
   };
 
@@ -150,9 +151,9 @@ function Analytics() {
   const plotData = [
     {
       type: "bar",
-      x: ["Cluster Quality", "Overprivileged %", "AI Detection"],
-      y: [kpi.clusterQuality, kpi.overprivilegedPct, kpi.aiDetection],
-      marker: { color: ["#6aa6ff", "#ff6a6a", "#71ffb2"] }
+      x: ["Cluster Quality", "Model Quality", "AI Detection"],
+      y: [kpi.clusterQuality, kpi.modelQuality, kpi.aiDetection],
+      marker: { color: ["#3b82f6", "#f43f5e", "#10b981"] }
     }
   ];
 
@@ -162,9 +163,18 @@ function Analytics() {
 
       <div className="grid">
         <div className="card"><div className="k">Total Users</div><div className="v">{kpi.totalUsers}</div></div>
-        <div className="card"><div className="k">Cluster Quality</div><div className="v">{kpi.clusterQuality}%</div></div>
-        <div className="card"><div className="k">Overprivileged</div><div className="v">{kpi.overprivilegedPct}%</div></div>
-        <div className="card"><div className="k">AI Detection</div><div className="v">{kpi.aiDetection}%</div></div>
+        <div className="card" style={{ cursor: "pointer" }} onClick={() => navigate("/kpi/cluster-quality")}>
+          <div className="k">Cluster Quality</div>
+          <div className="v">{kpi.clusterQuality}%</div>
+        </div>
+        <div className="card" style={{ cursor: "pointer" }} onClick={() => navigate("/model-quality")}>
+          <div className="k">Model Quality</div>
+          <div className="v">{kpi.modelQuality}%</div>
+        </div>
+        <div className="card" style={{ cursor: "pointer" }} onClick={() => navigate("/ai-detection")}>
+          <div className="k">AI Detection</div>
+          <div className="v">{kpi.aiDetection}%</div>
+        </div>
       </div>
 
       <hr className="sep" />
@@ -1902,6 +1912,7 @@ export default function App() {
           <Route path="/utenti" element={<Utenti />} />
           <Route path="/utenti/:username" element={<UserDetail />} />
           <Route path="/overprivileged-users" element={<OverprivilegedPage />} />
+          <Route path="/model-quality" element={<ModelQualityPage />} />
           <Route path="/config/connettori" element={<Connettori />} />
           <Route path="/config/logs" element={<Logs />} />
           <Route path="*" element={<Analytics />} />
