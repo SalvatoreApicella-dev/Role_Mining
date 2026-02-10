@@ -3,14 +3,19 @@ import Plot from "react-plotly.js";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
-import KpiDrilldownPage from "./pages/KpiDrilldownPage";
 import { api, clearToken, getToken, setToken } from "./api.js";
 import Select from "react-select";
 import { importBusinessRolesCsv } from "./api";
-import OverprivilegedPage from "./pages/OverprivilegedPage";
-import AiDetectionPage from "./pages/AiDetectionPage";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
+
+// Lazy Load Pages
+const KpiDrilldownPage = lazy(() => import("./pages/KpiDrilldownPage"));
+const OverprivilegedPage = lazy(() => import("./pages/OverprivilegedPage"));
+const AiDetectionPage = lazy(() => import("./pages/AiDetectionPage"));
+const AiTrainingPage = lazy(() => import("./pages/AiTrainingPage"));
+
+
 
 const SPLIT_KEY = "cluster_assignments_height_v1";
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -33,12 +38,16 @@ function Sidebar({ onLogout, roles }) {
     <aside className="sidebar">
 
       <div className="menu">
+        <div className="menu-section">Insights</div>
         <NavLink to="/analytics" className={({ isActive }) => (isActive ? "active" : "")}>Analytics</NavLink>
+
+        <div className="menu-section">Management</div>
         <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "active" : "")}>Business Roles</NavLink>
         <NavLink to="/cluster" className={({ isActive }) => (isActive ? "active" : "")}>Cluster</NavLink>
         <NavLink to="/utenti" className={({ isActive }) => (isActive ? "active" : "")}>Utenti</NavLink>
+        <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "active" : "")}>AI Training</NavLink>
 
-
+        <div className="menu-section">System</div>
         <button className="link" onClick={() => setOpenCfg(v => !v)}>
           Configurazioni ▾
         </button>
@@ -102,8 +111,8 @@ function Login() {
           Mock AD: admin / admin123
         </p>
         <form onSubmit={doLogin} className="row" style={{ flexDirection: "column", alignItems: "stretch" }}>
-          <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" />
-          <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" type="password" />
+          <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" aria-label="Username" />
+          <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" type="password" aria-label="Password" />
           <button className="primary" type="submit">Entra</button>
           {err && <div className="err">{err}</div>}
         </form>
@@ -242,6 +251,7 @@ function Connettori() {
             value={cfg.server}
             onChange={e => setCfg({ ...cfg, server: e.target.value })}
             placeholder="server (es: ad.local o mock)"
+            aria-label="AD Server Address"
           />
           <select
             value={cfg.auth}
@@ -380,11 +390,14 @@ function Connettori() {
 
 function Utenti() {
   const [q, setQ] = useState("");
+  const [typeQ, setTypeQ] = useState("");
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
   const [err, setErr] = useState("");
+  const [sortBy, setSortBy] = useState("");
+  const [sortOrder, setSortOrder] = useState("asc");
   const nav = useNavigate();
 
 
@@ -392,7 +405,9 @@ function Utenti() {
     try {
       setErr("");
       setOffset(currOffset);
-      const res = await api.users(q, limit, currOffset);
+      setErr("");
+      setOffset(currOffset);
+      const res = await api.users(q, limit, currOffset, sortBy, sortOrder, typeQ);
       setRows(res.items || []);
       setTotal(res.total || 0);
     } catch (e) {
@@ -409,14 +424,27 @@ function Utenti() {
     if (offset + limit < total) load(offset + limit);
   }
 
+  function handleSort(col) {
+    if (sortBy === col) {
+      setSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(col);
+      setSortOrder("asc");
+    }
+  }
+  useEffect(() => { if (sortBy) load(0); }, [sortBy, sortOrder]);
+
+  const sortIcon = (col) => sortBy === col ? (sortOrder === "asc" ? " ▲" : " ▼") : "";
+
   return (
     <div className="main">
       <h2 style={{ marginTop: 0 }}>Utenti ({total})</h2>
 
       <div className="panel">
         <div className="row">
-          <input style={{ width: 360 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Filtro (username/displayName)" />
-          <button className="primary" onClick={() => load(0)}>Cerca</button>
+          <input style={{ width: 360 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Filtro (username/displayName)" aria-label="Filter Users" />
+          <input style={{ width: 140, marginLeft: 10 }} value={typeQ} onChange={e => setTypeQ(e.target.value)} placeholder="Type (es. Service)" aria-label="Filter by Type" />
+          <button className="primary" onClick={() => load(0)} style={{ marginLeft: 10 }}>Cerca</button>
         </div>
 
         <hr className="sep" />
@@ -424,8 +452,9 @@ function Utenti() {
         <table className="table">
           <thead>
             <tr>
-              <th>Username</th>
-              <th>Display Name</th>
+              <th style={{ cursor: "pointer" }} onClick={() => handleSort("username")}>Username{sortIcon("username")}</th>
+              <th style={{ cursor: "pointer" }} onClick={() => handleSort("displayName")}>Display Name{sortIcon("displayName")}</th>
+              <th style={{ cursor: "pointer" }} onClick={() => handleSort("accountType")}>Type{sortIcon("accountType")}</th>
               <th>Groups (memberOf)</th>
             </tr>
           </thead>
@@ -439,6 +468,7 @@ function Utenti() {
 
                 <td>{u.username}</td>
                 <td>{u.displayName}</td>
+                <td style={{ color: "var(--muted)", fontSize: 13 }}>{u.accountType || "Internal"}</td>
                 <td style={{ color: "var(--muted)" }}>{(u.groups || []).join(", ")}</td>
               </tr>
             ))}
@@ -469,6 +499,9 @@ function UserDetail() {
 
   const [selectedRole, setSelectedRole] = useState("Unassigned");
   const [selectedGroups, setSelectedGroups] = useState([]);
+  const [accountType, setAccountType] = useState("Internal");
+  const [peerStats, setPeerStats] = useState(null);
+  const [analyzingPeers, setAnalyzingPeers] = useState(false);
   const [filter, setFilter] = useState("");
 
   const [ok, setOk] = useState("");
@@ -515,8 +548,8 @@ function UserDetail() {
       setErr("");
       setOk("");
 
-      const u = await api.get(`/api/users/${encodeURIComponent(username)}`); // { user, allGroups }
-      const br = await api.businessRoles(); // { roles, assignments }
+      const u = await api.get(`/api/users/${encodeURIComponent(username)}`); // {user, allGroups}
+      const br = await api.businessRoles(); // {roles, assignments}
 
       setUser(u.user);
       setAllGroups(u.allGroups || []);
@@ -524,6 +557,8 @@ function UserDetail() {
 
       setSelectedRole(u.user?.businessRole || "Unassigned");
       setSelectedGroups((u.user?.groups || []).slice().sort());
+      setAccountType(u.user?.accountType || "Internal");
+      setPeerStats(null);
     } catch (e) {
       setErr(String(e?.message || e));
     }
@@ -542,6 +577,20 @@ function UserDetail() {
     });
   }
 
+  async function runPeerAnalysis() {
+    if (!user?.username) return;
+    try {
+      setAnalyzingPeers(true);
+      setPeerStats(null);
+      const res = await api.peerAnalysis(user.username);
+      setPeerStats(res);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setAnalyzingPeers(false);
+    }
+  }
+
   async function save() {
     if (!user?.username) return;
     try {
@@ -552,6 +601,7 @@ function UserDetail() {
       await api.post(`/api/users/${encodeURIComponent(user.username)}/update`, {
         groups: selectedGroups,
         businessRole: selectedRole,
+        accountType: accountType,
       });
 
       setOk("Salvato.");
@@ -583,6 +633,7 @@ function UserDetail() {
           <div style={{ color: "var(--muted)", fontSize: 12 }}>
             Username: {user?.username || username}
             {user?.department ? ` • Department: ${user.department}` : ""}
+            {user?.accountType ? ` • Type: ${user.accountType}` : ""}
           </div>
         </div>
 
@@ -617,6 +668,91 @@ function UserDetail() {
 
         {ok ? <div className="ok">{ok}</div> : null}
         {err ? <div className="err">{err}</div> : null}
+
+        <hr className="sep" />
+
+        <h3 style={{ marginTop: 0 }}>Account Classification</h3>
+        <div className="row" style={{ alignItems: "center" }}>
+          <div style={{ width: 200 }}>
+            <Select
+              styles={selectStyles}
+              value={{ value: accountType, label: accountType }}
+              onChange={(opt) => setAccountType(opt?.value || "Internal")}
+              options={[
+                { value: "Internal", label: "Internal" },
+                { value: "External", label: "External" },
+                { value: "Service", label: "Service" },
+                { value: "Administrative", label: "Administrative" },
+                { value: "BlueCollar", label: "BlueCollar" },
+              ]}
+              menuPortalTarget={document.body}
+              menuPosition="fixed"
+            />
+          </div>
+
+          <div style={{ marginLeft: 20, display: "flex", gap: 10, alignItems: "center" }}>
+            <button className="secondary" onClick={runPeerAnalysis} disabled={analyzingPeers}>
+              {analyzingPeers ? "Analyzing..." : "Run Peer Analysis"}
+            </button>
+          </div>
+        </div>
+
+        {peerStats && (
+          <div style={{ marginTop: 15, background: "rgba(0,0,0,0.2)", padding: 10, borderRadius: 8 }}>
+            <h4 style={{ marginTop: 0 }}>Peer Analysis Results</h4>
+            <div style={{ fontSize: 13, marginBottom: 10 }}>
+              Peers found: <b>{peerStats?.peersCount ?? 0}</b> (Same Business Role + Same Account Type)
+            </div>
+
+            {peerStats?.anomalies?.length > 0 ? (
+              <table className="table" style={{ fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th>Anomalous Group (Redundant?)</th>
+                    <th>Freq</th>
+                    <th>Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {peerStats.anomalies.map((a, i) => (
+                    <tr key={i}>
+                      <td style={{ color: "#ff6a6a" }}>{a.group}</td>
+                      <td>{(a.frequency * 100).toFixed(0)}%</td>
+                      <td>{a.count}/{a.peers}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{ color: "#71ffb2", fontSize: 13 }}>No anomalies found (all groups are consistent with peers).</div>
+            )}
+
+            {/* Suggested Groups – green */}
+            {peerStats?.suggestedGroups?.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <h4 style={{ marginTop: 0, color: "#4ade80" }}>✅ Suggested Groups (present in peers, missing here)</h4>
+                <table className="table" style={{ fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th>Suggested Group</th>
+                      <th>Freq</th>
+                      <th>Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {peerStats.suggestedGroups.map((s, i) => (
+                      <tr key={i}>
+                        <td style={{ color: "#4ade80", fontWeight: 500 }}>{s.group}</td>
+                        <td>{(s.frequency * 100).toFixed(0)}%</td>
+                        <td>{s.count}/{s.peers}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         <hr className="sep" />
 
@@ -689,8 +825,8 @@ function UserDetail() {
 
 
 function Cluster() {
-  const [roleMetaByRole, setRoleMetaByRole] = useState({});   // { "IT": {color, groups}, ... }
-  const [groupRoleMap, setGroupRoleMap] = useState({});       // { "VPN": "IT", "Payroll": "HR", ... }
+  const [roleMetaByRole, setRoleMetaByRole] = useState({});   // {"IT": {color, groups}, ... }
+  const [groupRoleMap, setGroupRoleMap] = useState({});       // {"VPN": "IT", "Payroll": "HR", ... }
   const [usersIndex, setUsersIndex] = useState({});
 
   const containerRef = React.useRef(null);
@@ -815,7 +951,7 @@ function Cluster() {
   const ASSIGN_PAGE_SIZE = 50;
 
   async function loadRoles() {
-    const r = await api.businessRoles(); // {roles:[{role,count}], assignments:{user:role}}
+    const r = await api.businessRoles(); // {roles:[{role, count}], assignments:{user:role}}
     setRoleData(r);
 
     // carica meta (color + groups) per ogni ruolo
@@ -823,7 +959,7 @@ function Cluster() {
     const metas = await Promise.all(
       roles.map(async (role) => {
         try {
-          const m = await api.businessRoleMeta(role); // {role,color,groups}
+          const m = await api.businessRoleMeta(role); // {role, color, groups}
           return [role, m];
         } catch {
           return [role, { role, color: "#6aa6ff", groups: [] }];
@@ -1763,22 +1899,24 @@ export default function App() {
   return (
     <div className="layout">
       <Sidebar onLogout={logout} roles={roles} />
-      <Routes>
-        <Route path="/" element={<Analytics />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/cluster" element={<Cluster />} />
-        <Route path="/utenti" element={<Utenti />} />
-        <Route path="/utenti/:username" element={<UserDetail />} />
-        <Route path="/overprivileged-users" element={<OverprivilegedPage />} />
-        <Route path="/config/connettori" element={<Connettori />} />
-        <Route path="/config/logs" element={<Logs />} />
-        <Route path="*" element={<Analytics />} />
-        <Route path="/business-roles" element={<BusinessRolesHome />} />
-        <Route path="/business-roles/:role" element={<BusinessRoleDetail />} />
-        <Route path="/kpi/:metric" element={<KpiDrilldownPage />} />
-        <Route path="/ai-detection" element={<AiDetectionPage />} />
-
-      </Routes>
+      <Suspense fallback={<div style={{ display: "grid", placeItems: "center", height: "100vh", color: "var(--muted)" }}>Loading...</div>}>
+        <Routes>
+          <Route path="/" element={<Analytics />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/cluster" element={<Cluster />} />
+          <Route path="/utenti" element={<Utenti />} />
+          <Route path="/utenti/:username" element={<UserDetail />} />
+          <Route path="/overprivileged-users" element={<OverprivilegedPage />} />
+          <Route path="/config/connettori" element={<Connettori />} />
+          <Route path="/config/logs" element={<Logs />} />
+          <Route path="*" element={<Analytics />} />
+          <Route path="/business-roles" element={<BusinessRolesHome />} />
+          <Route path="/business-roles/:role" element={<BusinessRoleDetail />} />
+          <Route path="/kpi/:metric" element={<KpiDrilldownPage />} />
+          <Route path="/ai-detection" element={<AiDetectionPage />} />
+          <Route path="/ai-training" element={<AiTrainingPage />} />
+        </Routes>
+      </Suspense>
     </div>
   );
 }

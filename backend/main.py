@@ -34,6 +34,10 @@ MOCK_AD = os.getenv("MOCK_AD", "0") == "1"
 from openpyxl import load_workbook
 from collections import defaultdict
 
+# ML Engine import
+from ml_engine import get_ml_engine, ACCOUNT_TYPES
+ml_engine = get_ml_engine(data_dir="./ml_data")
+
 
 # =============================================================================
 # Response Cache (Solution 1: In-Memory TTL Cache)
@@ -479,6 +483,48 @@ def ensure_role_registered(role: str) -> None:
     _ensure_role_registered(role)
 
 DEPT_MERGE_JACCARD = 0.55  # soglia similarità gruppi dept vs BR template
+
+
+def classify_account(display_name: str, ou: str, employee_type: str, use_ml: bool = True) -> str:
+    """
+    Classify account type using ML (if available) with rule-based fallback.
+    
+    Uses the ML engine for high-confidence predictions (>75%), otherwise
+    falls back to the extended 12-type rule-based classification.
+    """
+    # Try ML-based classification first
+    if use_ml:
+        try:
+            predicted_type, confidence, method = ml_engine.classify_account(
+                display_name, ou, employee_type, confidence_threshold=0.75
+            )
+            if method == "ml" and confidence >= 0.75:
+                return predicted_type
+        except Exception:
+            pass  # Fall through to rules
+    
+    # Use ML engine's rule-based classification (extended 12 types)
+    return ml_engine.classify_account_rules(display_name, ou, employee_type)
+
+
+# =============================================================================
+# BRDB Functions (Business Role Database) - Delegating to ML Engine
+# =============================================================================
+
+def brdb_rebuild():
+    """Rebuild the Business Role Database from current user assignments."""
+    users = state.get("last_extract", {}).get("users") or []
+    ml_engine.brdb_rebuild(users)
+
+
+def brdb_infer_group(group: str) -> dict:
+    """Infer which role a group belongs to based on learned patterns."""
+    return ml_engine.brdb_infer_group(group)
+
+
+def brdb_learn_assignment(role: str, groups: list, weight: float = 1.0):
+    """Record a confirmed role→groups assignment for learning."""
+    ml_engine.brdb_learn_assignment(role, groups, weight)
 
 def _jaccard(a: set[str], b: set[str]) -> float:
     if not a and not b:
@@ -1145,7 +1191,8 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
 
         # objectClass=user può includere account tecnici: in produzione aggiungere filtri più stretti
         search_filter = "(&(objectClass=user)(sAMAccountName=*))"
-        attrs = ["sAMAccountName", "displayName", "memberOf", "department", "lastLogonTimestamp"]
+        # Fetch ALL attributes to support dynamic rules
+        attrs = ["*"]
         
         log("INFO", f"Searching LDAP base='{ou_dn}' filter='{search_filter}'")
 
@@ -1156,10 +1203,18 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
         log("INFO", f"LDAP search found {len(conn.entries)} entries. Parsing...")
         
         users: List[Dict[str, Any]] = []
+        
+        # Collect all available field names for UI
+        available_fields = set()
+
         for entry in conn.entries:
             try:
                 d = entry.entry_attributes_as_dict
                 
+                # Update available fields
+                for k in d.keys():
+                    available_fields.add(k)
+
                 # Safe attribute extraction
                 sAM = d.get("sAMAccountName") or []
                 username = str(sAM[0]).strip() if sAM else ""
@@ -1189,6 +1244,20 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
                 llt = d.get("lastLogonTimestamp")
                 last_login = str(llt[0]).strip() if (llt and llt[0]) else None
 
+                et = d.get("employeeType")
+                etype = str(et[0]).strip() if et else ""
+                
+                dn_full = d.get("distinguishedName")
+                dn_str_val = str(dn_full[0]).strip() if dn_full else ""
+                
+                # Use department or parse OU from DN as fallback for classification
+                ou_for_class = department or dn_str_val
+
+                # Pass ALL attributes to classification (d is the dict of attributes)
+                # We normalize/clean values if needed, but ml_engine handles basic lists/strings.
+                # 'd' values are usually lists in ldap3. ml_engine now expects lists -> joins them.
+                account_type = classify_account(display, ou_for_class, etype, attributes=d)
+
                 if username:
                     users.append({
                         "username": username,
@@ -1196,11 +1265,18 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
                         "groups": sorted(set(groups)),
                         "department": department,
                         "lastLogin": last_login,
+                        "accountType": account_type,
+                        "attributes": d # Store raw attributes for future reference/rules
                     })
             except Exception as entry_ex:
                 # Log but continue processing other users
                 log("WARNING", f"Error parsing LDAP entry: {entry_ex}. Entry: {str(entry)[:100]}...")
                 continue
+        
+        # Update state with available fields
+        state["ad_available_fields"] = sorted(list(available_fields))
+        log("INFO", f"Updated available AD fields: {len(available_fields)} found.")
+
                 
         log("INFO", f"LDAP extraction complete. Parsed {len(users)} users.")
         return users
@@ -1593,6 +1669,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 @app.get("/api/kpi/drilldown")
 def kpidrilldown_q(metric: str, username: str = Depends(require_auth)):
     return kpi_drilldown(metric, username)
@@ -1716,8 +1795,10 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
 
 
 @app.get("/api/users")
-def list_users(q: str = "", limit: int = 100, offset: int = 0, username: str = Depends(require_auth)):
+def list_users(q: str = "", type_q: str = "", limit: int = 100, offset: int = 0, sort_by: str = "", order: str = "asc", username: str = Depends(require_auth)):
     users = active_users(state["last_extract"]["users"] or [])
+    
+    # Text Filter
     if q:
         ql = q.lower()
         users = [
@@ -1725,6 +1806,27 @@ def list_users(q: str = "", limit: int = 100, offset: int = 0, username: str = D
             if ql in (u.get("username") or "").lower()
             or ql in (u.get("displayName") or "").lower()
         ]
+        
+    # Type Filter
+    if type_q:
+        tql = type_q.lower()
+        users = [
+            u for u in users
+            if tql in (u.get("accountType") or u.get("account_type") or "internal").lower()
+        ]
+    
+    # Sorting support
+    if sort_by:
+        reverse = order.lower() == "desc"
+        
+        def get_sort_key(u):
+            val = u.get(sort_by)
+            # Fallback for accountType nuances
+            if val is None and sort_by == "accountType":
+                val = u.get("account_type")
+            return (val or "").lower()
+            
+        users = sorted(users, key=get_sort_key, reverse=reverse)
     
     total = len(users)
     sliced = users[offset : offset + limit]
@@ -1743,7 +1845,8 @@ def get_user(uname: str, username: str = Depends(require_auth)):
 
 class UserUpdateRequest(BaseModel):
     groups: List[str] = []
-    businessRole: Optional[str] = None  # se vuoi cambiarlo dalla stessa pagina
+    businessRole: Optional[str] = None
+    accountType: Optional[str] = None
 
 @app.post("/api/users/{uname}/update")
 def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(require_auth)):
@@ -1773,12 +1876,75 @@ def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(req
         except Exception:
             pass
 
+    if body.accountType:
+        u["accountType"] = body.accountType.strip()
+
     # riallinea derivati
     apply_business_roles(users)
     # state["last_extract"]["groups"] = recompute_groups_from_users(users)
     state["mining_dirty"] = True
 
     return {"ok": True, "user": u}
+
+
+@app.get("/api/users/{uname}/peer-analysis")
+def get_peer_analysis(uname: str, username: str = Depends(require_auth)):
+    users = state.get("last_extract", {}).get("users") or []
+    target = next((x for x in users if x.get("username") == uname), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    br = target.get("businessRole")
+    at = target.get("accountType") or "Internal"
+    
+    if not br or br == "Unassigned":
+         return {"peersCount": 0, "anomalies": [], "suggestedGroups": []}
+
+    # Find peers: same BR + same AccountType
+    peers = [u for u in users if u.get("businessRole") == br and (u.get("accountType") or "Internal") == at]
+    peers_count = len(peers)
+    
+    if peers_count < 2:
+        return {"peersCount": peers_count, "anomalies": [], "suggestedGroups": []}
+        
+    # Calculate group frequencies
+    grp_counts = defaultdict(int)
+    for p in peers:
+        for g in (p.get("groups") or []):
+            grp_counts[g] += 1
+            
+    # Check target user's groups
+    target_groups = set(target.get("groups") or [])
+    anomalies = []
+    
+    for g in target_groups:
+        freq = grp_counts[g] / peers_count
+        if freq < 0.15:  # Threshold for anomaly (e.g., < 15% of peers have this group)
+            anomalies.append({
+                "group": g,
+                "frequency": round(freq, 2),
+                "count": grp_counts[g],
+                "peers": peers_count
+            })
+    
+    # Suggested groups: present in >=50% of peers but MISSING from this user
+    suggested_groups = []
+    for g, cnt in grp_counts.items():
+        freq = cnt / peers_count
+        if freq >= 0.50 and g not in target_groups:
+            suggested_groups.append({
+                "group": g,
+                "frequency": round(freq, 2),
+                "count": cnt,
+                "peers": peers_count
+            })
+    suggested_groups.sort(key=lambda x: x["frequency"], reverse=True)
+            
+    return {
+        "peersCount": peers_count,
+        "anomalies": sorted(anomalies, key=lambda x: x["frequency"]),
+        "suggestedGroups": suggested_groups,
+    }
 
 
 @app.post("/api/rolemining/run")
@@ -2447,6 +2613,8 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             i += 1
         seen_usernames.add(uname)
 
+
+        atype = classify_account(dn, dept, row.get("EmployeeType", ""))
         new_users.append({
             "username": uname,
             "displayName": dn,
@@ -2455,6 +2623,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             "businessRole": br or None,
             "excluded": False,
             "lastLogin": None,
+            "accountType": atype,
         })
 
         rec = {
@@ -2517,6 +2686,8 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
                 existing_user["department"] = user["department"]
             if user.get("displayName"):
                 existing_user["displayName"] = user["displayName"]
+            if user.get("accountType"):
+                existing_user["accountType"] = user["accountType"]
             
             # Update username if it changed (displayName matched but username different)
             if existing_user.get("username") != uname:
@@ -2721,7 +2892,165 @@ async def import_xlsx(file: UploadFile = File(...), username: str = Depends(requ
     }
 
 
+# =============================================================================
+# ML ENGINE API ENDPOINTS
+# =============================================================================
+
+@app.get("/api/config/ad-fields")
+def get_ad_fields(username: str = Depends(require_auth)):
+    """Return list of all AD fields found during last import."""
+    fields = state.get("ad_available_fields", [])
+    # Ensure default fields are always present
+    defaults = {"displayName", "department", "title", "employeeType", "company", "manager", "mail"}
+    combined = sorted(list(set(fields) | defaults))
+    return {"fields": combined}
+
+@app.get("/api/brdb/status")
+def brdb_status_api(username: str = Depends(require_auth)):
+    """
+    Ritorna lo stato del calcolo BRDB (background).
+    """
+    return {
+        "calculated": state["brdb_calculated"],
+        "min_confidence": state["brdb_min_confidence"],
+        "last_update": state["brdb_last_update"]
+    }
+
+@app.get("/api/ml/status")
+def ml_status(username: str = Depends(require_auth)):
+    """Return ML engine status and metrics."""
+    return ml_engine.get_status()
+
+
+@app.post("/api/ml/train")
+def ml_train(username: str = Depends(require_auth)):
+    """Trigger ML model training from accumulated data."""
+    # Build training data from existing users
+    users = state.get("last_extract", {}).get("users") or []
+    training_data = []
+    
+    for u in users:
+        if u.get("accountType"):
+            training_data.append({
+                "display_name": u.get("displayName", ""),
+                "ou": u.get("department", ""),
+                "employee_type": "",  # Not always available
+                "account_type": u.get("accountType", "Internal"),
+            })
+    
+    # Also include corrections/confirmations
+    result = ml_engine.retrain_from_history()
+    if not result.get("success") and training_data:
+        result = ml_engine.train_classifier(training_data)
+    
+    return result
+
+
+@app.post("/api/ml/rebuild-brdb")
+def ml_rebuild_brdb(username: str = Depends(require_auth)):
+    """Force rebuild of Business Role Database."""
+    brdb_rebuild()
+    return {"ok": True, "message": "BRDB rebuilt", **ml_engine.get_status()["brdb"]}
+
+
+class AccountTypeConfirmRequest(BaseModel):
+    confirmed_type: str
+
+
+@app.post("/api/users/{uname}/confirm-type")
+def confirm_account_type(uname: str, body: AccountTypeConfirmRequest, username: str = Depends(require_auth)):
+    """Record a type confirmation (trains the ML model)."""
+    users = state.get("last_extract", {}).get("users") or []
+    target = next((x for x in users if x.get("username") == uname), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Record confirmation
+    ml_engine.record_confirmation(
+        username=uname,
+        display_name=target.get("displayName", ""),
+        ou=target.get("department", ""),
+        employee_type="",
+        confirmed_type=body.confirmed_type
+    )
+    
+    # Update user type
+    target["accountType"] = body.confirmed_type
+    
+    return {"ok": True, "user": uname, "type": body.confirmed_type}
+
+
+@app.post("/api/users/{uname}/correct-type")
+def correct_account_type(uname: str, body: AccountTypeConfirmRequest, username: str = Depends(require_auth)):
+    """Record a type correction (trains the ML model)."""
+    users = state.get("last_extract", {}).get("users") or []
+    target = next((x for x in users if x.get("username") == uname), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    old_type = target.get("accountType", "Internal")
+    
+    # Record correction
+    ml_engine.record_correction(
+        username=uname,
+        display_name=target.get("displayName", ""),
+        ou=target.get("department", ""),
+        employee_type="",
+        old_type=old_type,
+        new_type=body.confirmed_type
+    )
+    
+    # Update user type
+    target["accountType"] = body.confirmed_type
+    
+    return {"ok": True, "user": uname, "old_type": old_type, "new_type": body.confirmed_type}
+
+
+@app.get("/api/ml/account-types")
+def get_account_types(username: str = Depends(require_auth)):
+    """Return the list of supported account types."""
+    return {"types": ACCOUNT_TYPES}
+
+
+# =============================================================================
+# PATTERN RULES API ENDPOINTS
+# =============================================================================
+
+class PatternRuleRequest(BaseModel):
+    account_type: str
+    field: str
+    regex: str
+
+
+@app.get("/api/ml/patterns")
+def get_patterns(username: str = Depends(require_auth)):
+    """Return all classification patterns (static + custom)."""
+    return ml_engine.get_patterns()
+
+
+@app.post("/api/ml/patterns")
+def add_pattern(body: PatternRuleRequest, username: str = Depends(require_auth)):
+    """Add a new custom regex pattern rule for account classification."""
+    result = ml_engine.add_pattern(body.account_type, body.field, body.regex)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed"))
+    log("INFO", f"Pattern added: {body.account_type}/{body.field}/{body.regex} by {username}")
+    return result
+
+
+@app.delete("/api/ml/patterns/{index}")
+def delete_pattern_endpoint(index: int, username: str = Depends(require_auth)):
+    """Delete a custom pattern by index."""
+    result = ml_engine.delete_pattern(index)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed"))
+    log("INFO", f"Pattern deleted: index={index} by {username}")
+    return result
+
+
+# (peer-analysis endpoint defined at line 1846)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8002, reload=True)
-

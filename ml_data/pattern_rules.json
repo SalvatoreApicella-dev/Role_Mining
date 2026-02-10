@@ -1,0 +1,26 @@
+[
+  {
+    "account_type": "Technical",
+    "field": "department_code",
+    "regex": "^DEV.*",
+    "created_at": "2026-02-10T01:15:59.850204"
+  },
+  {
+    "account_type": "Executive",
+    "field": "display_name",
+    "regex": ".*CEO.*",
+    "created_at": "2026-02-10T01:15:59.850705"
+  },
+  {
+    "account_type": "Technical",
+    "field": "department_code",
+    "regex": "^DEV.*",
+    "created_at": "2026-02-10T01:17:16.508488"
+  },
+  {
+    "account_type": "Executive",
+    "field": "display_name",
+    "regex": ".*CEO.*",
+    "created_at": "2026-02-10T01:17:16.509121"
+  }
+]

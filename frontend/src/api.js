@@ -111,7 +111,12 @@ export const api = {
   setConnector: (cfg) => request("/api/config/connector", { method: "POST", body: cfg }),
 
   extract: (ou) => request("/api/ad/extract", { method: "POST", body: { ou } }),
-  users: (q = "", limit = 100, offset = 0) => request(`/api/users?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+  users: (q = "", limit = 100, offset = 0, sortBy = "", order = "asc", typeQ = "") => {
+    let url = `/api/users?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`;
+    if (sortBy) url += `&sort_by=${encodeURIComponent(sortBy)}&order=${encodeURIComponent(order)}`;
+    if (typeQ) url += `&type_q=${encodeURIComponent(typeQ)}`;
+    return request(url);
+  },
 
   roleMiningRun: (n_clusters, role_support) =>
     request("/api/rolemining/run", { method: "POST", body: { n_clusters, role_support } }),
@@ -127,6 +132,19 @@ export const api = {
   businessRoleDetail: (role) => request(`/api/businessroles/${encodeURIComponent(role)}`),
   businessRoleAddUser: (role, username) =>
     request(`/api/businessroles/${encodeURIComponent(role)}/add`, { method: "POST", body: { username } }),
+
+  updateAccountType: (username, accountType) => request(`/api/users/${encodeURIComponent(username)}/update`, { method: "POST", body: { accountType } }),
+  peerAnalysis: (username) => request(`/api/users/${encodeURIComponent(username)}/peer-analysis`),
+
+  // Pattern rules (AI Training)
+  getPatterns: () => request("/api/ml/patterns"),
+  addPattern: (account_type, field, regex) => request("/api/ml/patterns", { method: "POST", body: { account_type, field, regex } }),
+  deletePattern: (index) => request(`/api/ml/patterns/${index}`, { method: "DELETE" }),
+
+  // ML
+  mlStatus: () => request("/api/ml/status"),
+  mlAccountTypes: () => request("/api/ml/account-types"),
+  getAdFields: () => request("/api/config/ad-fields"),
 
   async get(path) {
     const res = await fetch(path, {
