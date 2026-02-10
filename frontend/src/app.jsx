@@ -951,31 +951,26 @@ function Cluster() {
   const ASSIGN_PAGE_SIZE = 50;
 
   async function loadRoles() {
-    const r = await api.businessRoles(); // {roles:[{role, count}], assignments:{user:role}}
+    const r = await api.businessRoles(); // {roles:[{role, count, color, groups}], assignments:{user:role}}
     setRoleData(r);
 
-    // carica meta (color + groups) per ogni ruolo
-    const roles = (r.roles || []).map(x => x.role);
-    const metas = await Promise.all(
-      roles.map(async (role) => {
-        try {
-          const m = await api.businessRoleMeta(role); // {role, color, groups}
-          return [role, m];
-        } catch {
-          return [role, { role, color: "#6aa6ff", groups: [] }];
-        }
-      })
-    );
-
-    const metaObj = Object.fromEntries(metas);
+    // Optimization: Build metaObj directly from the response, avoiding N+1 calls
+    const metaObj = {};
+    (r.roles || []).forEach(x => {
+      metaObj[x.role] = {
+        role: x.role,
+        color: x.color || "#6aa6ff",
+        groups: x.groups || []
+      };
+    });
     setRoleMetaByRole(metaObj);
 
     // costruisce group -> role (se un group è in più ruoli, vince il primo)
     const gmap = {};
-    for (const role of roles) {
-      const gs = metaObj?.[role]?.groups || [];
+    for (const x of (r.roles || [])) {
+      const gs = x.groups || [];
       for (const g of gs) {
-        if (!gmap[g]) gmap[g] = role;
+        if (!gmap[g]) gmap[g] = x.role;
       }
     }
     setGroupRoleMap(gmap);

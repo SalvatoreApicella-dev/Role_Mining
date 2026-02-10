@@ -2112,7 +2112,14 @@ def businessroles(username: str = Depends(require_auth)):
     roles_info = []
     for r in roles:
         members = [u for u in users if u.get("businessRole") == r]
-        roles_info.append({"role": r, "count": len(members)})
+        # Optimization: include meta (color, groups) directly
+        meta = state.get("role_meta", {}).get(r, {})
+        roles_info.append({
+            "role": r,
+            "count": len(members),
+            "color": meta.get("color", "#6aa6ff"),
+            "groups": meta.get("groups", [])
+        })
     result = {
         "roles": roles_info,
         "assignments": {u["username"]: u.get("businessRole", "Unassigned") for u in users},
