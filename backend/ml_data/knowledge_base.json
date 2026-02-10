@@ -1,0 +1,69 @@
+{
+    "redundancy_rules": {
+        "VPN_GLOBAL": [
+            "VPN_IT",
+            "VPN_FR",
+            "VPN_US",
+            "VPN_DE"
+        ],
+        "SAP_ALL": [
+            "SAP_READ",
+            "SAP_WRITE",
+            "SAP_REPORTING"
+        ],
+        "ADMIN_FULL": [
+            "ADMIN_READONLY",
+            "ADMIN_SUPPORT"
+        ],
+        "OFFICE_365_E5": [
+            "OFFICE_365_E3",
+            "OFFICE_365_E1"
+        ]
+    },
+    "account_type_policies": {
+        "BlueCollar": [
+            "ADMIN",
+            "SUDO",
+            "ROOT",
+            "VPN",
+            "SSH",
+            "ADMIN_CONSOLE_ACCESS"
+        ],
+        "External": [
+            "INTERNAL",
+            "HR_SYSTEM",
+            "FIN_SYSTEM"
+        ],
+        "Contractor": [
+            "HR_ADMIN",
+            "SALARY_INFO"
+        ]
+    },
+    "role_definitions": {
+        "Developer": [
+            "GIT",
+            "DOCKER",
+            "KAFKA"
+        ],
+        "Analyst": [
+            "EXCEL",
+            "POWERBI",
+            "SAP_READ"
+        ],
+        "Manager": [
+            "APPROVER",
+            "PAYROLL_MANAGER"
+        ]
+    },
+    "department_norms": {
+        "Finance": [
+            "SAP_PAYROLL",
+            "FINANCE_TOOL"
+        ],
+        "Engineering": [
+            "KAFKA",
+            "GIT",
+            "DOCKER"
+        ]
+    }
+}

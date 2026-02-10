@@ -241,6 +241,237 @@ def build_ai_detection_items(matrix: dict) -> list[dict]:
     return items
 
 
+# ---------------------------------------------------------------------------
+# Smart AI Detection (On-Demand) – Peer / Department / AccountType analysis
+# ---------------------------------------------------------------------------
+ADMIN_MARKERS = {'admin', 'administrator', 'superuser', 'root', 'owner',
+                 'elevated', 'privileged', 'sudo', 'godmode'}
+RESTRICTED_ACCOUNT_TYPES = {
+    'BlueCollar':  ADMIN_MARKERS,
+    'External':    ADMIN_MARKERS | {'internal', 'staff', 'employee', 'hr',
+                                     'payroll', 'finance', 'accounting'},
+    'Contractor':  ADMIN_MARKERS | {'internal', 'staff'},
+}
+PEER_ANOMALY_THRESHOLD = 0.10   # flag if < 10% of peers have the group
+DEPT_ANOMALY_THRESHOLD = 0.05   # flag if < 5% of dept members have group
+
+
+def load_knowledge_base() -> dict:
+    """Load the synthetic knowledge base (LLM-instructed rules)."""
+    try:
+        import json
+        path = "backend/ml_data/knowledge_base.json"
+        if not os.path.exists(path):
+            return {}
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading KB: {e}")
+        return {}
+
+
+def _build_freq_tables(users: list) -> tuple:
+    """Pre-compute frequency tables in a SINGLE pass over the user list.
+    Returns (role_freq, dept_freq):
+      role_freq  = { businessRole: { group: ratio_0_to_1 } }
+      dept_freq  = { department:   { group: ratio_0_to_1 } }
+    """
+    from collections import Counter
+
+    role_counts: dict[str, Counter] = {}   # role -> Counter of groups
+    role_totals: dict[str, int] = {}       # role -> num users in role
+    dept_counts: dict[str, Counter] = {}
+    dept_totals: dict[str, int] = {}
+
+    for u in (users or []):
+        if u.get("excluded"):
+            continue
+        groups = u.get("groups") or []
+        br = (u.get("businessRole") or "Unassigned").strip()
+        dept = (u.get("department") or "Unknown").strip()
+
+        role_totals[br] = role_totals.get(br, 0) + 1
+        dept_totals[dept] = dept_totals.get(dept, 0) + 1
+
+        if br not in role_counts:
+            role_counts[br] = Counter()
+        if dept not in dept_counts:
+            dept_counts[dept] = Counter()
+
+        for g in groups:
+            role_counts[br][g] += 1
+            dept_counts[dept][g] += 1
+
+    # Convert counts to ratios
+    role_freq: dict[str, dict[str, float]] = {}
+    for br, ctr in role_counts.items():
+        total = max(1, role_totals.get(br, 1))
+        role_freq[br] = {g: cnt / total for g, cnt in ctr.items()}
+
+    dept_freq: dict[str, dict[str, float]] = {}
+    for dept, ctr in dept_counts.items():
+        total = max(1, dept_totals.get(dept, 1))
+        dept_freq[dept] = {g: cnt / total for g, cnt in ctr.items()}
+
+    return role_freq, dept_freq
+
+
+def _check_type_violation(group: str, account_type: str) -> str:
+    """Return violation reason or empty string. O(1) per group."""
+    if not account_type:
+        return ""
+    restricted = RESTRICTED_ACCOUNT_TYPES.get(account_type)
+    if not restricted:
+        return ""
+    toks = set(_tokens(group))
+    matched = toks & restricted
+    if matched:
+        return f"Policy: {account_type} should not have '{group}'"
+    return ""
+
+
+def run_smart_ai_detection(users: list, matrix: dict) -> dict:
+    """On-demand smart redundancy detection.
+    Combines:
+    1. Statistical signal (Peer / Dept freq)
+    2. Knowledge Base rules (Redundancy, Policy, Norms)
+    """
+    role_freq, dept_freq = _build_freq_tables(users)
+    kb = load_knowledge_base()
+    
+    kb_redundancy = kb.get("redundancy_rules", {})
+    kb_policies = kb.get("account_type_policies", {})
+    kb_role_defs = kb.get("role_definitions", {})
+    kb_dept_norms = kb.get("department_norms", {})
+
+    # Index users by username for O(1) lookup
+    user_by_name: dict[str, dict] = {}
+    for u in (users or []):
+        if not u.get("excluded"):
+            uname = u.get("username")
+            if uname:
+                user_by_name[uname] = u
+
+    items: list[dict] = []
+    total_anomalies = 0
+    total_assignments = 0
+    users_with_anomaly = 0
+
+    for uname, row in (matrix or {}).items():
+        groups = [g for g, v in (row or {}).items() if int(v) == 1]
+        groups_set = set(groups)  # fast lookup
+        total_assignments += len(groups)
+
+        u_data = user_by_name.get(uname, {})
+        br = (u_data.get("businessRole") or "Unassigned").strip()
+        dept = (u_data.get("department") or "Unknown").strip()
+        acct_type = (u_data.get("accountType") or "").strip()
+
+        peer_freqs = role_freq.get(br, {})
+        dept_freqs = dept_freq.get(dept, {})
+
+        # KB Norms for this user
+        # Match "Engineer" in "Software Engineer III" etc.
+        kb_role_norm = next((norm for k, norm in kb_role_defs.items() if k in br), [])
+        kb_dept_norm = next((norm for k, norm in kb_dept_norms.items() if k in dept), [])
+
+        anomalies: list[dict] = []
+        for g in groups:
+            reasons: list[str] = []
+            confidence = 0.0
+
+            # --- 1. KNOWLEDGE BASE CHECKS (High Confidence) ---
+            
+            # A) Known Redundancy Rule (e.g. VPN_GLOBAL implies VPN_IT is redundant)
+            # Check if 'g' is in the redundant list of ANY other group the user has
+            for other_g in groups:
+                if other_g == g: continue
+                redundant_list = kb_redundancy.get(other_g, [])
+                if g in redundant_list:
+                    reasons.append(f"Redundant: Superceded by '{other_g}' (KB Rule)")
+                    confidence = 1.0
+                    break
+            
+            # B) Account Type Policy
+            # Check against KB policies + hardcoded fallback
+            forbidden = kb_policies.get(acct_type, [])
+            if any(token in g for token in forbidden):
+                 # re-check hardcoded function too just in case
+                 pass
+            
+            # (Merged policy check logic)
+            violation = _check_type_violation(g, acct_type)
+            if violation:
+                reasons.append(violation)
+                confidence = max(confidence, 0.95)
+            
+            # C) KB Role/Dept Norms (finding out-of-pattern items)
+            # If we generally know what this role has, and 'g' is NOT in it -> anomaly?
+            # Careful: KB is generic, don't be too strict.
+            # Only flag if it confirms a statistical anomaly.
+
+            # --- 2. STATISTICAL CHECKS (Medium/Low Confidence) ---
+
+            # Peer frequency check
+            pf = peer_freqs.get(g, 0.0)
+            is_stat_anomaly = False
+            
+            if pf < PEER_ANOMALY_THRESHOLD:
+                reasons.append(f"Peer: only {pf * 100:.0f}% of '{br}' have this")
+                confidence = max(confidence, 1.0 - pf)
+                is_stat_anomaly = True
+
+            # Department frequency check
+            df = dept_freqs.get(g, 0.0)
+            if df < DEPT_ANOMALY_THRESHOLD:
+                # If KB says this dept SHOULD have it, ignore the anomaly
+                if not any(k in g for k in kb_dept_norm):
+                    reasons.append(f"Dept: only {df * 100:.0f}% of '{dept}' have this")
+                    confidence = max(confidence, 1.0 - df)
+                    is_stat_anomaly = True
+
+            if reasons:
+                anomalies.append({
+                    "group": g,
+                    "reasons": reasons,
+                    "confidence": round(confidence, 2),
+                    "peerFreq": round(pf, 4),
+                    "deptFreq": round(df, 4),
+                })
+
+
+        if anomalies:
+            users_with_anomaly += 1
+            total_anomalies += len(anomalies)
+            anomalies.sort(key=lambda a: a["confidence"], reverse=True)
+            items.append({
+                "username": uname,
+                "displayName": u_data.get("displayName") or uname,
+                "businessRole": br,
+                "department": dept,
+                "accountType": acct_type,
+                "anomalyCount": len(anomalies),
+                "anomalies": anomalies,
+            })
+
+    items.sort(key=lambda x: x["anomalyCount"], reverse=True)
+
+    pct = (total_anomalies / max(1, total_assignments)) * 100.0
+
+    return {
+        "status": "ready",
+        "items": items,
+        "stats": {
+            "aiDetection": round(pct, 2),
+            "totalAnomalies": total_anomalies,
+            "totalAssignments": total_assignments,
+            "usersWithAnomaly": users_with_anomaly,
+            "totalUsersScanned": len(matrix or {}),
+        },
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def build_cluster_quality_items(clusters: list, matrix: dict) -> list[dict]:
     """
     Drilldown “Cluster Quality”: ordina gli elementi che peggiorano la qualità del cluster.
@@ -1030,8 +1261,8 @@ def recompute_groups_from_users(users: list[dict]) -> list[str]:
 
 
 def apply_choice_for_displayname(display_name: str,
-                                 chosen_business_role: str | None,
-                                 chosen_roles: list[str] | None) -> None:
+                                 chosen_business_role: Optional[str],
+                                 chosen_roles: Optional[List[str]]) -> None:
     users = state.get("last_extract", {}).get("users") or []
 
     same = [u for u in users if (u.get("displayName") or "").strip() == (display_name or "").strip()]
@@ -1254,9 +1485,7 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
                 ou_for_class = department or dn_str_val
 
                 # Pass ALL attributes to classification (d is the dict of attributes)
-                # We normalize/clean values if needed, but ml_engine handles basic lists/strings.
-                # 'd' values are usually lists in ldap3. ml_engine now expects lists -> joins them.
-                account_type = classify_account(display, ou_for_class, etype, attributes=d)
+                account_type = classify_account(display or username, ou_for_class, etype, attributes=d)
 
                 if username:
                     users.append({
@@ -1339,7 +1568,20 @@ def compute_purity(cluster_members_idx: List[int], X: np.ndarray) -> float:
 # (_tokens, _family_key, _is_broad already defined at lines 96-109)
 # (BROAD_MARKERS defined at line 94)
 
-def compute_ai_detection(matrix: dict) -> dict:
+def compute_ai_detection(matrix: dict, users: list = None) -> dict:
+    if users:
+        # Use SMART logic (KB + Stats)
+        res = run_smart_ai_detection(users, matrix)
+        stats = res.get("stats", {})
+        return {
+            "aiDetection": stats.get("aiDetection", 0),
+            "redundantAssignments": stats.get("totalAnomalies", 0),
+            "totalAssignments": stats.get("totalAssignments", 0),
+            "usersWithRedundancy": stats.get("usersWithAnomaly", 0),
+            "redundantUsers": [], # Not needed for KPI summary
+        }
+
+    # --- Legacy Logic (Matrix only) ---
     total_assignments = 0
     redundant_assignments = 0
 
@@ -1439,7 +1681,7 @@ def compute_kpis(
     overpriv = float((row_counts >= thr).mean() * 100.0)
 
     # --- AI detection (redundant broad roles) ---
-    ai = compute_ai_detection(matrix)
+    ai = compute_ai_detection(matrix, users=users)
 
     # --- RoleCoverage: roleGroups copre i gruppi reali (da matrix) dei membri ---
     cov_vals: list[float] = []
@@ -2007,6 +2249,18 @@ def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)
     ensure_last_mining(background_tasks)
     last = state.get("last_mining") or {}
     kpi_data = last.get("kpi") or {}
+
+    # Overlay latest Smart AI Detection stats if available (aligns KPI with internal page)
+    last_ai = state.get("last_ai_detection") or {}
+    stats = last_ai.get("stats")
+    if stats and "aiDetection" in stats:
+        # Use copy to avoid mutating persistent state unexpectedly, or modify if intended.
+        # Safe to modify for display.
+        kpi_data["aiDetection"] = stats["aiDetection"]
+        kpi_data["redundantAssignments"] = stats.get("totalAnomalies", 0)
+        kpi_data["totalAssignments"] = stats.get("totalAssignments", 0)
+        kpi_data["usersWithRedundancy"] = stats.get("usersWithAnomaly", 0)
+
     if not kpi_data:
         raise HTTPException(status_code=400, detail="Nessun risultato: dataset vuoto o role mining non eseguibile")
     
@@ -2019,6 +2273,35 @@ def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)
 def cache_stats(username: str = Depends(require_auth)):
     """Return cache statistics for monitoring."""
     return RESPONSE_CACHE.stats()
+
+
+@app.post("/api/ai-detection/run")
+def ai_detection_run(background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    """On-demand smart AI detection. Computes peer/dept/type anomalies and caches the result."""
+    ensure_last_mining(background_tasks)
+    last = state.get("last_mining") or {}
+    matrix = last.get("matrix") or {}
+    if not matrix:
+        raise HTTPException(status_code=400, detail="No mining data. Run role mining first.")
+
+    users = active_users(state.get("last_extract", {}).get("users") or [])
+    result = run_smart_ai_detection(users, matrix)
+    state["last_ai_detection"] = result
+
+    # Invalidate KPI cache so dashboard picks up the new aiDetection %
+    RESPONSE_CACHE.invalidate("kpi")
+
+    return result
+
+
+@app.get("/api/ai-detection/last")
+def ai_detection_last(username: str = Depends(require_auth)):
+    """Return last cached AI detection results (fast read)."""
+    cached = state.get("last_ai_detection")
+    if not cached:
+        return {"status": "not_run", "items": [], "stats": {}}
+    return cached
+
 
 @app.get("/api/kpi/drilldown/{metric}")
 def kpi_drilldown(metric: str, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
@@ -2035,7 +2318,16 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks, username: str 
         return {"metric": metric, **payload}
 
     if metric == "ai-detection":
-        return {"metric": metric, "items": build_ai_detection_items(matrix)}
+        # Always use smart detection logic
+        cached = state.get("last_ai_detection")
+        if not cached or cached.get("status") != "ready":
+             # If not cached or ready, compute it on the fly (ensure consistency)
+             users = active_users(state.get("last_extract", {}).get("users") or [])
+             cached = run_smart_ai_detection(users, matrix)
+             state["last_ai_detection"] = cached
+             # Also update stats in main KPI if needed, but for now just return consistent data
+        
+        return {"metric": metric, "items": cached.get("items", []), "stats": cached.get("stats", {})}
 
     if metric == "cluster-quality":
         # se ti serve davvero: return {"metric": metric, "items": build_cluster_quality_items(clusters, matrix)}
@@ -2550,19 +2842,22 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         "department": ["department", "dept", "dipartimento", "area", "funzione"],
         "businessRole": ["businessrole", "business role", "br", "ruolo business", "ruolo_business"],
         "roles": ["ruoli", "roles", "groups", "gruppi", "entitlements"],
+        "accountType": ["accounttype", "account type", "tipo utente", "tipo_utente", "type"],
     }
 
-    def _extract_csv_fields(row: dict) -> tuple[str, str, str, str, str]:
+    def _extract_csv_fields(row: dict) -> tuple:
         row_ci = {_norm_header(k): v for k, v in (row or {}).items()}
         dnraw = _get_any(row_ci, CSV_KEYS["displayName"])
         deptraw = _get_any(row_ci, CSV_KEYS["department"])
         brraw = _get_any(row_ci, CSV_KEYS["businessRole"])
         rolesraw = _get_any(row_ci, CSV_KEYS["roles"])
+        type_raw = _get_any(row_ci, CSV_KEYS["accountType"])
 
         dn = (dnraw or "").strip()
         dept = (deptraw or "").strip()
         br = (brraw or "").strip()
         roles = (rolesraw or "").strip()
+        acct_type = (type_raw or "WhiteCollar").strip()
 
         if (not dept) and dn and ("," in dn):
             dn, dept = [x.strip() for x in dn.split(",", 1)]
@@ -2570,7 +2865,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         if not br:
             br = dept
 
-        return dnraw, dn, dept, br, roles
+        return dnraw, dn, dept, br, roles, acct_type
 
     state.setdefault("ingest_sources", {})
     state["ingest_sources"]["csv"] = []
@@ -2592,7 +2887,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     for row in reader:
         csv_rows_total += 1
         row_id = f"csv:{csv_rows_total}"
-        dnraw, dn, dept, br, roles = _extract_csv_fields(row)
+        dnraw, dn, dept, br, roles, acct_type = _extract_csv_fields(row)
 
         if not dn:
             csv_missing_displayname += 1
@@ -2621,7 +2916,10 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         seen_usernames.add(uname)
 
 
+        # Favor CSV provided type if it's not the default 'WhiteCollar', otherwise fallback to heuristic
         atype = classify_account(dn, dept, row.get("EmployeeType", ""))
+        final_type = acct_type if acct_type not in ["", "WhiteCollar"] else atype
+
         new_users.append({
             "username": uname,
             "displayName": dn,
@@ -2630,7 +2928,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             "businessRole": br or None,
             "excluded": False,
             "lastLogin": None,
-            "accountType": atype,
+            "accountType": final_type,
         })
 
         rec = {

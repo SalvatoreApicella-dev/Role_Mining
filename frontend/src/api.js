@@ -125,6 +125,8 @@ export const api = {
   kpiDrilldown: (metric) => request(`/api/kpi/drilldown?metric=${encodeURIComponent(metric)}`),
 
   kpi: () => request("/api/kpi"),
+  aiDetectionRun: () => request("/api/ai-detection/run", { method: "POST" }),
+  aiDetectionLast: () => request("/api/ai-detection/last"),
   logs: () => request("/api/logs"),
   businessRoles: () => request("/api/businessroles"),
   businessRoleCreate: (role) =>

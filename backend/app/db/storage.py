@@ -5,7 +5,7 @@ Uses JSON for simplicity and human-readability.
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 import threading
 
@@ -125,7 +125,7 @@ class JsonFileStore:
 
 
 # Global instance
-_store: JsonFileStore | None = None
+_store: Optional[JsonFileStore] = None
 
 
 def get_store() -> JsonFileStore:

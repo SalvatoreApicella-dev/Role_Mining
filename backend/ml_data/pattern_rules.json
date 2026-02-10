@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "account_type": "WhiteCollar",
+    "field": "JobTitle",
+    "regex": "^WC+",
+    "created_at": "2026-02-10T11:22:04.979582"
+  }
+]

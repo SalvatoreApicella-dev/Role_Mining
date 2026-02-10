@@ -1,0 +1,29 @@
+# Node
+node_modules/
+.npm/
+npm-debug.log*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+backend/.venv/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+backend/ml_data/knowledge_base.json
+gen_output.txt
+*.webp
+*.png
+brain/
