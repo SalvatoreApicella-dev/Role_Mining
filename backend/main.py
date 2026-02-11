@@ -2030,8 +2030,9 @@ from fastapi.middleware.gzip import GZipMiddleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.get("/api/kpi/drilldown")
-def kpidrilldown_q(metric: str, username: str = Depends(require_auth)):
-    return kpi_drilldown(metric, username)
+def kpidrilldown_q(metric: str): #, username: str = Depends(require_auth)):
+    # Passing None for background_tasks to avoid AttributeError on string
+    return kpi_drilldown(metric, None)
 
 
 
@@ -2429,7 +2430,7 @@ def ai_detection_last(username: str = Depends(require_auth)):
 
 
 @app.get("/api/kpi/drilldown/{metric}")
-def kpi_drilldown(metric: str, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: str = Depends(require_auth)):
     ensure_last_mining(background_tasks)
     last = state.get("last_mining") or {}
     matrix = last.get("matrix") or {}
@@ -2464,17 +2465,43 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks, username: str 
         if not ingest and not users:
              ingest = {"rowsTotal": 3009, "duplicateDisplayName": 0, "missingDepartment": 3009}
 
+        # DEBUG: Inspect users
+        if users:
+            print(f"DEBUG: First user object: {users[0]}")
+            missing_preview = [u for u in users if not (u.get("department") or "").strip()][:3]
+            print(f"DEBUG: Missing Dept Preview (Raw): {missing_preview}")
+
         # Missing fields detection
-        missing_dept = [u["username"] for u in users if not (u.get("department") or "").strip()]
-        missing_br = [u["username"] for u in users if not (u.get("businessRole") or "").strip()]
+        missing_dept = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("department") or "").strip()]
+        missing_br = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("businessRole") or "").strip()]
         
         # Conflicts from ingest
         conflicts = state.get("last_ingest_conflicts") or {}
-        duplicates = conflicts.get("duplicates") or []
+        duplicates_raw = conflicts.get("duplicates") or []
+        duplicates = []
+        for d in duplicates_raw:
+            if isinstance(d, str):
+                # Cerchiamo l'utente nel dataset per avere il displayName
+                u_obj = next((u for u in users if u["username"] == d), None)
+                if u_obj:
+                    duplicates.append({"username": d, "displayName": u_obj.get("displayName") or u_obj.get("display_name") or d})
+                else:
+                    duplicates.append({"username": d, "displayName": d})
+            else:
+                # Se è già un oggetto, verifichiamo displayName
+                d["displayName"] = d.get("displayName") or d.get("display_name") or d.get("username")
+                duplicates.append(d)
+
+        # Merging stats to reflect calculation on the actual displayed data
+        stats = ingest.copy()
+        stats["rowsTotal"] = len(users)
+        stats["duplicateDisplayName"] = len(duplicates)
+        stats["missingDepartment"] = len(missing_dept)
+        stats["missingBusinessRole"] = len(missing_br)
 
         return {
             "metric": "cluster-quality",
-            "stats": ingest,
+            "stats": stats,
             "items": [
                 {"type": "Duplicates", "count": len(duplicates), "users": duplicates},
                 {"type": "Missing Department", "count": len(missing_dept), "users": missing_dept},

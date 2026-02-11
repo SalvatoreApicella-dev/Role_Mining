@@ -34,7 +34,7 @@ export default function KpiDrilldownPage() {
   return (
     <div className="main">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 24 }}>
-        <h2 style={{ margin: 0 }}>Drilldown: <span style={{ color: "var(--accent)", textTransform: "capitalize" }}>{metric.replace("-", " ")}</span></h2>
+        <h2 style={{ margin: 0 }}>Drilldown: <span style={{ color: metric === "cluster-quality" ? "#fff" : "var(--accent)", textTransform: "capitalize" }}>{metric.replace("-", " ")}</span></h2>
         <Link to="/" className="primary" style={{ display: "inline-flex", alignItems: "center", padding: "8px 16px", borderRadius: 10, border: "1px solid var(--border)", background: "rgba(255,255,255,0.05)" }}>
           Indietro al Dashboard
         </Link>
@@ -109,18 +109,18 @@ export default function KpiDrilldownPage() {
         <div className="panel">
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ marginTop: 0, fontSize: 16, textTransform: "uppercase", letterSpacing: 1 }}>Riepilogo Qualità Dati</h3>
-            <div className="grid">
+            <div className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
               <div className="card">
                 <div className="k">Righe Totali</div>
                 <div className="v">{data.stats?.rowsTotal || 0}</div>
               </div>
-              <div className="card" style={{ borderLeft: "3px solid var(--danger)" }}>
+              <div className="card" style={{ borderLeft: "3px solid " + ((data.stats?.duplicateDisplayName || 0) > 0 ? "var(--danger)" : "#71ffb2") }}>
                 <div className="k">Duplicati</div>
-                <div className="v" style={{ color: "var(--danger)" }}>{data.stats?.duplicateDisplayName || 0}</div>
+                <div className="v" style={{ color: (data.stats?.duplicateDisplayName || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.duplicateDisplayName || 0}</div>
               </div>
-              <div className="card" style={{ borderLeft: "3px solid var(--danger)" }}>
-                <div className="k">Dept Mancanti</div>
-                <div className="v" style={{ color: "var(--danger)" }}>{data.stats?.missingDepartment || 0}</div>
+              <div className="card" style={{ borderLeft: "3px solid " + ((data.stats?.missingDepartment || 0) > 0 ? "var(--danger)" : "#71ffb2") }}>
+                <div className="k">Dipartimento Mancanti</div>
+                <div className="v" style={{ color: (data.stats?.missingDepartment || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.missingDepartment || 0}</div>
               </div>
             </div>
           </div>
@@ -134,14 +134,14 @@ export default function KpiDrilldownPage() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Identificativo</th>
+                      <th style={{ width: "40%" }}>Username</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(section.users || []).map((u, i) => (
                       <tr key={i}>
-                        <td style={{ fontFamily: "monospace", fontSize: 13 }}>
-                          {typeof u === 'string' ? u : (u.displayName || u.username || JSON.stringify(u))}
+                        <td style={{ fontWeight: 500, fontSize: 13 }}>
+                          {typeof u === 'string' ? u : (u.displayName || u.username)}
                         </td>
                       </tr>
                     ))}
@@ -161,15 +161,15 @@ export default function KpiDrilldownPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Username</th>
-                    <th>Motivo dello scarto</th>
+                    <th style={{ width: "40%" }}>Username</th>
+                    <th style={{ width: "60%" }}>Motivo dello scarto</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.rejects.map((r, i) => (
                     <tr key={i}>
-                      <td style={{ fontWeight: 500 }}>{r.username}</td>
-                      <td style={{ color: "var(--muted)" }}>{r.reason}</td>
+                      <td style={{ fontWeight: 500 }}>{r.user?.displayName || r.user?.username || r.username || "Utente Sconosciuto"}</td>
+                      <td style={{ color: "var(--muted)", lineHeight: "1.4" }}>{r.reason}</td>
                     </tr>
                   ))}
                 </tbody>

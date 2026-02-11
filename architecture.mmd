@@ -1,0 +1,8 @@
+graph TD
+    Client((Chrome su PC Aziendale)) -->|HTTPS:443| WAF[Azure WAF / AWS Shield]
+    WAF -->|Inbound:443| APP[App Server - Subnet A]
+    APP -->|Llama API:11434| AI[AI Node - Subnet B]
+    APP -->|LDAP:636| AD[Domain Controller - Subnet C]
+    
+    DEV[Dev Server Antigravity] -->|Automatic Build & Push| APP
+    DEV -->|Model Upload| AI
