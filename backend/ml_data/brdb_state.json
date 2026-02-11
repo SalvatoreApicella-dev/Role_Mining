@@ -311,14 +311,66 @@
       "DEPT_BASE_Sales": 31.0,
       "KUBERNETES_CLUSTER_ADMIN": 5.0
     },
-    "HR": {
-      "Guest": 1.0
+    "Finance": {
+      "G-Static-Role": 2.0,
+      "G-Finance-Access": 235.0
     },
-    "IT": {
-      "Dev": 1.0
+    "HR": {
+      "G-Static-Role": 2.0,
+      "G-Onboarding": 1.0,
+      "G-HR-Access": 279.0
     },
     "Sales": {
-      "Admin": 1.0
+      "Admin": 1.0,
+      "G-Static-Role": 2.0,
+      "G-Onboarding": 2.0,
+      "G-Sales-Access": 248.0
+    },
+    "IT": {
+      "G-Global-Access": 5.0,
+      "G-Static-Role": 2.0,
+      "SAP_1": 3.0,
+      "SAP_All": 3.0,
+      "G-Standard-User": 60.0,
+      "SAP_Read": 3.0,
+      "SAP_Admin": 3.0,
+      "Salesforce_1": 8.0,
+      "Salesforce_All": 8.0,
+      "Salesforce_Read": 8.0,
+      "Salesforce_Admin": 8.0,
+      "Azure_1": 10.0,
+      "Azure_All": 10.0,
+      "Azure_Read": 10.0,
+      "Azure_Admin": 10.0,
+      "AWS_1": 4.0,
+      "AWS_All": 4.0,
+      "AWS_Read": 4.0,
+      "AWS_Admin": 4.0,
+      "GitLab_1": 5.0,
+      "GitLab_All": 5.0,
+      "GitLab_Read": 5.0,
+      "GitLab_Admin": 5.0,
+      "G-IT-Access": 243.0
+    },
+    "Legal": {
+      "G-Static-Role": 6.0,
+      "G-Onboarding": 2.0,
+      "G-Legal-Access": 261.0
+    },
+    "Marketing": {
+      "G-Static-Role": 2.0,
+      "G-Onboarding": 1.0,
+      "G-Marketing-Access": 231.0
+    },
+    "R&D": {
+      "G-Static-Role": 3.0,
+      "G-Onboarding": 2.0,
+      "G-R&D-Access": 238.0
+    },
+    "Operations": {
+      "G-Static-Role": 1.0,
+      "G-Onboarding": 2.0,
+      "G-Operations-Access": 255.0
     }
   },
   "group_role_primary": {
@@ -484,9 +536,39 @@
     "UNIQUE_PERM_976": "Clerk",
     "UNIQUE_PERM_984": "Analyst",
     "UNIQUE_PERM_992": "Developer",
-    "Guest": "HR",
-    "Dev": "IT",
-    "Admin": "Sales"
+    "G-Static-Role": "Legal",
+    "Admin": "Sales",
+    "G-Global-Access": "IT",
+    "G-Onboarding": "Sales",
+    "SAP_1": "IT",
+    "SAP_All": "IT",
+    "G-Standard-User": "IT",
+    "SAP_Read": "IT",
+    "SAP_Admin": "IT",
+    "Salesforce_1": "IT",
+    "Salesforce_All": "IT",
+    "Salesforce_Read": "IT",
+    "Salesforce_Admin": "IT",
+    "Azure_1": "IT",
+    "Azure_All": "IT",
+    "Azure_Read": "IT",
+    "Azure_Admin": "IT",
+    "AWS_1": "IT",
+    "AWS_All": "IT",
+    "AWS_Read": "IT",
+    "AWS_Admin": "IT",
+    "GitLab_1": "IT",
+    "GitLab_All": "IT",
+    "GitLab_Read": "IT",
+    "GitLab_Admin": "IT",
+    "G-Legal-Access": "Legal",
+    "G-Operations-Access": "Operations",
+    "G-R&D-Access": "R&D",
+    "G-Sales-Access": "Sales",
+    "G-Finance-Access": "Finance",
+    "G-Marketing-Access": "Marketing",
+    "G-IT-Access": "IT",
+    "G-HR-Access": "HR"
   },
-  "total_assignments": 3008
+  "total_assignments": 5091
 }

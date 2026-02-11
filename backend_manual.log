@@ -1,334 +1,327 @@
-INFO:     Started server process [65173]
+INFO:     Started server process [99835]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:58592 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:58593 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:58594 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:58595 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:58596 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:58599 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58602 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58605 - "GET /api/kpi HTTP/1.1" 20INFO:     127.0.0.1:58997 - "GET /health HTTP/1.1" 404 Not Found
-WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [67099]
-Process SpawnProcess-3:
-Traceback (most recent call last):
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
-    self.run()
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/salvo/Development/Role_Mining/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)  # pragma: full coverage
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/os.py", line 1023, in fdopen
-    return io.open(fd, *args, **kwargs)
-OSError: [Errno 9] Bad file descriptor
-WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
-Process SpawnProcess-4:
-Traceback (most recent call last):
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
-    self.run()
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/salvo/Development/Role_Mining/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)  # pragma: full coverage
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/os.py", line 1023, in fdopen
-    return io.open(fd, *args, **kwargs)
-OSError: [Errno 9] Bad file descriptor
-WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
-Process SpawnProcess-5:
-Traceback (most recent call last):
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
-    self.run()
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/salvo/Development/Role_Mining/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)  # pragma: full coverage
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/os.py", line 1023, in fdopen
-    return io.open(fd, *args, **kwargs)
-OSError: [Errno 9] Bad file descriptor
-WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
-Process SpawnProcess-6:
-Traceback (most recent call last):
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
-    self.run()
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/salvo/Development/Role_Mining/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)  # pragma: full coverage
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/os.py", line 1023, in fdopen
-    return io.open(fd, *args, **kwargs)
-OSError: [Errno 9] Bad file descriptor
-WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
-Process SpawnProcess-7:
-Traceback (most recent call last):
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
-    self.run()
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/salvo/Development/Role_Mining/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)  # pragma: full coverage
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/os.py", line 1023, in fdopen
-    return io.open(fd, *args, **kwargs)
-OSError: [Errno 9] Bad file descriptor
-WARNING:  WatchFiles detected changes in 'debug_kpi.py'. Reloading...
-Process SpawnProcess-8:
-Traceback (most recent call last):
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
-    self.run()
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/salvo/Development/Role_Mining/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)  # pragma: full coverage
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/os.py", line 1023, in fdopen
-    return io.open(fd, *args, **kwargs)
-OSError: [Errno 9] Bad file descriptor
-WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
-Process SpawnProcess-9:
-Traceback (most recent call last):
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
-    self.run()
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/salvo/Development/Role_Mining/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)  # pragma: full coverage
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/os.py", line 1023, in fdopen
-    return io.open(fd, *args, **kwargs)
-OSError: [Errno 9] Bad file descriptor
-WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
-Process SpawnProcess-10:
-Traceback (most recent call last):
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
-    self.run()
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/salvo/Development/Role_Mining/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)  # pragma: full coverage
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/os.py", line 1023, in fdopen
-    return io.open(fd, *args, **kwargs)
-OSError: [Errno 9] Bad file descriptor
-639 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59638 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59642 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59645 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59648 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59651 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59654 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59659 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59663 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59660 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59666 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59674 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59677 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59680 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59683 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59712 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59715 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59718 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59721 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59724 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59727 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59734 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59737 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59743 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59746 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59749 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59755 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59752 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59758 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59761 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59764 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59767 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59770 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59773 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59776 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60407 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60411 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60408 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60416 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60419 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60422 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60425 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60428 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60432 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60435 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60440 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60444 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60441 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60447 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60452 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60453 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60456 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60459 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60462 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60465 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60468 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60471 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60475 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60478 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60483 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60486 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60491 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60495 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60492 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60498 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60501 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60504 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60507 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60510 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60532 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60548 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60549 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60550 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60555 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60556 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60559 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60562 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60602 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60605 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60608 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60611 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60616 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60620 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60617 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60623 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60626 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60629 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60632 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60635 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60651 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60654 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60683 - "GET /api/kpi-drilldown/cluster-quality HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:60686 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60698 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60701 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60712 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60713 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60714 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60719 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60720 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60723 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60726 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60736 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60735 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60739 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60740 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60745 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60746 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60749 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60758 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60759 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60760 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60765 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60766 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60769 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60772 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60805 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60806 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60807 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60812 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60813 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60816 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60819 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60852 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60853 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60854 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60857 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60860 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60863 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60866 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60898 - "GET /api/kpi/drilldown/cluster-quality HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:60922 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61007 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61008 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61011 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61014 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61017 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61020 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61023 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61036 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61039 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61042 - "GET /api/rolemining/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61045 - "GET /api/rolemining/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61048 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61051 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61058 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61059 - "GET /api/ml/patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61062 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61065 - "GET /api/ml/patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61068 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61071 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61078 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61079 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61080 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61082 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61084 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61086 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61088 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61091 - "GET /api/logs HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61093 - "GET /api/logs HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61096 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61098 - "GET /api/ml/patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61100 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61102 - "GET /api/ml/patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61105 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61107 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61110 - "GET /api/rolemining/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61112 - "GET /api/rolemining/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61114 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61117 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61122 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61123 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61127 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61128 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61131 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61135 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61137 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61133 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61141 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61142 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61145 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61147 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61178 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61179 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61180 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61181 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61184 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61187 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61190 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61193 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61196 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61199 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61202 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61207 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61208 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61211 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61214 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61217 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61220 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61223 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61226 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61229 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61232 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61347 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61348 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61351 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61352 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61359 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61360 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61363 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61366 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61367 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61370 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61373 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61376 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61379 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61382 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61385 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [65173]
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:64255 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64256 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64257 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64260 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64265 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64266 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64269 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64277 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64278 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64281 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64284 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64304 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64305 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64307 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64311 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64312 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64315 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64320 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64321 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64324 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64358 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64359 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64360 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64361 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64364 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64365 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64367 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64369 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64373 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64374 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64377 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64380 - "GET /api/kpi HTTP/1.1" 200 OK
+DEBUG: First user object: {'username': 'user_0.surname_0', 'displayName': 'User_0 Surname_0', 'groups': ['VPN_GLOBAL', 'DEPT_BASE_Operations', 'BASE_ACCESS_ALL', 'PAYROLL_EXPORT_TOOL', 'VPN_IT', 'ADMIN_CONSOLE_ACCESS', 'ROLE_BASE_Manager'], 'department': 'Operations', 'businessRole': 'Manager', 'excluded': False, 'lastLogin': None, 'accountType': 'BlueCollar'}
+DEBUG: Missing Dept Preview (Raw): [{'username': 'alice', 'displayName': 'Alice Rossi', 'groups': ['AllEmployees', 'Confluence', 'HR'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'bob', 'displayName': 'Bob Bianchi', 'groups': ['AllEmployees', 'HR', 'Payroll'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'carol', 'displayName': 'Carol Verdi', 'groups': ['AllEmployees', 'Azure', 'GitLab', 'IT'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}]
+INFO:     127.0.0.1:64383 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+DEBUG: First user object: {'username': 'user_0.surname_0', 'displayName': 'User_0 Surname_0', 'groups': ['VPN_GLOBAL', 'DEPT_BASE_Operations', 'BASE_ACCESS_ALL', 'PAYROLL_EXPORT_TOOL', 'VPN_IT', 'ADMIN_CONSOLE_ACCESS', 'ROLE_BASE_Manager'], 'department': 'Operations', 'businessRole': 'Manager', 'excluded': False, 'lastLogin': None, 'accountType': 'BlueCollar'}
+DEBUG: Missing Dept Preview (Raw): [{'username': 'alice', 'displayName': 'Alice Rossi', 'groups': ['AllEmployees', 'Confluence', 'HR'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'bob', 'displayName': 'Bob Bianchi', 'groups': ['AllEmployees', 'HR', 'Payroll'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'carol', 'displayName': 'Carol Verdi', 'groups': ['AllEmployees', 'Azure', 'GitLab', 'IT'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}]
+INFO:     127.0.0.1:64386 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64409 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64412 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64415 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64418 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64421 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64424 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64433 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64434 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64435 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64438 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64441 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64444 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64447 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64456 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64457 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64458 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64463 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64464 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64467 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64470 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64479 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64480 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64481 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64486 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64487 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64490 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64493 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64534 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64535 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64536 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64539 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64542 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64545 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64548 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64649 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64650 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64651 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64654 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64657 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64660 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64663 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64674 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64675 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64680 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64681 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64682 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64685 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64688 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64695 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64696 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64699 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64702 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64705 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64708 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64711 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64714 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64717 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64720 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64723 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64726 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64729 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64759 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64760 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64761 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64764 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64767 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64770 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64773 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64778 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64781 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64784 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64787 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64790 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64793 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64805 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64806 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64807 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64812 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64813 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64816 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64819 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64828 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64829 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64830 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64833 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64836 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64839 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64842 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64847 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64850 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64853 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64856 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64859 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64862 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64865 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64868 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64873 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64874 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64877 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64880 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64883 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64886 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64889 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64892 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64895 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64898 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64901 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64904 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64911 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64915 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64920 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64923 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64931 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64934 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64926 - "POST /api/ad/extract HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64937 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64940 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64943 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64946 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64949 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64952 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64955 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64958 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64961 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64964 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64967 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64977 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64978 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64979 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64984 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64985 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64988 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64991 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64997 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65000 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65005 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65008 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65011 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65014 - "GET /api/users?q=&limit=50&offset=0&sort_by=displayName&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65017 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65020 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65026 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65029 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65034 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65037 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65040 - "GET /api/users?q=&limit=50&offset=0&sort_by=displayName&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65043 - "GET /api/users?q=&limit=50&offset=0&sort_by=displayName&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65046 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65049 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65081 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65082 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65083 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65086 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65089 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65094 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65095 - "GET /api/kpi HTTP/1.1" 200 OK
+DEBUG: First user object: {'username': 'user_0.surname_0', 'displayName': 'User_0 Surname_0', 'groups': ['VPN_GLOBAL', 'DEPT_BASE_Operations', 'BASE_ACCESS_ALL', 'PAYROLL_EXPORT_TOOL', 'VPN_IT', 'ADMIN_CONSOLE_ACCESS', 'ROLE_BASE_Manager'], 'department': 'Operations', 'businessRole': 'Manager', 'excluded': False, 'lastLogin': None, 'accountType': 'BlueCollar'}
+DEBUG: Missing Dept Preview (Raw): [{'username': 'alice', 'displayName': 'Alice Rossi', 'groups': ['AllEmployees', 'Confluence', 'HR'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'bob', 'displayName': 'Bob Bianchi', 'groups': ['AllEmployees', 'HR', 'Payroll'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'carol', 'displayName': 'Carol Verdi', 'groups': ['AllEmployees', 'Azure', 'GitLab', 'IT'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}]
+INFO:     127.0.0.1:65098 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+DEBUG: First user object: {'username': 'user_0.surname_0', 'displayName': 'User_0 Surname_0', 'groups': ['VPN_GLOBAL', 'DEPT_BASE_Operations', 'BASE_ACCESS_ALL', 'PAYROLL_EXPORT_TOOL', 'VPN_IT', 'ADMIN_CONSOLE_ACCESS', 'ROLE_BASE_Manager'], 'department': 'Operations', 'businessRole': 'Manager', 'excluded': False, 'lastLogin': None, 'accountType': 'BlueCollar'}
+DEBUG: Missing Dept Preview (Raw): [{'username': 'alice', 'displayName': 'Alice Rossi', 'groups': ['AllEmployees', 'Confluence', 'HR'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'bob', 'displayName': 'Bob Bianchi', 'groups': ['AllEmployees', 'HR', 'Payroll'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'carol', 'displayName': 'Carol Verdi', 'groups': ['AllEmployees', 'Azure', 'GitLab', 'IT'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}]
+INFO:     127.0.0.1:65101 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65106 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65109 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65113 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65115 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65118 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65121 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65126 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65127 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65132 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65133 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65144 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65147 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65150 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65153 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65170 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65171 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65172 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65177 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65178 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65181 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65188 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65189 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65190 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65193 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65196 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65199 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65202 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65205 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65427 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65428 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65431 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65432 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65438 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65440 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65442 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65446 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65447 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65450 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65503 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65506 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65509 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49189 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49190 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49193 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49198 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49199 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49202 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49223 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49224 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49228 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49232 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49235 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49238 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49241 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49244 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49247 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49250 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49253 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49256 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49267 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49268 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49269 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49274 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49277 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49280 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49283 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49287 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49290 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49293 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49296 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49299 - "GET /api/kpi HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49310 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49313 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49316 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49319 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49322 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49325 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49335 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49336 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49337 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49342 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49343 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49346 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49349 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49352 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49355 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49365 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49368 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49372 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49375 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49378 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49381 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49385 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49387 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49390 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49393 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49396 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49399 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49402 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49405 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49408 - "POST /api/rolemining/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49411 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49414 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49421 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49424 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49433 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49434 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49437 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49438 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49441 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49444 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49447 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49450 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49456 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49460 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49463 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49466 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49469 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49472 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49476 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49479 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49510 - "GET /api/health HTTP/1.1" 200 OK

@@ -1,69 +1,63 @@
 {
     "redundancy_rules": {
-        "VPN_GLOBAL": [
-            "VPN_IT",
-            "VPN_FR",
-            "VPN_US",
-            "VPN_DE"
+        "G-Admin-All": [
+            "G-Admin-Read",
+            "G-Admin-Write"
         ],
-        "SAP_ALL": [
-            "SAP_READ",
-            "SAP_WRITE",
-            "SAP_REPORTING"
+        "Azure_All": [
+            "Azure_1",
+            "Azure_Read",
+            "Azure_Write"
         ],
-        "ADMIN_FULL": [
-            "ADMIN_READONLY",
-            "ADMIN_SUPPORT"
+        "AWS_FullAccess": [
+            "AWS_ReadOnlyAccess",
+            "AWS_PowerUserAccess"
         ],
-        "OFFICE_365_E5": [
-            "OFFICE_365_E3",
-            "OFFICE_365_E1"
+        "GitLab_Owner": [
+            "GitLab_Developer",
+            "GitLab_Maintainer",
+            "GitLab_Reporter",
+            "GitLab_Guest"
         ]
     },
-    "account_type_policies": {
-        "BlueCollar": [
-            "ADMIN",
-            "SUDO",
-            "ROOT",
-            "VPN",
-            "SSH",
-            "ADMIN_CONSOLE_ACCESS"
-        ],
-        "External": [
-            "INTERNAL",
-            "HR_SYSTEM",
-            "FIN_SYSTEM"
-        ],
-        "Contractor": [
-            "HR_ADMIN",
-            "SALARY_INFO"
-        ]
-    },
-    "role_definitions": {
-        "Developer": [
-            "GIT",
-            "DOCKER",
-            "KAFKA"
-        ],
-        "Analyst": [
-            "EXCEL",
-            "POWERBI",
-            "SAP_READ"
-        ],
-        "Manager": [
-            "APPROVER",
-            "PAYROLL_MANAGER"
-        ]
-    },
-    "department_norms": {
-        "Finance": [
-            "SAP_PAYROLL",
-            "FINANCE_TOOL"
-        ],
-        "Engineering": [
-            "KAFKA",
-            "GIT",
-            "DOCKER"
-        ]
-    }
+    "hierarchy_patterns": [
+        {
+            "root": "_Admin",
+            "supersedes": [
+                "_Read",
+                "_Write",
+                "_View",
+                "_List",
+                "_User"
+            ]
+        },
+        {
+            "root": "_Full",
+            "supersedes": [
+                "_Read",
+                "_Write",
+                "_View",
+                "_List",
+                "_User"
+            ]
+        },
+        {
+            "root": "_Write",
+            "supersedes": [
+                "_Read",
+                "_View",
+                "_List"
+            ]
+        },
+        {
+            "root": "_All",
+            "supersedes": [
+                "_1",
+                "_2",
+                "_3",
+                "_Read",
+                "_View"
+            ]
+        }
+    ]
 }

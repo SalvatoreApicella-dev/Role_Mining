@@ -382,15 +382,38 @@ def run_smart_ai_detection(users: list, matrix: dict) -> dict:
 
             # --- 1. KNOWLEDGE BASE CHECKS (High Confidence) ---
             
-            # A) Known Redundancy Rule (e.g. VPN_GLOBAL implies VPN_IT is redundant)
-            # Check if 'g' is in the redundant list of ANY other group the user has
+            # A) Known Redundancy Rule (Explicit and Heuristic)
+            hierarchy_rules = kb.get("hierarchy_patterns", [])
+            
             for other_g in groups:
                 if other_g == g: continue
+                
+                # A1) Explicit KB Rule
                 redundant_list = kb_redundancy.get(other_g, [])
                 if g in redundant_list:
-                    reasons.append(f"Redundant: Superceded by '{other_g}' (KB Rule)")
+                    reasons.append(f"Redundant: Superceded by '{other_g}' (Explicit KB Rule)")
                     confidence = 1.0
                     break
+                
+                # A2) Heuristic Hierarchy Rule (Pattern-based)
+                # e.g. Azure_1 vs Azure_All, App_Read vs App_Admin
+                for pattern in hierarchy_rules:
+                    root = pattern.get("root", "")
+                    supersedes = pattern.get("supersedes", [])
+                    
+                    if root in other_g:
+                        # Find the base name without the root suffix
+                        base_other = other_g.replace(root, "")
+                        for s in supersedes:
+                            if s in g:
+                                base_g = g.replace(s, "")
+                                # If they share the same base name (e.g. "Azure"), it's likely a hierarchy violation
+                                if base_other == base_g or base_other in g:
+                                    reasons.append(f"Least Privilege: '{g}' is likely redundant given '{other_g}' ({root} hierarchy)")
+                                    confidence = 0.9
+                                    break
+                        if reasons: break
+                if reasons: break
             
             # B) Account Type Policy
             # Check against KB policies + hardcoded fallback
@@ -456,7 +479,9 @@ def run_smart_ai_detection(users: list, matrix: dict) -> dict:
 
     items.sort(key=lambda x: x["anomalyCount"], reverse=True)
 
-    pct = (total_anomalies / max(1, total_assignments)) * 100.0
+    total_users = len(matrix or {})
+    pct = (users_with_anomaly / max(1, total_users)) * 100.0
+    print(f"[AI Detection] users_with_anomaly={users_with_anomaly}, total_users={total_users}, pct={pct:.2f}%", flush=True)
 
     return {
         "status": "ready",
@@ -1623,7 +1648,8 @@ def compute_ai_detection(matrix: dict, users: list = None) -> dict:
             users_with_redundancy += 1
             redundant_users.append(uname)
 
-    pct = (redundant_assignments / total_assignments * 100.0) if total_assignments else 0.0
+    total_users = len(matrix or {})
+    pct = (users_with_redundancy / max(1, total_users) * 100.0)
 
     return {
         "aiDetection": round(pct, 2),
@@ -1738,17 +1764,6 @@ def compute_kpis(
     else:
         clustering_quality = 0.0
 
-    # Ensure last_kpis is updated in state for drilldown fallback
-    last_kpis = {
-        "clusterQuality": round(cluster_quality, 2),
-        "clusteringQuality": round(clustering_quality, 2),
-        "modelQuality": mq.get("modelQuality", 0),
-        "aiDetection": ai.get("score", 0),
-        "roleCoverage": round(role_coverage, 2),
-        "staleAccounts": mq.get("staleUsers", 0)
-    }
-    state["last_kpis"] = last_kpis
-
     # --- Model Quality (Enhanced Option B) ---
     groups_list = (state.get("last_extract") or {}).get("groups") or []
     if not groups_list and matrix:
@@ -1759,6 +1774,17 @@ def compute_kpis(
         groups_list = list(all_groups)
     
     mq = compute_model_quality(users, matrix, groups_list)
+
+    # Ensure last_kpis is updated in state for drilldown fallback
+    last_kpis = {
+        "clusterQuality": round(cluster_quality, 2),
+        "clusteringQuality": round(clustering_quality, 2),
+        "modelQuality": mq.get("modelQuality", 0),
+        "aiDetection": ai.get("score", 0),
+        "roleCoverage": round(role_coverage, 2),
+        "staleAccounts": mq.get("staleUsers", 0)
+    }
+    state["last_kpis"] = last_kpis
 
     return {
         "totalUsers": total_users,
@@ -1952,27 +1978,35 @@ def run_role_mining(
 
 
 def _mining_worker(n_clusters, role_support):
-    users = active_users(state.get("last_extract", {}).get("users") or [])
-    res = run_role_mining(users, n_clusters=n_clusters, role_support=role_support)
+    try:
+        users = active_users(state.get("last_extract", {}).get("users") or [])
+        res = run_role_mining(users, n_clusters=n_clusters, role_support=role_support)
 
-    # Build displayNames map (username -> displayName) for frontend optimization
-    display_names = {}
-    for u in users:
-        uname = u.get("username")
-        if uname:
-            display_names[uname] = u.get("displayName") or uname
+        # Build displayNames map (username -> displayName) for frontend optimization
+        display_names = {}
+        for u in users:
+            uname = u.get("username")
+            if uname:
+                display_names[uname] = u.get("displayName") or uname
 
-    state["last_mining"] = {
-        "clusters": res.get("clusters", []),
-        "matrix": res.get("matrix", {}),
-        "kpi": res.get("kpi", {}),
-        "groups": res.get("groups", []),
-        "displayNames": display_names,  # Solution 2: Include displayNames
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "status": "ready"
-    }
-    state["mining_dirty"] = False
-    state["mining_processing"] = False
+        state.update({
+            "last_mining": {
+                "clusters": res.get("clusters", []),
+                "matrix": res.get("matrix", {}),
+                "kpi": res.get("kpi", {}),
+                "groups": res.get("groups", []),
+                "displayNames": display_names,
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "status": "ready"
+            },
+            "mining_dirty": False
+        })
+    except Exception as e:
+        print(f"[Mining Worker] Error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        state["mining_processing"] = False
 
 def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
     """
@@ -2461,9 +2495,9 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         last_extract = state.get("last_extract") or {}
         users = last_extract.get("users") or []
         
-        # Fallback if state is empty but dashboard shows 30% (for consistency)
+        # Fallback if state is empty (for consistency)
         if not ingest and not users:
-             ingest = {"rowsTotal": 3009, "duplicateDisplayName": 0, "missingDepartment": 3009}
+             ingest = {"rowsTotal": 0, "duplicateDisplayName": 0, "missingDepartment": 0}
 
         # DEBUG: Inspect users
         if users:
@@ -2588,7 +2622,10 @@ def build_overprivileged_rows(matrix: Dict[str, Dict[str, int]], threshold: Opti
 
 @app.get("/api/drilldown/overprivileged")
 def drilldown_overprivileged(nclusters: int = 8, rolesupport: float = 0.1):
-    clusters, matrix, kpi = runroleminingusers(users, nclusters=nclusters, rolesupport=rolesupport)
+    last = state.get("last_mining") or {}
+    matrix = last.get("matrix") or {}
+    # Use existing kpi if available, don't re-run full mining on every drilldown hit
+    kpi = last.get("kpi") or {}
 
     thr = compute_over_threshold(matrix, pct=0.10)     # calcolata su TUTTI gli utenti
     rows = build_over_rows_only(matrix, thr)           # ma ritorni SOLO gli over
@@ -3583,4 +3620,4 @@ def delete_pattern_endpoint(index: int, username: str = Depends(require_auth)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8002, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
