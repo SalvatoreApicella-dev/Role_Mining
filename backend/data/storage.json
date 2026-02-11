@@ -586032,10 +586032,10 @@
       "staleAccountCount": 0,
       "clusterQuality": 30.0,
       "clusteringQuality": 99.7,
-      "aiDetection": 18.43,
-      "redundantAssignments": 2557,
-      "totalAssignments": 13877,
-      "usersWithRedundancy": 1927,
+      "aiDetection": 18.44,
+      "redundantAssignments": 2555,
+      "totalAssignments": 13854,
+      "usersWithRedundancy": 1925,
       "roleCoverage": 98.51
     },
     "groups": [
@@ -589232,6 +589232,26 @@
   },
   "logs": [
     {
+      "ts": "2026-02-11T09:18:55.228511+00:00",
+      "level": "INFO",
+      "message": "Login OK admin"
+    },
+    {
+      "ts": "2026-02-11T09:16:43.206026+00:00",
+      "level": "INFO",
+      "message": "Login OK admin"
+    },
+    {
+      "ts": "2026-02-11T09:14:19.158794+00:00",
+      "level": "INFO",
+      "message": "Login OK admin"
+    },
+    {
+      "ts": "2026-02-11T09:01:08.115182+00:00",
+      "level": "INFO",
+      "message": "Login OK admin"
+    },
+    {
       "ts": "2026-02-10T15:45:20.139040+00:00",
       "level": "INFO",
       "message": "Merge complete. Updated: 6, Added: 0, Total: 3009"
@@ -589421,22 +589441,22 @@
     }
   },
   "business_roles": [
-    "Associate",
-    "Legal",
-    "Engineering",
-    "Developer",
+    "Analyst",
+    "Director",
+    "HR",
     "Sales",
+    "IT",
+    "Support",
+    "Engineering",
+    "Legal",
+    "Developer",
+    "VP",
+    "Associate",
+    "Finance",
     "Manager",
     "Marketing",
     "Operations",
-    "Finance",
-    "VP",
-    "HR",
-    "Clerk",
-    "IT",
-    "Analyst",
-    "Director",
-    "Support"
+    "Clerk"
   ],
   "user_business_role": {
     "user_0.surname_0": "Manager",
@@ -595917,22 +595937,22 @@
     }
   },
   "businessroles": [
-    "Associate",
-    "Legal",
-    "Engineering",
-    "Developer",
+    "Analyst",
+    "Director",
+    "HR",
     "Sales",
+    "IT",
+    "Support",
+    "Engineering",
+    "Legal",
+    "Developer",
+    "VP",
+    "Associate",
+    "Finance",
     "Manager",
     "Marketing",
     "Operations",
-    "Finance",
-    "VP",
-    "HR",
-    "Clerk",
-    "IT",
-    "Analyst",
-    "Director",
-    "Support"
+    "Clerk"
   ],
   "userbusinessrole": {
     "user_0.surname_0": "Manager",

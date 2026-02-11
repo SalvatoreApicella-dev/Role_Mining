@@ -131,7 +131,7 @@ function Analytics() {
 
   const kpiRouteByLabel = {
     "Cluster Quality": "/kpi/cluster-quality",
-    "Model Quality": "/model-quality",
+    "Model Score": "/model-quality",
     "AI Detection": "/ai-detection",
   };
 
@@ -151,7 +151,7 @@ function Analytics() {
   const plotData = [
     {
       type: "bar",
-      x: ["Cluster Quality", "Model Quality", "AI Detection"],
+      x: ["Cluster Quality", "Model Score", "AI Detection"],
       y: [kpi.clusterQuality, kpi.modelQuality, kpi.aiDetection],
       marker: { color: ["#3b82f6", "#f43f5e", "#10b981"] }
     }
@@ -168,7 +168,7 @@ function Analytics() {
           <div className="v">{kpi.clusterQuality}%</div>
         </div>
         <div className="card" style={{ cursor: "pointer" }} onClick={() => navigate("/model-quality")}>
-          <div className="k">Model Quality</div>
+          <div className="k">Model Score</div>
           <div className="v">{kpi.modelQuality}%</div>
         </div>
         <div className="card" style={{ cursor: "pointer" }} onClick={() => navigate("/ai-detection")}>
