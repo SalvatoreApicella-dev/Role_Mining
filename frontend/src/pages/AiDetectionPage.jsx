@@ -92,10 +92,10 @@ export default function AiDetectionPage() {
       {/* Stats Bar */}
       {status === "ready" && stats && (
         <div className="grid" style={{ marginBottom: 24 }}>
-          <StatCard label="Anomaly %" value={`${stats.aiDetection ?? 0}%`} color="var(--accent)" />
-          <StatCard label="Anomalies" value={stats.totalAnomalies ?? 0} color="var(--danger)" />
-          <StatCard label="Users Affected" value={stats.usersWithAnomaly ?? 0} />
-          <StatCard label="Total Scanned" value={stats.totalUsersScanned ?? 0} />
+          <StatCard label="Righe Totali" value={stats.totalUsersScanned ?? 0} color="#fff" />
+          <StatCard label="Anomaly %" value={`${stats.aiDetection ?? 0}%`} color={(stats.aiDetection ?? 0) > 0 ? "var(--danger)" : "#71ffb2"} />
+          <StatCard label="Anomalies" value={stats.totalAnomalies ?? 0} color={(stats.totalAnomalies ?? 0) > 0 ? "var(--danger)" : "#71ffb2"} />
+          <StatCard label="Users Affected" value={stats.usersWithAnomaly ?? 0} color={(stats.usersWithAnomaly ?? 0) > 0 ? "var(--danger)" : "#71ffb2"} />
         </div>
       )}
 

@@ -292,3 +292,43 @@ INFO:     127.0.0.1:61141 - "GET /api/kpi HTTP/1.1" 200 OK
 INFO:     127.0.0.1:61142 - "GET /api/kpi HTTP/1.1" 200 OK
 INFO:     127.0.0.1:61145 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
 INFO:     127.0.0.1:61147 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61178 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61179 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61180 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61181 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61184 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61187 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61190 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61193 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61196 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61199 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61202 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61207 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61208 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61211 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61214 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61217 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61220 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61223 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61226 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61229 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61232 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61347 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61348 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61351 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61352 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61359 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61360 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61363 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61366 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61367 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61370 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61373 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61376 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61379 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61382 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61385 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [65173]

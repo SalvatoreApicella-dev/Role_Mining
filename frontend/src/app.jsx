@@ -46,9 +46,9 @@ function Sidebar({ onLogout, roles }) {
         <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "active" : "")}>Business Roles</NavLink>
         <NavLink to="/cluster" className={({ isActive }) => (isActive ? "active" : "")}>Cluster</NavLink>
         <NavLink to="/utenti" className={({ isActive }) => (isActive ? "active" : "")}>Utenti</NavLink>
-        <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "active" : "")}>AI Training</NavLink>
 
         <div className="menu-section">System</div>
+        <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "active" : "")}>AI Training</NavLink>
         <button className="link" onClick={() => setOpenCfg(v => !v)}>
           Configurazioni ▾
         </button>

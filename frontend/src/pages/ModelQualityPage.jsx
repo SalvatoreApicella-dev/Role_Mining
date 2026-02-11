@@ -62,9 +62,9 @@ export default function ModelQualityPage() {
 
             <div className="grid" style={{ marginBottom: 24 }}>
                 <StatCard label="Model Score" value={`${score}%`} color={score > 80 ? "#71ffb2" : score > 50 ? "#ff9f1c" : "#ff6a6a"} />
-                <StatCard label="Gruppi Orfani" value={orphanCount} color="#ff9f1c" />
-                <StatCard label="Account Stale" value={staleCount} color="#ff6a6a" />
-                <StatCard label="Issue Utenti" value={totalUserIssues} color="#6aa6ff" />
+                <StatCard label="Gruppi Orfani" value={orphanCount} color={orphanCount > 0 ? "var(--danger)" : "#71ffb2"} />
+                <StatCard label="Account Stale" value={staleCount} color={staleCount > 0 ? "var(--danger)" : "#71ffb2"} />
+                <StatCard label="Issue Utenti" value={totalUserIssues} color={totalUserIssues > 0 ? "var(--danger)" : "#71ffb2"} />
             </div>
 
             <div className="panel">
