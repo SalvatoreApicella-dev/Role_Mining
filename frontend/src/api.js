@@ -44,6 +44,25 @@ export async function importBusinessRolesCsv(file) {
   return await res.json();
 }
 
+export async function aiLabAbCompareUpload(fileA, fileB) {
+  const form = new FormData();
+  form.append("file_a", fileA);
+  form.append("file_b", fileB);
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/api/ai-lab/ab-playground/upload-compare`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
 
 export async function chooseCsvDuplicateRow(displayNameRaw, rowId) {
   return apiFetch("/api/csv/duplicates/choose", {
@@ -148,11 +167,29 @@ export const api = {
   getPatterns: () => request("/api/ml/patterns"),
   addPattern: (account_type, field, regex) => request("/api/ml/patterns", { method: "POST", body: { account_type, field, regex } }),
   deletePattern: (index) => request(`/api/ml/patterns/${index}`, { method: "DELETE" }),
+  getBrPatterns: () => request("/api/ml/br-patterns"),
+  addBrPattern: (business_role, field, regex) => request("/api/ml/br-patterns", { method: "POST", body: { business_role, field, regex } }),
+  deleteBrPattern: (index) => request(`/api/ml/br-patterns/${index}`, { method: "DELETE" }),
+  getBrAssignmentPatterns: () => request("/api/ml/br-assignment-patterns"),
+  addBrAssignmentPattern: (business_role, regex) => request("/api/ml/br-assignment-patterns", { method: "POST", body: { business_role, regex } }),
+  deleteBrAssignmentPattern: (index) => request(`/api/ml/br-assignment-patterns/${index}`, { method: "DELETE" }),
 
   // ML
   mlStatus: () => request("/api/ml/status"),
   mlAccountTypes: () => request("/api/ml/account-types"),
   getAdFields: () => request("/api/config/ad-fields"),
+  aiLabDrift: () => request("/api/ai-lab/drift"),
+  aiLabTimeline: () => request("/api/ai-lab/training-timeline"),
+  aiLabTimelineRun: (model_name = "account-type-classifier", note = "") =>
+    request("/api/ai-lab/training-timeline/run", { method: "POST", body: { model_name, note } }),
+  aiLabAbCompare: (model_a, model_b, sample_size = 400) =>
+    request("/api/ai-lab/ab-playground/compare", { method: "POST", body: { model_a, model_b, sample_size } }),
+  aiLabFairness: () => request("/api/ai-lab/fairness"),
+  aiLabSynthetic: () => request("/api/ai-lab/synthetic"),
+  aiLabSyntheticGenerate: (count = 30, scenario = "mixed", persist = true) =>
+    request("/api/ai-lab/synthetic/generate", { method: "POST", body: { count, scenario, persist } }),
+  aiLabFeedback: () => request("/api/ai-lab/feedback"),
+  aiLabFeedbackAdd: (payload) => request("/api/ai-lab/feedback", { method: "POST", body: payload }),
 
   async get(path) {
     const res = await fetch(path, {

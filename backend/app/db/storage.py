@@ -189,6 +189,11 @@ def init_default_state():
             "reject_empty_groups": False,
         },
         "dq_feedback_events": [],
+        "ai_feedback_events": [],
+        "manual_user_changes": [],
+        "llm_learning_history": [],
+        "br_pattern_rules": [],
+        "br_assignment_pattern_rules": [],
         "dq_model_preset": "manufacturing",
         "dq_model_weights": {
             "role_entropy": 0.08,

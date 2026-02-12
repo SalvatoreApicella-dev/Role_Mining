@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import CreatableSelect from "react-select/creatable";
-import Select from "react-select";
 import { api } from "../api.js";
 
 const ACCOUNT_TYPES = [
@@ -55,6 +54,8 @@ const customStyles = {
 
 export default function AiTrainingPage() {
     const [patterns, setPatterns] = useState([]);
+    const [brPatterns, setBrPatterns] = useState([]);
+    const [brAssignmentPatterns, setBrAssignmentPatterns] = useState([]);
     const [loading, setLoading] = useState(false);
     const [err, setErr] = useState("");
     const [ok, setOk] = useState("");
@@ -64,23 +65,84 @@ export default function AiTrainingPage() {
     const [adFields, setAdFields] = useState(DEFAULT_FIELDS);
     const [field, setField] = useState(DEFAULT_FIELDS[0]);
     const [regex, setRegex] = useState("");
+    const [brRoles, setBrRoles] = useState([]);
+    const [businessRole, setBusinessRole] = useState(null);
+    const [brField, setBrField] = useState(DEFAULT_FIELDS[0]);
+    const [brRegex, setBrRegex] = useState("");
+    const [assignmentBusinessRole, setAssignmentBusinessRole] = useState(null);
+    const [assignmentRegex, setAssignmentRegex] = useState("");
 
     useEffect(() => {
-        api.getAdFields().then(res => {
-            const dynamic = res.fields.map(f => ({ value: f, label: f }));
-            setAdFields(dynamic);
-            // Optional: if current field is not in dynamic, maybe keep it?
-            // For now, valid defaults are likely in the list.
-        }).catch(err => console.error("Failed to load AD fields", err));
+        Promise.all([api.getAdFields(), api.businessRoles()])
+            .then(([fieldsRes, rolesRes]) => {
+                const fieldsList = Array.isArray(fieldsRes?.fields)
+                    ? fieldsRes.fields
+                    : Array.isArray(fieldsRes)
+                        ? fieldsRes
+                        : [];
+                const dynamic = fieldsList
+                    .filter((f) => typeof f === "string" && f.trim())
+                    .map((f) => ({ value: f, label: f }));
+                if (dynamic.length > 0) {
+                    setAdFields(dynamic);
+                    setField(dynamic[0]);
+                    setBrField(dynamic[0]);
+                }
+                const rolesList = Array.isArray(rolesRes?.roles)
+                    ? rolesRes.roles
+                    : Array.isArray(rolesRes?.items)
+                        ? rolesRes.items
+                        : Array.isArray(rolesRes)
+                            ? rolesRes
+                            : [];
+                const roleOptions = rolesList
+                    .map((role) => {
+                        if (typeof role === "string") {
+                            const name = role.trim();
+                            return name ? { value: name, label: name } : null;
+                        }
+                        if (role && typeof role === "object") {
+                            const name = String(role.role || role.name || "").trim();
+                            if (!name) return null;
+                            const count = Number(role.count || 0);
+                            return {
+                                value: name,
+                                label: count > 0 ? `${name} (${count})` : name,
+                            };
+                        }
+                        return null;
+                    })
+                    .filter(Boolean);
+                setBrRoles(roleOptions);
+                if (roleOptions.length > 0) {
+                    setBusinessRole(roleOptions[0]);
+                    setAssignmentBusinessRole(roleOptions[0]);
+                }
+            })
+            .catch((loadErr) => console.error("Failed to load AI Training selectors", loadErr));
     }, []);
 
     async function loadPatterns() {
         try {
             setLoading(true);
             setErr("");
-            const res = await api.getPatterns();
-            // Backend returns { static: {...}, custom: [...] }
-            setPatterns(res.custom || []);
+            const [res, brRes, brAssignRes] = await Promise.all([
+                api.getPatterns(),
+                api.getBrPatterns(),
+                api.getBrAssignmentPatterns(),
+            ]);
+            const safePatterns = Array.isArray(res?.custom)
+                ? res.custom.filter((p) => p && typeof p === "object")
+                : [];
+            const safeBrPatterns = Array.isArray(brRes?.custom)
+                ? brRes.custom.filter((p) => p && typeof p === "object")
+                : [];
+            const safeBrAssignmentPatterns = Array.isArray(brAssignRes?.custom)
+                ? brAssignRes.custom.filter((p) => p && typeof p === "object")
+                : [];
+            setPatterns(safePatterns);
+            setBrPatterns(safeBrPatterns);
+            setBrAssignmentPatterns(safeBrAssignmentPatterns);
         } catch (e) {
             setErr(String(e.message || e));
         } finally {
@@ -125,13 +187,78 @@ export default function AiTrainingPage() {
         }
     }
 
+    async function handleAddBrRule(e) {
+        e.preventDefault();
+        if (!brRegex.trim()) { setErr("Regex is required"); return; }
+        if (!businessRole || !brField) { setErr("Business Role and Field are required"); return; }
+        try { new RegExp(brRegex); } catch { setErr("Invalid regex syntax"); return; }
+
+        try {
+            setErr("");
+            setOk("");
+            const roleVal = businessRole.value || businessRole.label || businessRole;
+            const fieldVal = brField.value || brField.label || brField;
+            await api.addBrPattern(roleVal, fieldVal, brRegex.trim());
+            setOk(`Business Role rule added: ${roleVal} / ${fieldVal} / ${brRegex}`);
+            setBrRegex("");
+            await loadPatterns();
+        } catch (e) {
+            setErr(String(e.message || e));
+        }
+    }
+
+    async function handleDeleteBrRule(index) {
+        try {
+            setErr("");
+            setOk("");
+            await api.deleteBrPattern(index);
+            setOk("Business Role rule deleted.");
+            await loadPatterns();
+        } catch (e) {
+            setErr(String(e.message || e));
+        }
+    }
+
+    async function handleAddBrAssignmentRule(e) {
+        e.preventDefault();
+        if (!assignmentRegex.trim()) { setErr("Regex is required"); return; }
+        if (!assignmentBusinessRole) {
+            setErr("Business Role is required");
+            return;
+        }
+        try { new RegExp(assignmentRegex); } catch { setErr("Invalid regex syntax"); return; }
+        try {
+            setErr("");
+            setOk("");
+            const businessRoleVal = assignmentBusinessRole.value || assignmentBusinessRole.label || assignmentBusinessRole;
+            await api.addBrAssignmentPattern(businessRoleVal, assignmentRegex.trim());
+            setOk(`Role Assignment rule added: ${businessRoleVal} / ${assignmentRegex}`);
+            setAssignmentRegex("");
+            await loadPatterns();
+        } catch (e) {
+            setErr(String(e.message || e));
+        }
+    }
+
+    async function handleDeleteBrAssignmentRule(index) {
+        try {
+            setErr("");
+            setOk("");
+            await api.deleteBrAssignmentPattern(index);
+            setOk("Role Assignment rule deleted.");
+            await loadPatterns();
+        } catch (e) {
+            setErr(String(e.message || e));
+        }
+    }
+
     return (
         <div className="main">
             <h2 style={{ marginTop: 0 }}>
-                AI Training — Pattern Rules
+                Pattern Rules
             </h2>
             <p style={{ color: "var(--muted)", marginTop: -4, marginBottom: 16, fontSize: 13 }}>
-                Define regex patterns to classify accounts automatically. Rules are checked <b>before</b> the ML model.
+                Definisce regole regex deterministiche applicate in pre-classificazione, prima dell'inferenza del modello ML.
             </p>
 
             {/* ─── Add Rule Form ─── */}
@@ -175,6 +302,78 @@ export default function AiTrainingPage() {
                 </form>
             </div>
 
+            <div className="panel" style={{ marginTop: 16 }}>
+                <h3 style={{ marginTop: 0, fontSize: 15 }}>Add Business Role Rule</h3>
+                <form onSubmit={handleAddBrRule} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 220 }}>
+                        <label style={labelStyle}>Business Role</label>
+                        <CreatableSelect
+                            value={businessRole}
+                            onChange={setBusinessRole}
+                            options={brRoles}
+                            styles={customStyles}
+                            formatCreateLabel={(val) => `Create "${val}"`}
+                            placeholder="Select or type role..."
+                        />
+                    </div>
+                    <div style={{ minWidth: 180 }}>
+                        <label style={labelStyle}>Field</label>
+                        <CreatableSelect
+                            value={brField}
+                            onChange={setBrField}
+                            options={adFields}
+                            styles={customStyles}
+                            formatCreateLabel={(val) => `Use Field "${val}"`}
+                        />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 220 }}>
+                        <label style={labelStyle}>Regex Pattern</label>
+                        <input
+                            type="text"
+                            value={brRegex}
+                            onChange={(e) => setBrRegex(e.target.value)}
+                            placeholder="e.g. ^fin_.* or procurement"
+                            style={{ ...inputStyle, width: "100%" }}
+                            aria-label="Business Role Regex Pattern"
+                        />
+                    </div>
+                    <button type="submit" className="primary" style={{ height: 36, padding: "0 24px" }}>
+                        Add BR Rule
+                    </button>
+                </form>
+            </div>
+
+            <div className="panel" style={{ marginTop: 16 }}>
+                <h3 style={{ marginTop: 0, fontSize: 15 }}>Add Role Assignment Rule</h3>
+                <form onSubmit={handleAddBrAssignmentRule} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 220 }}>
+                        <label style={labelStyle}>Business Roles</label>
+                        <CreatableSelect
+                            value={assignmentBusinessRole}
+                            onChange={setAssignmentBusinessRole}
+                            options={brRoles}
+                            styles={customStyles}
+                            formatCreateLabel={(val) => `Create "${val}"`}
+                            placeholder="Select or type business role..."
+                        />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 220 }}>
+                        <label style={labelStyle}>Role Regex Pattern</label>
+                        <input
+                            type="text"
+                            value={assignmentRegex}
+                            onChange={(e) => setAssignmentRegex(e.target.value)}
+                            placeholder="e.g. ^SAP.*"
+                            style={{ ...inputStyle, width: "100%" }}
+                            aria-label="Role Regex Pattern"
+                        />
+                    </div>
+                    <button type="submit" className="primary" style={{ height: 36, padding: "0 24px" }}>
+                        Add Assignment Rule
+                    </button>
+                </form>
+            </div>
+
             {/* ─── Feedback ─── */}
             {ok && <div className="ok" style={{ marginTop: 12 }}>{ok}</div>}
             {err && <div className="err" style={{ marginTop: 12 }}>{err}</div>}
@@ -211,17 +410,17 @@ export default function AiTrainingPage() {
                                         <td style={{ color: "var(--muted)", fontSize: 12 }}>{i + 1}</td>
                                         <td>
                                             <span style={{
-                                                background: typeColor(p.account_type),
+                                                background: typeColor(String(p?.account_type || "Unknown")),
                                                 color: "#fff",
                                                 padding: "2px 10px",
                                                 borderRadius: 12,
                                                 fontSize: 12,
                                                 fontWeight: 500,
                                             }}>
-                                                {p.account_type}
+                                                {String(p?.account_type || "Unknown")}
                                             </span>
                                         </td>
-                                        <td style={{ fontSize: 13 }}>{fieldLabel(p.field)}</td>
+                                        <td style={{ fontSize: 13 }}>{fieldLabel(String(p?.field || ""))}</td>
                                         <td>
                                             <code style={{
                                                 background: "rgba(255,255,255,0.06)",
@@ -230,7 +429,7 @@ export default function AiTrainingPage() {
                                                 fontSize: 12,
                                                 fontFamily: "monospace",
                                             }}>
-                                                {p.regex}
+                                                {String(p?.regex || "")}
                                             </code>
                                         </td>
                                         <td>
@@ -238,6 +437,114 @@ export default function AiTrainingPage() {
                                                 className="danger"
                                                 style={{ fontSize: 12, padding: "3px 12px" }}
                                                 onClick={() => handleDelete(i)}
+                                            >
+                                                Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            <div className="panel" style={{ marginTop: 16 }}>
+                <h3 style={{ marginTop: 0, fontSize: 15 }}>
+                    Active Business Role Rules ({brPatterns.length})
+                </h3>
+
+                {loading ? (
+                    <div style={{ color: "var(--muted)", padding: 20, textAlign: "center" }}>Loading...</div>
+                ) : brPatterns.length === 0 ? (
+                    <div style={{ color: "var(--muted)", padding: 20, textAlign: "center", fontSize: 13 }}>
+                        No Business Role rules defined yet. Add one above.
+                    </div>
+                ) : (
+                    <div style={{ maxHeight: 420, overflow: "auto", borderRadius: 10, border: "1px solid rgba(255,255,255,0.10)" }}>
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th style={{ width: 40 }}>#</th>
+                                    <th>Business Role</th>
+                                    <th>Field</th>
+                                    <th>Regex</th>
+                                    <th style={{ width: 80 }}>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {brPatterns.map((p, i) => (
+                                    <tr key={`${String(p?.business_role || "")}-${String(p?.field || "")}-${i}`}>
+                                        <td style={{ color: "var(--muted)", fontSize: 12 }}>{i + 1}</td>
+                                        <td>
+                                            <span style={pillStyle}>
+                                                {String(p?.business_role || "Unknown")}
+                                            </span>
+                                        </td>
+                                        <td style={{ fontSize: 13 }}>{fieldLabel(String(p?.field || ""))}</td>
+                                        <td>
+                                            <code style={codeStyle}>
+                                                {String(p?.regex || "")}
+                                            </code>
+                                        </td>
+                                        <td>
+                                            <button
+                                                className="danger"
+                                                style={{ fontSize: 12, padding: "3px 12px" }}
+                                                onClick={() => handleDeleteBrRule(i)}
+                                            >
+                                                Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            <div className="panel" style={{ marginTop: 16 }}>
+                <h3 style={{ marginTop: 0, fontSize: 15 }}>
+                    Active Role Assignment Rules ({brAssignmentPatterns.length})
+                </h3>
+
+                {loading ? (
+                    <div style={{ color: "var(--muted)", padding: 20, textAlign: "center" }}>Loading...</div>
+                ) : brAssignmentPatterns.length === 0 ? (
+                    <div style={{ color: "var(--muted)", padding: 20, textAlign: "center", fontSize: 13 }}>
+                        No Role Assignment rules defined yet. Add one above.
+                    </div>
+                ) : (
+                    <div style={{ maxHeight: 420, overflow: "auto", borderRadius: 10, border: "1px solid rgba(255,255,255,0.10)" }}>
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th style={{ width: 40 }}>#</th>
+                                    <th>Business Roles</th>
+                                    <th>Role Regex Pattern</th>
+                                    <th style={{ width: 80 }}>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {brAssignmentPatterns.map((p, i) => (
+                                    <tr key={`${String(p?.business_role || "")}-${String(p?.regex || "")}-${i}`}>
+                                        <td style={{ color: "var(--muted)", fontSize: 12 }}>{i + 1}</td>
+                                        <td>
+                                            <span style={pillStyle}>
+                                                {String(p?.business_role || "Unknown")}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <code style={codeStyle}>
+                                                {String(p?.regex || "")}
+                                            </code>
+                                        </td>
+                                        <td>
+                                            <button
+                                                className="danger"
+                                                style={{ fontSize: 12, padding: "3px 12px" }}
+                                                onClick={() => handleDeleteBrAssignmentRule(i)}
                                             >
                                                 Delete
                                             </button>
@@ -266,7 +573,7 @@ export default function AiTrainingPage() {
                 Select an attribute from your Active Directory (or type a new one) and define a regex.
                 If the field matches the regex, the account is classified accordingly.
                 <br />
-                <i>Note: Fields are auto-populated from your latest import.</i>
+                <i>Note: Role Assignment rules evaluate regex on group names and add weighted evidence in automatic Business Role assignment.</i>
             </div>
         </div>
     );
@@ -308,3 +615,20 @@ function typeColor(t) {
     };
     return map[t] || "#6b7280";
 }
+
+const codeStyle = {
+    background: "rgba(255,255,255,0.06)",
+    padding: "2px 8px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontFamily: "monospace",
+};
+
+const pillStyle = {
+    background: "rgba(59,130,246,0.25)",
+    color: "#fff",
+    padding: "2px 10px",
+    borderRadius: 12,
+    fontSize: 12,
+    fontWeight: 500,
+};

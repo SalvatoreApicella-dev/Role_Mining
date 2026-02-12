@@ -15,6 +15,12 @@ const OverprivilegedPage = lazy(() => import("./pages/OverprivilegedPage"));
 const ModelQualityPage = lazy(() => import("./pages/ModelQualityPage"));
 const AiDetectionPage = lazy(() => import("./pages/AiDetectionPage"));
 const AiTrainingPage = lazy(() => import("./pages/AiTrainingPage"));
+const AiLabDriftPage = lazy(() => import("./pages/AiLabDriftPage"));
+const AiLabTimelinePage = lazy(() => import("./pages/AiLabTimelinePage"));
+const AiLabAbPlaygroundPage = lazy(() => import("./pages/AiLabAbPlaygroundPage"));
+const AiLabFairnessPage = lazy(() => import("./pages/AiLabFairnessPage"));
+const AiLabSyntheticPage = lazy(() => import("./pages/AiLabSyntheticPage"));
+const AiLabFeedbackPage = lazy(() => import("./pages/AiLabFeedbackPage"));
 
 
 
@@ -25,6 +31,7 @@ const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 function Sidebar({ onLogout, roles }) {
   const [openCfg, setOpenCfg] = useState(true);
   const [openBr, setOpenBr] = useState(true);
+  const [openAiGym, setOpenAiGym] = useState(true);
   const [xlsxFile, setXlsxFile] = useState(null);
   const [importMsg, setImportMsg] = useState("");
   const [csvFile, setCsvFile] = useState(null);
@@ -45,10 +52,23 @@ function Sidebar({ onLogout, roles }) {
         <div className="menu-section">Management</div>
         <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "active" : "")}>Business Roles</NavLink>
         <NavLink to="/cluster" className={({ isActive }) => (isActive ? "active" : "")}>Cluster</NavLink>
-        <NavLink to="/utenti" className={({ isActive }) => (isActive ? "active" : "")}>Utenti</NavLink>
+        <NavLink to="/utenti" className={({ isActive }) => (isActive ? "active" : "")}>Users</NavLink>
 
         <div className="menu-section">System</div>
-        <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "active" : "")}>AI Training</NavLink>
+        <button className="link" onClick={() => setOpenAiGym(v => !v)}>
+          AI Training ▾
+        </button>
+        {openAiGym && (
+          <div className="submenu">
+            <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "active" : "")}>Pattern Rules</NavLink>
+            <NavLink to="/ai-lab/drift" className={({ isActive }) => (isActive ? "active" : "")}>Data Drift</NavLink>
+            <NavLink to="/ai-lab/timeline" className={({ isActive }) => (isActive ? "active" : "")}>Training Timeline</NavLink>
+            <NavLink to="/ai-lab/ab-playground" className={({ isActive }) => (isActive ? "active" : "")}>A/B Playground</NavLink>
+            <NavLink to="/ai-lab/fairness" className={({ isActive }) => (isActive ? "active" : "")}>Bias & Fairness</NavLink>
+            <NavLink to="/ai-lab/synthetic" className={({ isActive }) => (isActive ? "active" : "")}>Synthetic Cases</NavLink>
+            <NavLink to="/ai-lab/feedback" className={({ isActive }) => (isActive ? "active" : "")}>Feedback Loop</NavLink>
+          </div>
+        )}
         <button className="link" onClick={() => setOpenCfg(v => !v)}>
           Configurazioni ▾
         </button>
@@ -1947,6 +1967,12 @@ export default function App() {
           <Route path="/kpi/:metric" element={<KpiDrilldownPage />} />
           <Route path="/ai-detection" element={<AiDetectionPage />} />
           <Route path="/ai-training" element={<AiTrainingPage />} />
+          <Route path="/ai-lab/drift" element={<AiLabDriftPage />} />
+          <Route path="/ai-lab/timeline" element={<AiLabTimelinePage />} />
+          <Route path="/ai-lab/ab-playground" element={<AiLabAbPlaygroundPage />} />
+          <Route path="/ai-lab/fairness" element={<AiLabFairnessPage />} />
+          <Route path="/ai-lab/synthetic" element={<AiLabSyntheticPage />} />
+          <Route path="/ai-lab/feedback" element={<AiLabFeedbackPage />} />
         </Routes>
       </Suspense>
     </div>

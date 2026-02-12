@@ -32,7 +32,7 @@ MOCK_AD = os.getenv("MOCK_AD", "0") == "1"
 
 
 from openpyxl import load_workbook
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 # ML Engine import
 from ml_engine import get_ml_engine, ACCOUNT_TYPES
@@ -855,6 +855,53 @@ def _jaccard(a: set[str], b: set[str]) -> float:
         return 1.0
     return len(a & b) / max(1, len(a | b))
 
+BR_ASSIGNMENT_RULE_WEIGHT = 1.75
+
+
+def _br_assignment_rule_scores_for_user(user: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Score business-role boosts from regex rules applied on group names.
+    The higher the score, the stronger the influence in automatic assignment.
+    """
+    rules = list(state.get("br_assignment_pattern_rules") or [])
+    if not rules:
+        return {}
+
+    groups = [str(g).strip() for g in (user.get("groups") or []) if str(g).strip()]
+    if not groups:
+        return {}
+    groups_lower = {g.lower() for g in groups}
+
+    scores: Dict[str, float] = defaultdict(float)
+
+    for rule in rules:
+        business_role = (rule.get("business_role") or "").strip()
+        regex = (rule.get("regex") or "").strip()
+        legacy_role = (rule.get("role") or "").strip()
+        if not business_role or not regex:
+            continue
+
+        # Backward compatibility: old rules might have an explicit group/role gate.
+        if legacy_role and legacy_role.lower() not in groups_lower:
+            continue
+
+        match_count = 0
+        try:
+            for g in groups:
+                if re.search(regex, g, re.IGNORECASE):
+                    match_count += 1
+        except re.error:
+            continue
+
+        if match_count <= 0:
+            continue
+
+        boost = BR_ASSIGNMENT_RULE_WEIGHT * (1.0 + 0.2 * (match_count - 1))
+        scores[business_role] += boost
+
+    return dict(scores)
+
+
 def apply_department_mapping(users: List[Dict[str, Any]], only_depts: Optional[set[str]] = None) -> None:
     # Prepara strutture coerenti
     state.setdefault("user_business_role", {})
@@ -900,12 +947,16 @@ def apply_department_mapping(users: List[Dict[str, Any]], only_depts: Optional[s
 
         # 3) Analisi: “votazione” ruolo macro dai gruppi utenti (BRDB)
         weights = defaultdict(float)
+        rules_boost = defaultdict(float)
         for u in members:
             s = brdb_infer_groupset(u.get("groups") or [])
             r = (s.get("role") or "Unassigned").strip()
             c = float(s.get("confidence") or 0.0)
             if r and r != "Unassigned" and c > 0:
                 weights[r] += c
+            for rr, sc in _br_assignment_rule_scores_for_user(u).items():
+                weights[rr] += float(sc)
+                rules_boost[rr] += float(sc)
 
         chosen_role = dept
         evidence = {
@@ -929,6 +980,7 @@ def apply_department_mapping(users: List[Dict[str, Any]], only_depts: Optional[s
                 "confidence": round(conf, 3),
                 "jaccard": round(sim, 3),
                 "weightsTop": sorted(weights.items(), key=lambda x: x[1], reverse=True)[:5],
+                "ruleBoostTop": sorted(rules_boost.items(), key=lambda x: x[1], reverse=True)[:5],
             })
 
             # Merge automatico (come mi hai chiesto), ma solo sopra soglie
@@ -956,6 +1008,21 @@ def apply_department_mapping(users: List[Dict[str, Any]], only_depts: Optional[s
                     user_br[uname] = existing_br
                 else:
                     user_br[uname] = chosen_role
+
+    # Apply BR assignment rules also to users without department mapping.
+    for u in (users or []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        existing_br = (u.get("businessRole") or "").strip()
+        mapped_br = (user_br.get(uname) or "").strip()
+        if (existing_br and existing_br != "Unassigned") or (mapped_br and mapped_br != "Unassigned"):
+            continue
+        rule_scores = _br_assignment_rule_scores_for_user(u)
+        if rule_scores:
+            forced_role = max(rule_scores.items(), key=lambda x: x[1])[0]
+            _ensure_role_registered(forced_role)
+            user_br[uname] = forced_role
 
     # applica mapping sugli oggetti utente
     apply_business_roles(users)
@@ -1633,6 +1700,79 @@ def build_over_rows_only(matrix: Dict[str, Dict[str, int]], threshold: Optional[
 def log(level: str, message: str) -> None:
     state["logs"].insert(0, {"ts": datetime.now(timezone.utc).isoformat(), "level": level, "message": message})
     state["logs"] = state["logs"][:500]
+
+
+def record_manual_user_change(
+    *,
+    actor: str,
+    username: str,
+    display_name: Optional[str],
+    action: str,
+    source: str,
+    details: Optional[Dict[str, Any]] = None,
+    persist: bool = True,
+) -> None:
+    events = state.setdefault("manual_user_changes", [])
+    item = {
+        "id": f"muc-{int(time.time()*1000)}-{len(events)+1}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "actor": actor,
+        "username": username,
+        "displayName": display_name or username,
+        "action": action,
+        "source": source,
+        "details": details or {},
+    }
+    events.append(item)
+    trimmed = events[-2000:]
+    if persist:
+        state["manual_user_changes"] = trimmed
+    else:
+        events[:] = trimmed
+    return item
+
+
+def record_llm_learning_event(
+    *,
+    actor: str,
+    source: str,
+    signal_type: str,
+    entity: str = "",
+    details: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    events = state.setdefault("llm_learning_history", [])
+    item = {
+        "id": f"lle-{int(time.time()*1000)}-{len(events)+1}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "actor": actor,
+        "source": source,
+        "signalType": signal_type,
+        "entity": entity,
+        "details": details or {},
+    }
+    events.append(item)
+    state["llm_learning_history"] = events[-3000:]
+    return item
+
+
+def recalculate_assignments_background(trigger: str, actor: str) -> None:
+    """
+    Recompute BR assignments asynchronously after rule changes.
+    Runs in background to keep API latency low.
+    """
+    try:
+        users = state.get("last_extract", {}).get("users") or []
+        if not users:
+            return
+        rerun_auto_business_roles_after_connector(users, only_depts=None)
+        sync_roles_from_users(users)
+        state["mining_dirty"] = True
+        RESPONSE_CACHE.invalidate("businessroles")
+        RESPONSE_CACHE.invalidate("kpi")
+        state.save()
+        log("INFO", f"Background assignment recalculation completed (trigger={trigger}, by={actor})")
+    except Exception as exc:
+        log("ERROR", f"Background assignment recalculation failed (trigger={trigger}, by={actor}): {exc}")
 
 def active_users(users: list[dict]) -> list[dict]:
     return [u for u in (users or []) if not u.get("excluded")]
@@ -2683,6 +2823,14 @@ def toggle_user_group(body: ToggleUserGroupRequest, username: str = Depends(requ
         current.discard(g)
 
     uobj["groups"] = sorted(current)
+    record_manual_user_change(
+        actor=username,
+        username=body.username,
+        display_name=uobj.get("displayName"),
+        action="toggle-group",
+        source="matrix",
+        details={"group": g, "enabled": bool(body.enabled), "groupsCount": len(uobj.get("groups") or [])},
+    )
 
     # IMPORTANTISSIMO: NON aggiornare state["last_extract"]["groups"] qui
     state["mining_dirty"] = True
@@ -2826,6 +2974,9 @@ def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(req
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
 
+    prev_groups = sorted(set(u.get("groups") or []))
+    prev_br = u.get("businessRole")
+    prev_type = u.get("accountType")
     # Replace groups
     u["groups"] = sorted({g.strip() for g in (body.groups or []) if g and g.strip()})
 
@@ -2844,6 +2995,13 @@ def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(req
         # training “forte” come fai già in businessroles/roleadd
         try:
             brdb_learn_assignment(br, u.get("groups") or [], weight=10)
+            record_llm_learning_event(
+                actor=username,
+                source="user-update",
+                signal_type="brdb-assignment",
+                entity=uname,
+                details={"businessRole": br, "groupsCount": len(u.get("groups") or []), "weight": 10},
+            )
         except Exception:
             pass
 
@@ -2854,6 +3012,21 @@ def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(req
     apply_business_roles(users)
     # state["last_extract"]["groups"] = recompute_groups_from_users(users)
     state["mining_dirty"] = True
+    record_manual_user_change(
+        actor=username,
+        username=uname,
+        display_name=u.get("displayName"),
+        action="update-user",
+        source="user-detail",
+        details={
+            "groupsBefore": prev_groups,
+            "groupsAfter": u.get("groups") or [],
+            "businessRoleBefore": prev_br,
+            "businessRoleAfter": u.get("businessRole"),
+            "accountTypeBefore": prev_type,
+            "accountTypeAfter": u.get("accountType"),
+        },
+    )
 
     return {"ok": True, "user": u}
 
@@ -3596,6 +3769,13 @@ def businessrole_suggestion_select(role: str, body: SuggestionPickRequest, usern
     # training "forte" (se hai brdb_learn_assignment); altrimenti ignoralo
     try:
         brdb_learn_assignment(role, [g], weight=10)
+        record_llm_learning_event(
+            actor=username,
+            source="businessroles-suggestion",
+            signal_type="brdb-assignment",
+            entity=role,
+            details={"group": g, "weight": 10},
+        )
     except Exception:
         pass
 
@@ -3666,6 +3846,14 @@ def choose_csv_duplicate_row(body: ChooseCsvRowRequest, username: str = Depends(
         uobj["businessRole"] = br
         state.setdefault("user_business_role", {})
         state["user_business_role"][uobj["username"]] = br
+    record_manual_user_change(
+        actor=username,
+        username=uobj.get("username"),
+        display_name=uobj.get("displayName"),
+        action="resolve-csv-duplicate",
+        source="cluster-quality",
+        details={"displayNameRaw": dn_raw, "chosenRowId": row_id},
+    )
 
     log("INFO", f"CSV duplicate resolved: '{dn_raw}' -> rowId={row_id} by {username}")
     return {"ok": True, "username": uobj["username"], "chosenRowId": row_id}
@@ -3707,6 +3895,17 @@ def choose_duplicate(body: ChooseDuplicateRequest, username: str = Depends(requi
             chosen_business_role=cand.get("businessRole"),
             chosen_roles=cand.get("roles") or [],
         )
+        users = state.get("last_extract", {}).get("users") or []
+        uobj = next((u for u in users if (u.get("displayName") or "").strip() == body.displayName and not u.get("excluded")), None)
+        if uobj:
+            record_manual_user_change(
+                actor=username,
+                username=uobj.get("username"),
+                display_name=uobj.get("displayName"),
+                action="resolve-duplicate",
+                source="cluster-quality",
+                details={"candidateId": body.candidateId},
+            )
 
     _record_duplicate_feedback(body.displayName, body.candidateId, actor=username)
     log("INFO", f"Duplicate resolved: {body.displayName} -> {body.candidateId} by {username}")
@@ -3804,6 +4003,21 @@ def businessrole_add(role: str, body: RoleAssignRequest, username: str = Depends
     u = next((x for x in users if x.get("username") == body.username), None)
     if u:
         brdb_learn_assignment(role, u.get("groups") or [], weight=10)
+        record_llm_learning_event(
+            actor=username,
+            source="businessroles-add-user",
+            signal_type="brdb-assignment",
+            entity=body.username,
+            details={"businessRole": role, "groupsCount": len(u.get("groups") or []), "weight": 10},
+        )
+        record_manual_user_change(
+            actor=username,
+            username=body.username,
+            display_name=u.get("displayName"),
+            action="assign-business-role",
+            source="business-roles",
+            details={"businessRole": role},
+        )
 
     log("INFO", f"Business role set: {body.username} -> {role} by {username}")
     return {"ok": True, "username": body.username, "role": role}
@@ -3855,6 +4069,8 @@ def apply_department_mapping_if_missing(users: list[dict]) -> None:
             conf = float(s.get("confidence") or 0.0)
             if role and role != "Unassigned" and conf > 0:
                 weights[role] += conf
+            for rr, sc in _br_assignment_rule_scores_for_user(u).items():
+                weights[rr] += float(sc)
 
         if weights:
             best_role, best_w = max(weights.items(), key=lambda x: x[1])
@@ -3882,6 +4098,23 @@ def apply_department_mapping_if_missing(users: list[dict]) -> None:
                 continue
 
             state["user_business_role"][uname] = chosen_role
+
+    # Also evaluate rule-based assignment for users without department.
+    state.setdefault("user_business_role", {})
+    for u in (users or []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        already = (state.get("user_business_role") or {}).get(uname)
+        if already:
+            continue
+        if (u.get("businessRole") or "").strip():
+            continue
+        rule_scores = _br_assignment_rule_scores_for_user(u)
+        if rule_scores:
+            forced_role = max(rule_scores.items(), key=lambda x: x[1])[0]
+            _ensure_role_registered(forced_role)
+            state["user_business_role"][uname] = forced_role
 
 
 
@@ -4480,7 +4713,33 @@ def ml_train(username: str = Depends(require_auth)):
     result = ml_engine.retrain_from_history()
     if not result.get("success") and training_data:
         result = ml_engine.train_classifier(training_data)
-    
+    timeline = state.setdefault("ai_training_timeline", [])
+    timeline.append({
+        "id": f"run-{int(time.time()*1000)}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "triggeredBy": username,
+        "datasetSize": len(training_data),
+        "modelName": "account-type-classifier",
+        "status": "success" if result.get("success") else "failed",
+        "metrics": {
+            "accuracy": float(result.get("accuracy") or 0.0),
+            "f1": float(result.get("f1") or 0.0),
+            "precision": float(result.get("precision") or 0.0),
+            "recall": float(result.get("recall") or 0.0),
+        },
+    })
+    record_llm_learning_event(
+        actor=username,
+        source="ml-train",
+        signal_type="model-train",
+        entity="account-type-classifier",
+        details={
+            "datasetSize": len(training_data),
+            "success": bool(result.get("success")),
+            "accuracy": float(result.get("accuracy") or 0.0),
+        },
+    )
+
     return result
 
 
@@ -4514,6 +4773,21 @@ def confirm_account_type(uname: str, body: AccountTypeConfirmRequest, username: 
     
     # Update user type
     target["accountType"] = body.confirmed_type
+    record_llm_learning_event(
+        actor=username,
+        source="confirm-account-type",
+        signal_type="supervised-label",
+        entity=uname,
+        details={"confirmed_type": body.confirmed_type},
+    )
+    record_manual_user_change(
+        actor=username,
+        username=uname,
+        display_name=target.get("displayName"),
+        action="confirm-account-type",
+        source="ai-training",
+        details={"accountType": body.confirmed_type},
+    )
     
     return {"ok": True, "user": uname, "type": body.confirmed_type}
 
@@ -4540,6 +4814,21 @@ def correct_account_type(uname: str, body: AccountTypeConfirmRequest, username: 
     
     # Update user type
     target["accountType"] = body.confirmed_type
+    record_llm_learning_event(
+        actor=username,
+        source="correct-account-type",
+        signal_type="supervised-correction",
+        entity=uname,
+        details={"old_type": old_type, "new_type": body.confirmed_type},
+    )
+    record_manual_user_change(
+        actor=username,
+        username=uname,
+        display_name=target.get("displayName"),
+        action="correct-account-type",
+        source="ai-training",
+        details={"from": old_type, "to": body.confirmed_type},
+    )
     
     return {"ok": True, "user": uname, "old_type": old_type, "new_type": body.confirmed_type}
 
@@ -4548,6 +4837,616 @@ def correct_account_type(uname: str, body: AccountTypeConfirmRequest, username: 
 def get_account_types(username: str = Depends(require_auth)):
     """Return the list of supported account types."""
     return {"types": ACCOUNT_TYPES}
+
+
+# =============================================================================
+# AI LAB API ENDPOINTS (Data Drift, Timeline, A/B, Fairness, Synthetic, Feedback)
+# =============================================================================
+
+class TimelineRunRequest(BaseModel):
+    model_name: str = "account-type-classifier"
+    note: Optional[str] = None
+
+
+class AbPlaygroundRequest(BaseModel):
+    model_a: str = "baseline-v1"
+    model_b: str = "candidate-v2"
+    sample_size: int = 400
+
+
+class SyntheticGenerateRequest(BaseModel):
+    count: int = 30
+    scenario: str = "mixed"
+    persist: bool = True
+
+
+class FeedbackEventRequest(BaseModel):
+    username: str
+    predicted_type: str
+    corrected_type: str
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    note: Optional[str] = None
+
+
+def _ai_lab_users() -> List[Dict[str, Any]]:
+    return active_users(state.get("last_extract", {}).get("users") or [])
+
+
+def _safe_dist(values: List[str]) -> Dict[str, float]:
+    total = max(1, len(values))
+    cnt = Counter([str(v or "unknown").strip().lower() for v in values])
+    return {k: v / total for k, v in cnt.items()}
+
+
+def _psi(base: Dict[str, float], current: Dict[str, float]) -> float:
+    eps = 1e-6
+    keys = set(base.keys()) | set(current.keys())
+    out = 0.0
+    for k in keys:
+        b = max(eps, float(base.get(k, 0.0)))
+        c = max(eps, float(current.get(k, 0.0)))
+        out += (c - b) * np.log(c / b)
+    return float(out)
+
+
+def _default_timeline_entry() -> Dict[str, Any]:
+    st = ml_engine.get_status() or {}
+    return {
+        "id": f"seed-{int(time.time()*1000)}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "triggeredBy": "system",
+        "datasetSize": int((st.get("training_data") or {}).get("total_samples") or 0),
+        "modelName": "account-type-classifier",
+        "status": "success",
+        "metrics": {
+            "accuracy": float((st.get("model") or {}).get("accuracy") or 0.0),
+            "f1": float((st.get("model") or {}).get("f1") or 0.0),
+            "precision": float((st.get("model") or {}).get("precision") or 0.0),
+            "recall": float((st.get("model") or {}).get("recall") or 0.0),
+        },
+        "note": "Snapshot iniziale",
+    }
+
+
+@app.get("/api/ai-lab/drift")
+def ai_lab_drift(username: str = Depends(require_auth)):
+    users = _ai_lab_users()
+    if len(users) < 10:
+        return {"summary": {"population": len(users), "psi_account_type": 0, "psi_department": 0, "mean_groups_delta": 0}, "signals": []}
+
+    sorted_users = sorted(users, key=lambda u: str(u.get("username") or ""))
+    split = max(3, int(len(sorted_users) * 0.35))
+    baseline = sorted_users[:split]
+    current = sorted_users[split:]
+
+    base_type = _safe_dist([u.get("accountType") for u in baseline])
+    cur_type = _safe_dist([u.get("accountType") for u in current])
+    base_dept = _safe_dist([u.get("department") for u in baseline])
+    cur_dept = _safe_dist([u.get("department") for u in current])
+
+    base_groups = np.mean([len(u.get("groups") or []) for u in baseline]) if baseline else 0.0
+    cur_groups = np.mean([len(u.get("groups") or []) for u in current]) if current else 0.0
+    delta_groups = float(cur_groups - base_groups)
+
+    psi_type = _psi(base_type, cur_type)
+    psi_dept = _psi(base_dept, cur_dept)
+
+    signals = [
+        {
+            "id": "account-type-distribution",
+            "label": "Distribuzione Account Type",
+            "baseline": base_type,
+            "current": cur_type,
+            "psi": round(psi_type, 4),
+            "severity": "high" if psi_type >= 0.25 else ("medium" if psi_type >= 0.1 else "low"),
+        },
+        {
+            "id": "department-distribution",
+            "label": "Distribuzione Department",
+            "baseline": base_dept,
+            "current": cur_dept,
+            "psi": round(psi_dept, 4),
+            "severity": "high" if psi_dept >= 0.25 else ("medium" if psi_dept >= 0.1 else "low"),
+        },
+        {
+            "id": "mean-groups-per-user",
+            "label": "Gruppi medi per utente",
+            "baseline": round(base_groups, 3),
+            "current": round(cur_groups, 3),
+            "delta": round(delta_groups, 3),
+            "severity": "high" if abs(delta_groups) >= 2.5 else ("medium" if abs(delta_groups) >= 1.0 else "low"),
+        },
+    ]
+    return {
+        "summary": {
+            "population": len(users),
+            "psi_account_type": round(psi_type, 4),
+            "psi_department": round(psi_dept, 4),
+            "mean_groups_delta": round(delta_groups, 3),
+        },
+        "signals": signals,
+    }
+
+
+@app.get("/api/ai-lab/training-timeline")
+def ai_lab_timeline(username: str = Depends(require_auth)):
+    timeline = state.setdefault("ai_training_timeline", [])
+    if not timeline:
+        timeline.append(_default_timeline_entry())
+    timeline.sort(key=lambda x: str(x.get("ts") or ""), reverse=True)
+    learning = sorted(state.get("llm_learning_history") or [], key=lambda x: str(x.get("ts") or ""), reverse=True)
+    return {"items": timeline[:60], "learningHistory": learning[:500]}
+
+
+@app.post("/api/ai-lab/training-timeline/run")
+def ai_lab_timeline_run(body: TimelineRunRequest, username: str = Depends(require_auth)):
+    st = ml_engine.get_status() or {}
+    acc = float((st.get("model") or {}).get("accuracy") or 0.78)
+    jitter = (hash(f"{body.model_name}:{time.time_ns()}") % 200 - 100) / 10000.0
+    acc2 = max(0.0, min(1.0, acc + jitter))
+    f1 = max(0.0, min(1.0, acc2 - 0.02))
+    precision = max(0.0, min(1.0, acc2 - 0.01))
+    recall = max(0.0, min(1.0, acc2 - 0.015))
+    users = _ai_lab_users()
+    item = {
+        "id": f"run-{int(time.time()*1000)}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "triggeredBy": username,
+        "datasetSize": len(users),
+        "modelName": body.model_name,
+        "status": "success",
+        "metrics": {
+            "accuracy": round(acc2, 4),
+            "f1": round(f1, 4),
+            "precision": round(precision, 4),
+            "recall": round(recall, 4),
+        },
+        "note": body.note or "Run simulato da AI Lab",
+    }
+    timeline = state.setdefault("ai_training_timeline", [])
+    timeline.append(item)
+    timeline.sort(key=lambda x: str(x.get("ts") or ""), reverse=True)
+    return {"ok": True, "item": item}
+
+
+def _simulate_quality_for_model(model_name: str, users: List[Dict[str, Any]], sample_size: int) -> Dict[str, Any]:
+    pool = users[:max(1, min(len(users), sample_size))]
+    if not pool:
+        return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0, "size": 0}
+    base = 0.79
+    if "candidate" in model_name.lower() or "v2" in model_name.lower():
+        base += 0.02
+    if "xgboost" in model_name.lower():
+        base += 0.015
+    if "legacy" in model_name.lower():
+        base -= 0.03
+    penalties = 0.0
+    for u in pool:
+        if not (u.get("department") or "").strip():
+            penalties += 0.002
+        if len(u.get("groups") or []) == 0:
+            penalties += 0.002
+    acc = max(0.45, min(0.98, base - penalties / max(1, len(pool))))
+    prec = max(0.0, min(1.0, acc - 0.01))
+    rec = max(0.0, min(1.0, acc - 0.015))
+    f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+    return {
+        "accuracy": round(acc, 4),
+        "precision": round(prec, 4),
+        "recall": round(rec, 4),
+        "f1": round(f1, 4),
+        "size": len(pool),
+    }
+
+
+def _guess_csv_delimiter(text: str) -> str:
+    header = (text.splitlines() or [""])[0]
+    if header.count(";") >= header.count(","):
+        return ";"
+    return ","
+
+
+def _ab_norm_header(h: str) -> str:
+    return (h or "").strip().lower().replace("_", "").replace(" ", "")
+
+
+def _ab_get(row_ci: Dict[str, Any], keys: List[str]) -> str:
+    for k in keys:
+        v = row_ci.get(_ab_norm_header(k))
+        if v is not None:
+            return str(v)
+    return ""
+
+
+def _build_matrix_from_users(users: List[Dict[str, Any]]) -> Tuple[Dict[str, Dict[str, int]], List[str]]:
+    all_groups = sorted({g for u in users for g in (u.get("groups") or [])})
+    matrix: Dict[str, Dict[str, int]] = {}
+    for u in users:
+        uname = str(u.get("username") or "")
+        ug = set(u.get("groups") or [])
+        matrix[uname] = {g: (1 if g in ug else 0) for g in all_groups}
+    return matrix, all_groups
+
+
+def _parse_users_from_csv_bytes(raw: bytes, dataset_name: str) -> Dict[str, Any]:
+    text = raw.decode("utf-8-sig", errors="replace")
+    delim = _guess_csv_delimiter(text)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim, skipinitialspace=True)
+    rows = list(reader)
+
+    KEY = {
+        "displayName": ["displayname", "display name", "name"],
+        "username": ["username", "userprincipalname", "samaccountname", "login"],
+        "department": ["department", "dept", "dipartimento"],
+        "businessRole": ["businessrole", "business role", "br"],
+        "roles": ["ruoli", "roles", "groups", "gruppi", "entitlements"],
+        "accountType": ["accounttype", "account type", "type"],
+        "lastLogin": ["lastlogon", "lastlogin", "last login", "last_logon"],
+    }
+
+    users: List[Dict[str, Any]] = []
+    seen_usernames = set()
+    missing_display = 0
+    missing_department = 0
+    missing_business_role = 0
+    zero_groups = 0
+    invalid_last_login = 0
+
+    by_dn = defaultdict(list)
+    for i, row in enumerate(rows, start=1):
+        row_ci = {_ab_norm_header(k): v for k, v in (row or {}).items()}
+        dn = (_ab_get(row_ci, KEY["displayName"]) or "").strip()
+        if not dn:
+            missing_display += 1
+            continue
+        uname = (_ab_get(row_ci, KEY["username"]) or "").strip()
+        dept = (_ab_get(row_ci, KEY["department"]) or "").strip()
+        br = (_ab_get(row_ci, KEY["businessRole"]) or "").strip()
+        roles_raw = (_ab_get(row_ci, KEY["roles"]) or "").strip()
+        atype = (_ab_get(row_ci, KEY["accountType"]) or "").strip() or "Internal"
+        ll_raw = (_ab_get(row_ci, KEY["lastLogin"]) or "").strip()
+        ll = _normalize_last_login(ll_raw or None)
+        if ll_raw and not ll:
+            invalid_last_login += 1
+
+        groups = [g.strip() for g in roles_raw.split(",") if g and g.strip()]
+        if not groups:
+            zero_groups += 1
+        if not dept:
+            missing_department += 1
+        if not br:
+            missing_business_role += 1
+            br = dept or "Unassigned"
+
+        if not uname:
+            uname = _slug_username(dn)
+        base = uname
+        n = 2
+        while uname in seen_usernames:
+            uname = f"{base}{n}"
+            n += 1
+        seen_usernames.add(uname)
+
+        u = {
+            "username": uname,
+            "displayName": dn,
+            "department": dept,
+            "businessRole": br,
+            "groups": groups,
+            "accountType": atype or classify_account(dn, dept, ""),
+            "lastLogin": ll,
+            "excluded": False,
+        }
+        users.append(u)
+        by_dn[dn.strip().lower()].append(u)
+
+    duplicate_displayname_rows = sum(max(0, len(v) - 1) for v in by_dn.values())
+    return {
+        "name": dataset_name,
+        "users": users,
+        "rowsTotal": len(rows),
+        "missingDisplayName": missing_display,
+        "missingDepartment": missing_department,
+        "missingBusinessRole": missing_business_role,
+        "zeroGroupsUsers": zero_groups,
+        "invalidLastLogin": invalid_last_login,
+        "duplicateDisplayNameRows": duplicate_displayname_rows,
+    }
+
+
+def _compute_dataset_scores_from_users(dataset: Dict[str, Any]) -> Dict[str, Any]:
+    users = dataset.get("users") or []
+    total = max(1, len(users))
+    matrix, groups = _build_matrix_from_users(users)
+    mq = compute_model_quality(users, matrix, groups)
+    ai = run_smart_ai_detection(users, matrix)
+
+    metrics = {
+        "rows_total": len(users),
+        "duplicate_displayname_rows": int(dataset.get("duplicateDisplayNameRows") or 0),
+        "missing_department": int(dataset.get("missingDepartment") or 0),
+        "missing_business_role": int(dataset.get("missingBusinessRole") or 0),
+        "zero_groups_users": int(dataset.get("zeroGroupsUsers") or 0),
+        "invalid_last_login": int(dataset.get("invalidLastLogin") or 0),
+        "stale_users": int(len(mq.get("staleList") or [])),
+        "overprivileged_users": int(len(mq.get("overprivilegedList") or [])),
+        "policy_violations": int(len(mq.get("policyViolations") or [])),
+        "ambiguous_users": int(len(mq.get("ambiguousUsers") or [])),
+        "ai_anomaly_users": int((ai.get("stats") or {}).get("usersWithAnomaly") or 0),
+        "model_quality_score": float(mq.get("modelQuality") or 0.0),
+    }
+
+    # weighted score [0..100], where higher is better
+    rates = {
+        "dup": metrics["duplicate_displayname_rows"] / total,
+        "miss_dept": metrics["missing_department"] / total,
+        "miss_br": metrics["missing_business_role"] / total,
+        "zero": metrics["zero_groups_users"] / total,
+        "invalid_ll": metrics["invalid_last_login"] / total,
+        "stale": metrics["stale_users"] / total,
+        "over": metrics["overprivileged_users"] / total,
+        "policy": metrics["policy_violations"] / total,
+        "amb": metrics["ambiguous_users"] / total,
+        "ai": metrics["ai_anomaly_users"] / total,
+    }
+    score = 100.0 * (
+        0.33 * (metrics["model_quality_score"] / 100.0) +
+        0.09 * (1.0 - min(1.0, rates["dup"])) +
+        0.08 * (1.0 - min(1.0, rates["miss_dept"])) +
+        0.08 * (1.0 - min(1.0, rates["miss_br"])) +
+        0.08 * (1.0 - min(1.0, rates["zero"])) +
+        0.07 * (1.0 - min(1.0, rates["invalid_ll"])) +
+        0.07 * (1.0 - min(1.0, rates["stale"])) +
+        0.07 * (1.0 - min(1.0, rates["over"])) +
+        0.06 * (1.0 - min(1.0, rates["policy"])) +
+        0.07 * (1.0 - min(1.0, rates["amb"])) +
+        0.10 * (1.0 - min(1.0, rates["ai"]))
+    )
+    score = max(0.0, min(100.0, score))
+
+    return {
+        "name": dataset.get("name"),
+        "score": round(score, 2),
+        "metrics": metrics,
+    }
+
+
+@app.post("/api/ai-lab/ab-playground/compare")
+def ai_lab_ab_compare(body: AbPlaygroundRequest, username: str = Depends(require_auth)):
+    users = _ai_lab_users()
+    sample_size = max(50, min(int(body.sample_size or 400), max(50, len(users))))
+    a = _simulate_quality_for_model(body.model_a, users, sample_size)
+    b = _simulate_quality_for_model(body.model_b, users, sample_size)
+    delta = {k: round(float(b.get(k, 0.0)) - float(a.get(k, 0.0)), 4) for k in ("accuracy", "precision", "recall", "f1")}
+    return {
+        "sampleSize": sample_size,
+        "modelA": {"name": body.model_a, **a},
+        "modelB": {"name": body.model_b, **b},
+        "delta": delta,
+        "winner": body.model_b if delta.get("f1", 0.0) > 0 else body.model_a,
+    }
+
+
+@app.post("/api/ai-lab/ab-playground/upload-compare")
+async def ai_lab_ab_compare_upload(
+    file_a: UploadFile = File(...),
+    file_b: UploadFile = File(...),
+    username: str = Depends(require_auth),
+):
+    raw_a = await file_a.read()
+    raw_b = await file_b.read()
+    if not raw_a or not raw_b:
+        raise HTTPException(status_code=400, detail="Entrambi i file CSV sono obbligatori.")
+
+    parsed_a = _parse_users_from_csv_bytes(raw_a, file_a.filename or "csv_a")
+    parsed_b = _parse_users_from_csv_bytes(raw_b, file_b.filename or "csv_b")
+    scored_a = _compute_dataset_scores_from_users(parsed_a)
+    scored_b = _compute_dataset_scores_from_users(parsed_b)
+
+    meta = {
+        "model_quality_score": {"higher_is_better": True, "label": "Model Quality Score"},
+        "rows_total": {"higher_is_better": True, "label": "Rows Total"},
+        "duplicate_displayname_rows": {"higher_is_better": False, "label": "Duplicate DisplayName Rows"},
+        "missing_department": {"higher_is_better": False, "label": "Missing Department"},
+        "missing_business_role": {"higher_is_better": False, "label": "Missing Business Role"},
+        "zero_groups_users": {"higher_is_better": False, "label": "Zero Groups Users"},
+        "invalid_last_login": {"higher_is_better": False, "label": "Invalid LastLogin"},
+        "stale_users": {"higher_is_better": False, "label": "Stale Users"},
+        "overprivileged_users": {"higher_is_better": False, "label": "Overprivileged Users"},
+        "policy_violations": {"higher_is_better": False, "label": "Policy Violations"},
+        "ambiguous_users": {"higher_is_better": False, "label": "Ambiguous Users"},
+        "ai_anomaly_users": {"higher_is_better": False, "label": "AI Anomaly Users"},
+    }
+
+    compare_rows = []
+    improved = 0
+    worsened = 0
+    unchanged = 0
+    for k, m in meta.items():
+        a_val = float(scored_a["metrics"].get(k, 0))
+        b_val = float(scored_b["metrics"].get(k, 0))
+        diff = round(b_val - a_val, 4)
+        hib = bool(m["higher_is_better"])
+        if diff == 0:
+            trend = "unchanged"
+            unchanged += 1
+        else:
+            better = diff > 0 if hib else diff < 0
+            trend = "improved" if better else "worsened"
+            if better:
+                improved += 1
+            else:
+                worsened += 1
+        compare_rows.append({
+            "metric": k,
+            "label": m["label"],
+            "a": a_val,
+            "b": b_val,
+            "diff": diff,
+            "trend": trend,
+        })
+
+    score_diff = round(float(scored_b["score"]) - float(scored_a["score"]), 2)
+    winner = scored_b["name"] if score_diff > 0 else (scored_a["name"] if score_diff < 0 else "tie")
+    return {
+        "datasetA": scored_a,
+        "datasetB": scored_b,
+        "scoreDiff": score_diff,
+        "winner": winner,
+        "comparison": compare_rows,
+        "summary": {"improved": improved, "worsened": worsened, "unchanged": unchanged},
+    }
+
+
+@app.get("/api/ai-lab/fairness")
+def ai_lab_fairness(username: str = Depends(require_auth)):
+    users = _ai_lab_users()
+    if not users:
+        return {"overallErrorRate": 0.0, "byDepartment": [], "byAccountType": []}
+
+    def _err(u: Dict[str, Any]) -> int:
+        risk = 0
+        if len(u.get("groups") or []) == 0:
+            risk += 1
+        if not (u.get("businessRole") or "").strip():
+            risk += 1
+        if str(u.get("accountType") or "").lower() in {"external", "contractor"} and len(u.get("groups") or []) > 7:
+            risk += 1
+        return 1 if risk > 0 else 0
+
+    overall = np.mean([_err(u) for u in users]) if users else 0.0
+
+    def _aggregate(key_name: str) -> List[Dict[str, Any]]:
+        buckets = defaultdict(list)
+        for u in users:
+            k = str(u.get(key_name) or "Unknown").strip() or "Unknown"
+            buckets[k].append(u)
+        out = []
+        for k, arr in buckets.items():
+            err_rate = float(np.mean([_err(x) for x in arr])) if arr else 0.0
+            out.append({
+                "group": k,
+                "size": len(arr),
+                "errorRate": round(err_rate, 4),
+                "gapVsOverall": round(err_rate - overall, 4),
+            })
+        out.sort(key=lambda x: abs(x["gapVsOverall"]), reverse=True)
+        return out
+
+    return {
+        "overallErrorRate": round(float(overall), 4),
+        "byDepartment": _aggregate("department")[:20],
+        "byAccountType": _aggregate("accountType")[:20],
+    }
+
+
+@app.get("/api/ai-lab/synthetic")
+def ai_lab_synthetic(username: str = Depends(require_auth)):
+    templates = [
+        {"id": "svc_admin_overlap", "label": "Service con gruppi admin", "risk": "high"},
+        {"id": "missing_identity_keys", "label": "Chiavi identita mancanti", "risk": "medium"},
+        {"id": "future_last_login", "label": "LastLogin futura", "risk": "medium"},
+        {"id": "department_role_mismatch", "label": "Dipartimento/BusinessRole incoerenti", "risk": "high"},
+        {"id": "ghost_manager", "label": "Manager non esistente", "risk": "high"},
+    ]
+    return {"templates": templates, "lastGenerated": state.get("ai_synthetic_cases", [])[:100]}
+
+
+@app.post("/api/ai-lab/synthetic/generate")
+def ai_lab_synthetic_generate(body: SyntheticGenerateRequest, username: str = Depends(require_auth)):
+    users = _ai_lab_users()
+    templates = ["svc_admin_overlap", "missing_identity_keys", "future_last_login", "department_role_mismatch", "ghost_manager"]
+    count = max(1, min(int(body.count or 30), 300))
+    generated = []
+    for i in range(count):
+        t = body.scenario if body.scenario != "mixed" else templates[i % len(templates)]
+        ref = users[i % len(users)] if users else {}
+        generated.append({
+            "id": f"syn-{int(time.time()*1000)}-{i}",
+            "template": t,
+            "displayName": f"syn_{(ref.get('displayName') or 'utente').replace(' ', '_').lower()}_{i+1}",
+            "department": ref.get("department") or "Unknown",
+            "businessRole": ref.get("businessRole") or "Unassigned",
+            "groups": (ref.get("groups") or [])[:4],
+            "severity": "high" if t in {"svc_admin_overlap", "department_role_mismatch", "ghost_manager"} else "medium",
+        })
+    if body.persist:
+        state["ai_synthetic_cases"] = generated
+    return {"ok": True, "count": len(generated), "items": generated}
+
+
+@app.get("/api/ai-lab/feedback")
+def ai_lab_feedback(username: str = Depends(require_auth)):
+    events = state.get("ai_feedback_events") or []
+    total = len(events)
+    recent = sorted(events, key=lambda x: str(x.get("ts") or ""), reverse=True)[:200]
+    by_corrected = Counter([str(e.get("corrected_type") or "Unknown") for e in events])
+    history = list(state.get("manual_user_changes") or [])
+    history = sorted(history, key=lambda x: str(x.get("ts") or ""), reverse=True)[:500]
+    return {
+        "total": total,
+        "byCorrectedType": [{"type": k, "count": v} for k, v in by_corrected.most_common()],
+        "items": recent,
+        "history": history,
+    }
+
+
+@app.post("/api/ai-lab/feedback")
+def ai_lab_feedback_add(body: FeedbackEventRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    users = state.get("last_extract", {}).get("users") or []
+    target = next((u for u in users if str(u.get("username") or "") == body.username), None)
+    if target:
+        target["accountType"] = body.corrected_type
+    event = {
+        "id": f"fb-{int(time.time()*1000)}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "author": username,
+        "username": body.username,
+        "predicted_type": body.predicted_type,
+        "corrected_type": body.corrected_type,
+        "confidence": float(body.confidence),
+        "note": body.note or "",
+    }
+    events = state.setdefault("ai_feedback_events", [])
+    events.append(event)
+    events[:] = events[-2000:]
+    dq_ev = state.setdefault("dq_feedback_events", [])
+    dq_ev.append({
+        "kind": "ai-feedback",
+        "username": body.username,
+        "predicted": body.predicted_type,
+        "corrected": body.corrected_type,
+        "ts": event["ts"],
+    })
+    dq_ev[:] = dq_ev[-3000:]
+    record_llm_learning_event(
+        actor=username,
+        source="ai-lab-feedback",
+        signal_type="supervised-correction",
+        entity=body.username,
+        details={
+            "predicted_type": body.predicted_type,
+            "corrected_type": body.corrected_type,
+            "confidence": float(body.confidence),
+        },
+    )
+    manual_event = record_manual_user_change(
+        actor=username,
+        username=body.username,
+        display_name=target.get("displayName") if target else body.username,
+        action="feedback-correction",
+        source="ai-lab-feedback",
+        details={
+            "predicted_type": body.predicted_type,
+            "corrected_type": body.corrected_type,
+            "confidence": float(body.confidence),
+            "note": body.note or "",
+        },
+        persist=False,
+    )
+    # Persist once in background to reduce response latency on large storage files.
+    background_tasks.add_task(state.save)
+    return {"ok": True, "event": event, "manualEvent": manual_event}
 
 
 # =============================================================================
@@ -4560,6 +5459,18 @@ class PatternRuleRequest(BaseModel):
     regex: str
 
 
+class BrPatternRuleRequest(BaseModel):
+    business_role: str
+    field: str
+    regex: str
+
+
+class BrAssignmentPatternRuleRequest(BaseModel):
+    business_role: str
+    role: Optional[str] = None  # legacy optional gate on exact group name
+    regex: str
+
+
 @app.get("/api/ml/patterns")
 def get_patterns(username: str = Depends(require_auth)):
     """Return all classification patterns (static + custom)."""
@@ -4567,12 +5478,20 @@ def get_patterns(username: str = Depends(require_auth)):
 
 
 @app.post("/api/ml/patterns")
-def add_pattern(body: PatternRuleRequest, username: str = Depends(require_auth)):
+def add_pattern(body: PatternRuleRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
     """Add a new custom regex pattern rule for account classification."""
     result = ml_engine.add_pattern(body.account_type, body.field, body.regex)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Failed"))
     log("INFO", f"Pattern added: {body.account_type}/{body.field}/{body.regex} by {username}")
+    record_llm_learning_event(
+        actor=username,
+        source="pattern-rules",
+        signal_type="rule-added",
+        entity=body.account_type,
+        details={"field": body.field, "regex": body.regex},
+    )
+    background_tasks.add_task(recalculate_assignments_background, "account-pattern-rule-added", username)
     return result
 
 
@@ -4583,7 +5502,139 @@ def delete_pattern_endpoint(index: int, username: str = Depends(require_auth)):
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Failed"))
     log("INFO", f"Pattern deleted: index={index} by {username}")
+    record_llm_learning_event(
+        actor=username,
+        source="pattern-rules",
+        signal_type="rule-deleted",
+        entity=str(index),
+        details={},
+    )
     return result
+
+
+@app.get("/api/ml/br-patterns")
+def get_br_patterns(username: str = Depends(require_auth)):
+    rules = state.setdefault("br_pattern_rules", [])
+    return {"custom": list(rules)}
+
+
+@app.post("/api/ml/br-patterns")
+def add_br_pattern(body: BrPatternRuleRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    business_role = (body.business_role or "").strip()
+    field = (body.field or "").strip()
+    regex = (body.regex or "").strip()
+    if not business_role:
+        raise HTTPException(status_code=400, detail="Business Role is required")
+    if not field:
+        raise HTTPException(status_code=400, detail="Field is required")
+    if not regex:
+        raise HTTPException(status_code=400, detail="Regex is required")
+    try:
+        re.compile(regex)
+    except re.error as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid regex: {exc}") from exc
+
+    rules = state.setdefault("br_pattern_rules", [])
+    rule = {
+        "business_role": business_role,
+        "field": field,
+        "regex": regex,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    rules.append(rule)
+    state["br_pattern_rules"] = rules
+    state.save()
+    log("INFO", f"BR pattern added: {business_role}/{field}/{regex} by {username}")
+    record_llm_learning_event(
+        actor=username,
+        source="pattern-rules",
+        signal_type="br-rule-added",
+        entity=business_role,
+        details={"field": field, "regex": regex},
+    )
+    background_tasks.add_task(recalculate_assignments_background, "br-pattern-rule-added", username)
+    return {"success": True, "rule": rule, "total_custom_rules": len(rules)}
+
+
+@app.delete("/api/ml/br-patterns/{index}")
+def delete_br_pattern(index: int, username: str = Depends(require_auth)):
+    rules = list(state.setdefault("br_pattern_rules", []))
+    if index < 0 or index >= len(rules):
+        raise HTTPException(status_code=400, detail="Invalid index")
+    removed = rules.pop(index)
+    state["br_pattern_rules"] = rules
+    state.save()
+    log("INFO", f"BR pattern deleted: index={index} by {username}")
+    record_llm_learning_event(
+        actor=username,
+        source="pattern-rules",
+        signal_type="br-rule-deleted",
+        entity=str(index),
+        details={},
+    )
+    return {"success": True, "removed": removed, "total_custom_rules": len(rules)}
+
+
+@app.get("/api/ml/br-assignment-patterns")
+def get_br_assignment_patterns(username: str = Depends(require_auth)):
+    rules = state.setdefault("br_assignment_pattern_rules", [])
+    return {"custom": list(rules)}
+
+
+@app.post("/api/ml/br-assignment-patterns")
+def add_br_assignment_pattern(body: BrAssignmentPatternRuleRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    business_role = (body.business_role or "").strip()
+    regex = (body.regex or "").strip()
+    if not business_role:
+        raise HTTPException(status_code=400, detail="Business Role is required")
+    if not regex:
+        raise HTTPException(status_code=400, detail="Regex is required")
+    try:
+        re.compile(regex)
+    except re.error as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid regex: {exc}") from exc
+
+    rules = state.setdefault("br_assignment_pattern_rules", [])
+    rule = {
+        "business_role": business_role,
+        "regex": regex,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    legacy_role = (body.role or "").strip()
+    if legacy_role:
+        rule["role"] = legacy_role
+    rules.append(rule)
+    state["br_assignment_pattern_rules"] = rules
+    state.save()
+    log("INFO", f"BR assignment pattern added: {business_role}/{regex} by {username}")
+    record_llm_learning_event(
+        actor=username,
+        source="pattern-rules",
+        signal_type="br-assignment-rule-added",
+        entity=business_role,
+        details={"regex": regex, "legacyRole": legacy_role},
+    )
+    background_tasks.add_task(recalculate_assignments_background, "br-assignment-rule-added", username)
+    return {"success": True, "rule": rule, "total_custom_rules": len(rules)}
+
+
+@app.delete("/api/ml/br-assignment-patterns/{index}")
+def delete_br_assignment_pattern(index: int, username: str = Depends(require_auth)):
+    rules = list(state.setdefault("br_assignment_pattern_rules", []))
+    if index < 0 or index >= len(rules):
+        raise HTTPException(status_code=400, detail="Invalid index")
+    removed = rules.pop(index)
+    state["br_assignment_pattern_rules"] = rules
+    state.save()
+    log("INFO", f"BR assignment pattern deleted: index={index} by {username}")
+    record_llm_learning_event(
+        actor=username,
+        source="pattern-rules",
+        signal_type="br-assignment-rule-deleted",
+        entity=str(index),
+        details={},
+    )
+    return {"success": True, "removed": removed, "total_custom_rules": len(rules)}
 
 
 # (peer-analysis endpoint defined at line 1846)

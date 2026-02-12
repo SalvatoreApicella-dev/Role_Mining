@@ -1,107 +1,28 @@
-INFO:     Started server process [94012]
+INFO:     Started server process [12314]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:61416 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61417 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61424 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61425 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61428 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61429 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61434 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61438 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61441 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61444 - "GET /api/kpi HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61448 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61451 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61454 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61457 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61471 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61474 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61477 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61480 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61495 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61498 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61513 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61514 - "GET /api/businessroles HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61515 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61520 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61521 - "GET /api/businessroles HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61524 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61527 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61530 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61533 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61547 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61548 - "GET /api/businessroles HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61549 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61554 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61555 - "GET /api/businessroles HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61558 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61561 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61564 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61567 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61571 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61574 - "GET /api/kpi HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61577 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61580 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61583 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61586 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61594 - "POST /api/data-quality/rules/suggestions/dq-reject-empty-groups/apply HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61599 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61600 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61603 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61606 - "GET /api/kpi HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61609 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61612 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61615 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61618 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61621 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61624 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61631 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61636 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61633 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61639 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61643 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61646 - "GET /api/kpi HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61649 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:61652 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61655 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61658 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61661 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61664 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61667 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61670 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
-[AI Detection] users_with_anomaly=980, total_users=4920, pct=19.92%
-INFO:     127.0.0.1:61673 - "POST /api/ai-detection/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65413 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65414 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65421 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65422 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65425 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65426 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65431 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65436 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65439 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65442 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65454 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65456 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65455 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65457 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65458 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65461 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65464 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65471 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65472 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65473 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65478 - "POST /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65487 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65489 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65488 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
