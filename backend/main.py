@@ -548,6 +548,9 @@ from app.db.storage import get_store, init_default_state
 # Initialize persistent storage
 state = get_store()
 init_default_state()
+REQUIRED_DUPLICATE_ORDER = ["last_login", "groups_count", "dept_group_correlation", "has_department"]
+state.setdefault("dq_rules", {})
+state["dq_rules"]["duplicate_resolution_order"] = REQUIRED_DUPLICATE_ORDER.copy()
 
 
 def apply_business_roles(users: List[Dict[str, Any]]) -> None:
@@ -942,12 +945,24 @@ def brdb_learn_assignment(br: str, groups: List[str], weight: int = 5) -> None:
     state["brdb_cache"] = {}
 
 
-def _mk_candidate(*, source: str, candidate_id: str, display_name: str, business_role: str, roles: list[str], raw: str) -> dict:
+def _mk_candidate(
+    *,
+    source: str,
+    candidate_id: str,
+    display_name: str,
+    business_role: str,
+    roles: list[str],
+    raw: str,
+    department: str = "",
+    last_login: Any = None,
+) -> dict:
     return {
         "candidateId": candidate_id,
         "source": source,
         "displayName": (display_name or "").strip(),
         "businessRole": (business_role or "").strip(),
+        "department": (department or "").strip(),
+        "lastLogin": last_login,
         "roles": roles or [],
         "rawLine": raw or "",
     }
@@ -1017,6 +1032,285 @@ def apply_duplicate_displayname_resolution() -> None:
 
     # aggiorna anche il mapping BR per coerenza UI
     apply_business_roles(users)
+
+
+def _to_ts(v: Any) -> float:
+    if v is None:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip()
+    if not s:
+        return 0.0
+    try:
+        return float(s)
+    except Exception:
+        pass
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _normalize_last_login(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    if isinstance(v, list):
+        if not v:
+            return None
+        v = v[0]
+    s = str(v).strip()
+    if not s:
+        return None
+
+    # AD FILETIME (100ns intervals since 1601-01-01 UTC)
+    try:
+        iv = int(float(s))
+        if iv > 116444736000000000:
+            unix_ts = (iv - 116444736000000000) / 10000000.0
+            dt = datetime.fromtimestamp(unix_ts, tz=timezone.utc)
+            return dt.isoformat()
+    except Exception:
+        pass
+
+    # Unix timestamp
+    try:
+        fv = float(s)
+        if fv > 0 and fv < 4102444800:  # until year 2100
+            dt = datetime.fromtimestamp(fv, tz=timezone.utc)
+            return dt.isoformat()
+    except Exception:
+        pass
+
+    # ISO-like string
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
+    except Exception:
+        return s
+
+
+def _build_dept_group_profile(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    by_dept = defaultdict(lambda: defaultdict(int))
+    dept_counts = defaultdict(int)
+    for r in (rows or []):
+        dept = (r.get("department") or "").strip()
+        if not dept:
+            continue
+        dept_counts[dept] += 1
+        for g in set(r.get("groups") or []):
+            by_dept[dept][g] += 1
+
+    out: Dict[str, Dict[str, float]] = {}
+    for dept, gstats in by_dept.items():
+        den = max(1, dept_counts.get(dept, 1))
+        out[dept] = {g: (cnt / den) for g, cnt in gstats.items()}
+    return out
+
+
+def _score_duplicate_candidate(c: Dict[str, Any], dept_profile: Dict[str, Dict[str, float]]) -> Dict[str, Any]:
+    dept = (c.get("department") or "").strip()
+    groups = list(dict.fromkeys(c.get("groups") or []))
+    has_dept = 1 if dept else 0
+    groups_count = len(groups)
+    last_login_ts = _to_ts(c.get("lastLogin"))
+
+    corr = 0.0
+    if dept and groups:
+        probs = dept_profile.get(dept) or {}
+        corr = sum(float(probs.get(g, 0.0)) for g in groups) / max(1, len(groups))
+
+    order = REQUIRED_DUPLICATE_ORDER
+
+    values = {
+        "dept_group_correlation": round(corr, 6),
+        "has_department": has_dept,
+        "groups_count": groups_count,
+        "last_login": last_login_ts,
+    }
+    rank = tuple(values.get(k, 0.0) for k in order)
+    return {
+        "rank": rank,
+        "order": order,
+        "reason": {
+            "deptGroupCorrelation": round(corr, 4),
+            "hasDepartment": bool(has_dept),
+            "groupsCount": groups_count,
+            "lastLoginTs": last_login_ts,
+        },
+    }
+
+
+def _duplicate_resolution_items() -> List[Dict[str, Any]]:
+    candidates = state.get("ingest_candidates") or []
+    if not candidates:
+        return []
+
+    by_dn = defaultdict(list)
+    for c in candidates:
+        dn = (c.get("displayName") or "").strip()
+        if dn:
+            by_dn[dn.lower()].append(c)
+
+    choice_raw = state.get("choice_by_displayName") or {}
+    auto_raw = state.get("duplicate_autoselect") or {}
+    choice = {(str(k).strip().lower()): v for k, v in choice_raw.items() if str(k).strip()}
+    auto = {(str(k).strip().lower()): v for k, v in auto_raw.items() if str(k).strip()}
+    items = []
+    for dn_key, rows in by_dn.items():
+        if len(rows) <= 1:
+            continue
+        chosen_id = choice.get(dn_key) or rows[0].get("candidateId")
+        chosen = next((r for r in rows if r.get("candidateId") == chosen_id), rows[0])
+        auto_id = ((auto.get(dn_key) or {}).get("candidateId")) or chosen_id
+        display_name = (chosen.get("displayName") or rows[0].get("displayName") or "").strip()
+        alternatives = [r for r in rows if r.get("candidateId") != chosen.get("candidateId")]
+        items.append(
+            {
+                "displayName": display_name,
+                "chosenCandidateId": chosen.get("candidateId"),
+                "autoChosenCandidateId": auto_id,
+                "chosen": chosen,
+                "alternatives": alternatives,
+                "count": len(rows),
+                "autoReason": (auto.get(dn_key) or {}).get("reason"),
+            }
+        )
+
+    items.sort(key=lambda x: x.get("displayName") or "")
+    return items
+
+
+def _record_duplicate_feedback(display_name: str, chosen_candidate_id: str, actor: str = "system") -> None:
+    display_name = (display_name or "").strip()
+    chosen_candidate_id = (chosen_candidate_id or "").strip()
+    if not display_name or not chosen_candidate_id:
+        return
+
+    auto = state.get("duplicate_autoselect") or {}
+    auto_item = auto.get(display_name) or auto.get(display_name.lower()) or {}
+    auto_id = (auto_item.get("candidateId") or "").strip()
+    if not auto_id or auto_id == chosen_candidate_id:
+        return
+
+    by_id = {}
+    for c in (state.get("ingest_candidates") or []):
+        cid = str(c.get("candidateId") or "").strip()
+        if cid:
+            by_id[cid] = c
+
+    auto_c = by_id.get(auto_id) or {}
+    chosen_c = by_id.get(chosen_candidate_id) or {}
+
+    ev = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "displayName": display_name,
+        "actor": actor,
+        "autoCandidateId": auto_id,
+        "chosenCandidateId": chosen_candidate_id,
+        "auto": {
+            "department": auto_c.get("department"),
+            "groupsCount": len(auto_c.get("roles") or []),
+            "lastLogin": auto_c.get("lastLogin"),
+        },
+        "chosen": {
+            "department": chosen_c.get("department"),
+            "groupsCount": len(chosen_c.get("roles") or []),
+            "lastLogin": chosen_c.get("lastLogin"),
+        },
+    }
+
+    events = state.get("dq_feedback_events") or []
+    events.append(ev)
+    # keep recent history bounded
+    state["dq_feedback_events"] = events[-500:]
+
+
+def build_dq_rule_suggestions() -> List[Dict[str, Any]]:
+    suggestions: List[Dict[str, Any]] = []
+    rules = state.get("dq_rules") or {}
+    order = list(rules.get("duplicate_resolution_order") or [])
+    if not order:
+        order = ["dept_group_correlation", "has_department", "groups_count", "last_login"]
+    events = list(state.get("dq_feedback_events") or [])
+    ingest = state.get("last_ingest_stats") or {}
+
+    dep_better = 0
+    grp_better = 0
+    ll_better = 0
+    considered = 0
+    for ev in events:
+        auto = ev.get("auto") or {}
+        chosen = ev.get("chosen") or {}
+        considered += 1
+        if (not auto.get("department")) and (chosen.get("department")):
+            dep_better += 1
+        if int(chosen.get("groupsCount") or 0) > int(auto.get("groupsCount") or 0):
+            grp_better += 1
+        if _to_ts(chosen.get("lastLogin")) > _to_ts(auto.get("lastLogin")):
+            ll_better += 1
+
+    def _ratio(x: int, y: int) -> float:
+        return (float(x) / float(y)) if y > 0 else 0.0
+
+    def _idx(lst: List[str], key: str) -> int:
+        try:
+            return lst.index(key)
+        except ValueError:
+            return 999
+
+    if considered >= 3 and _ratio(ll_better, considered) >= 0.60 and _idx(order, "last_login") > 1:
+        new_order = [x for x in order if x != "last_login"]
+        new_order.insert(1, "last_login")
+        suggestions.append(
+            {
+                "ruleId": "dq-dup-priority-lastlogin",
+                "title": "Alza priorita LastLogin nella deduplica",
+                "description": "Gli override manuali scelgono spesso il candidato con ultimo accesso piu recente.",
+                "confidence": round(_ratio(ll_better, considered), 2),
+                "impact": {"manualOverridesAnalyzed": considered, "lastLoginPreferred": ll_better},
+                "preview": {"duplicate_resolution_order": new_order},
+                "current": {"duplicate_resolution_order": order},
+                "alreadyApplied": new_order == order,
+            }
+        )
+
+    if considered >= 3 and _ratio(grp_better, considered) >= 0.60 and _idx(order, "groups_count") > 1:
+        new_order = [x for x in order if x != "groups_count"]
+        new_order.insert(1, "groups_count")
+        suggestions.append(
+            {
+                "ruleId": "dq-dup-priority-groups",
+                "title": "Alza priorita numero gruppi nella deduplica",
+                "description": "Gli override manuali privilegiano il candidato con maggiore copertura gruppi.",
+                "confidence": round(_ratio(grp_better, considered), 2),
+                "impact": {"manualOverridesAnalyzed": considered, "groupsPreferred": grp_better},
+                "preview": {"duplicate_resolution_order": new_order},
+                "current": {"duplicate_resolution_order": order},
+                "alreadyApplied": new_order == order,
+            }
+        )
+
+    if int(ingest.get("missingRoles") or 0) > 0 and not bool(rules.get("reject_empty_groups")):
+        miss_roles = int(ingest.get("missingRoles") or 0)
+        total_rows = max(1, int(ingest.get("rowsTotal") or 0))
+        suggestions.append(
+            {
+                "ruleId": "dq-reject-empty-groups",
+                "title": "Blocca righe senza gruppi",
+                "description": "Scarta in import le righe con gruppi vuoti per ridurre utenti orfani e remediation manuale.",
+                "confidence": round(min(1.0, miss_roles / total_rows), 2),
+                "impact": {"missingRolesLastImport": miss_roles, "rowsTotal": total_rows},
+                "preview": {"reject_empty_groups": True},
+                "current": {"reject_empty_groups": bool(rules.get("reject_empty_groups"))},
+                "alreadyApplied": False,
+            }
+        )
+
+    suggestions.sort(key=lambda x: (x.get("alreadyApplied"), -(x.get("confidence") or 0)))
+    return suggestions
 
 
 def pick_best_user(cands: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1504,7 +1798,18 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
                 department = str(dept[0]).strip() if dept else None
                 
                 llt = d.get("lastLogonTimestamp")
-                last_login = str(llt[0]).strip() if (llt and llt[0]) else None
+                ll = d.get("lastLogon")
+                candidates = []
+                n1 = _normalize_last_login(llt)
+                n2 = _normalize_last_login(ll)
+                if n1:
+                    candidates.append(n1)
+                if n2:
+                    candidates.append(n2)
+                if candidates:
+                    last_login = max(candidates, key=_to_ts)
+                else:
+                    last_login = None
 
                 et = d.get("employeeType")
                 etype = str(et[0]).strip() if et else ""
@@ -2190,6 +2495,8 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
                 business_role=u.get("businessRole", ""),
                 roles=(u.get("groups") or []),
                 raw=f"AD:{u.get('username')}|{u.get('displayName')}|{','.join(u.get('groups') or [])}",
+                department=u.get("department") or "",
+                last_login=u.get("lastLogin"),
             )
         )
 
@@ -2560,92 +2867,67 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         missing_dept = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("department") or "").strip()]
         missing_br = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("businessRole") or "").strip()]
         
-        # Conflicts from ingest (legacy source)
-        conflicts = state.get("last_ingest_conflicts") or {}
-        duplicates_raw = conflicts.get("duplicates") or []
-        duplicates = []
-        for d in duplicates_raw:
-            if isinstance(d, str):
-                u_obj = next((u for u in users if u["username"] == d), None)
-                if u_obj:
-                    duplicates.append({"username": d, "displayName": u_obj.get("displayName") or u_obj.get("display_name") or d})
-                else:
-                    duplicates.append({"username": d, "displayName": d})
-            else:
-                d["displayName"] = d.get("displayName") or d.get("display_name") or d.get("username")
-                duplicates.append(d)
-
-        # Primary source: detect duplicate displayName directly from current dataset
-        by_display_name = defaultdict(list)
-        for u in users:
-            dn = (u.get("displayName") or u.get("display_name") or "").strip()
-            if dn:
-                by_display_name[dn].append(u)
-
-        detected_duplicates = []
-        for dn, rows in by_display_name.items():
-            if len(rows) > 1:
-                for u in rows:
-                    detected_duplicates.append({
-                        "username": u.get("username"),
-                        "displayName": dn
-                    })
-
-        # Merge + dedupe by (username, displayName)
-        merged = {}
-        for d in duplicates + detected_duplicates:
-            k = (d.get("username"), d.get("displayName"))
-            merged[k] = {
-                "username": d.get("username"),
-                "displayName": d.get("displayName")
-            }
-        duplicates = list(merged.values())
-
-        # Ingest candidates can contain duplicate displayName rows even if users were later deduped.
-        # Include them so Cluster Quality reflects source-data issues.
-        ingest_candidates = state.get("ingest_candidates") or []
-        by_dn_candidates = defaultdict(list)
-        for c in ingest_candidates:
-            dn = (c.get("displayName") or "").strip()
-            if dn:
-                by_dn_candidates[dn].append(c)
-
-        candidate_dup_items = []
-        candidate_dup_extra_rows = 0
-        for dn, rows in by_dn_candidates.items():
-            if len(rows) > 1:
-                candidate_dup_extra_rows += (len(rows) - 1)
-                for c in rows:
-                    candidate_dup_items.append({
-                        "username": c.get("candidateId") or c.get("source"),
+        duplicate_items = _duplicate_resolution_items()
+        if not duplicate_items:
+            by_display_name = defaultdict(list)
+            for u in users:
+                dn = (u.get("displayName") or u.get("display_name") or "").strip()
+                if dn:
+                    by_display_name[dn].append(u)
+            for dn, rows in by_display_name.items():
+                if len(rows) <= 1:
+                    continue
+                chosen_user = rows[0]
+                chosen = {
+                    "candidateId": f"user:{chosen_user.get('username')}",
+                    "source": "current",
+                    "displayName": dn,
+                    "department": chosen_user.get("department"),
+                    "businessRole": chosen_user.get("businessRole"),
+                    "roles": chosen_user.get("groups") or [],
+                    "lastLogin": chosen_user.get("lastLogin"),
+                }
+                alternatives = []
+                for alt in rows[1:]:
+                    alternatives.append(
+                        {
+                            "candidateId": f"user:{alt.get('username')}",
+                            "source": "current",
+                            "displayName": dn,
+                            "department": alt.get("department"),
+                            "businessRole": alt.get("businessRole"),
+                            "roles": alt.get("groups") or [],
+                            "lastLogin": alt.get("lastLogin"),
+                        }
+                    )
+                duplicate_items.append(
+                    {
                         "displayName": dn,
-                    })
+                        "chosenCandidateId": chosen["candidateId"],
+                        "autoChosenCandidateId": chosen["candidateId"],
+                        "chosen": chosen,
+                        "alternatives": alternatives,
+                        "count": len(rows),
+                        "autoReason": None,
+                    }
+                )
 
-        # Also account for duplicate rejects from ingest filtering
+        candidate_dup_extra_rows = sum(max(0, int(x.get("count") or 0) - 1) for x in duplicate_items)
+
+        # Also account for duplicate rejects from ingest filtering (metrics only)
         rejects = state.get("last_rejects") or []
-        reject_dup_items = []
+        reject_dup_count = 0
         for r in rejects:
             reason = str((r or {}).get("reason") or "")
             if "Duplicate displayName" in reason:
-                u = (r or {}).get("user") or {}
-                reject_dup_items.append({
-                    "username": u.get("username"),
-                    "displayName": u.get("displayName") or u.get("display_name") or u.get("username"),
-                })
-
-        # Merge all duplicate evidences for drilldown list
-        all_dup = {}
-        for d in duplicates + candidate_dup_items + reject_dup_items:
-            k = (d.get("username"), d.get("displayName"))
-            all_dup[k] = {"username": d.get("username"), "displayName": d.get("displayName")}
-        duplicates = list(all_dup.values())
+                reject_dup_count += 1
 
         # Merging stats to reflect calculation on the actual displayed data
         stats = ingest.copy()
         stats["rowsTotal"] = len(users)
         # Keep ingest duplicate metric semantics (extra duplicate rows), but never hide detected duplicates.
         stats_dup = int(ingest.get("duplicateDisplayName") or 0)
-        stats["duplicateDisplayName"] = max(stats_dup, candidate_dup_extra_rows, len(duplicates))
+        stats["duplicateDisplayName"] = max(stats_dup, candidate_dup_extra_rows, reject_dup_count)
         stats["missingDepartment"] = len(missing_dept)
         stats["missingBusinessRole"] = len(missing_br)
 
@@ -2653,7 +2935,7 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
             "metric": "cluster-quality",
             "stats": stats,
             "items": [
-                {"type": "Duplicates", "count": len(duplicates), "users": duplicates},
+                {"type": "Duplicates", "count": len(duplicate_items), "users": duplicate_items},
                 {"type": "Missing Department", "count": len(missing_dept), "users": missing_dept},
                 {"type": "Missing Business Role", "count": len(missing_br), "users": missing_br},
             ],
@@ -3021,25 +3303,10 @@ def conflicts_duplicate_displayname(username: str = Depends(require_auth)):
     """
     Ritorna la lista dei displayName che hanno più di un candidato (conflitto).
     """
-    candidates = state.get("ingest_candidates") or []
-    by_dn = defaultdict(list)
-    for c in candidates:
-        if not c: continue
-        dn = (c.get("displayName") or "").strip()
-        if dn:
-            by_dn[dn].append(c)
-
-    items = []
-    choice = state.get("choice_by_displayName") or {}
-    for dn, rows in by_dn.items():
-        if len(rows) > 1:
-            items.append({
-                "displayName": dn,
-                "chosenCandidateId": choice.get(dn),
-                "rows": rows,
-            })
-
-    items.sort(key=lambda x: len(x["rows"]), reverse=True)
+    items = _duplicate_resolution_items()
+    for item in items:
+        item["rows"] = [item.get("chosen")] + (item.get("alternatives") or [])
+    items.sort(key=lambda x: len(x.get("rows") or []), reverse=True)
     return {"items": items}
 
 
@@ -3048,7 +3315,7 @@ class ChooseDuplicateRequest(BaseModel):
     candidateId: str
 
 @app.post("/api/ingest/conflicts/duplicate-displayname/choose")
-def choose_duplicate(body: ChooseDuplicateRequest):
+def choose_duplicate(body: ChooseDuplicateRequest, username: str = Depends(require_auth)):
     state.setdefault("choice_by_displayName", {})
     state["choice_by_displayName"][body.displayName] = body.candidateId
 
@@ -3061,8 +3328,40 @@ def choose_duplicate(body: ChooseDuplicateRequest):
             chosen_roles=cand.get("roles") or [],
         )
 
-    log("INFO", f"Duplicate resolved: {body.displayName} -> {body.candidateId}")
+    _record_duplicate_feedback(body.displayName, body.candidateId, actor=username)
+    log("INFO", f"Duplicate resolved: {body.displayName} -> {body.candidateId} by {username}")
     return {"ok": True}
+
+
+@app.get("/api/data-quality/rules/suggestions")
+def data_quality_rule_suggestions(username: str = Depends(require_auth)):
+    return {
+        "items": build_dq_rule_suggestions(),
+        "activeRules": state.get("dq_rules") or {},
+    }
+
+
+@app.post("/api/data-quality/rules/suggestions/{rule_id}/apply")
+def apply_data_quality_rule(rule_id: str, username: str = Depends(require_auth)):
+    rid = (rule_id or "").strip()
+    if not rid:
+        raise HTTPException(status_code=400, detail="rule_id required")
+
+    suggestions = {x.get("ruleId"): x for x in build_dq_rule_suggestions()}
+    item = suggestions.get(rid)
+    if not item:
+        raise HTTPException(status_code=404, detail="Rule suggestion not found")
+
+    rules = dict(state.get("dq_rules") or {})
+    preview = item.get("preview") or {}
+    for k, v in preview.items():
+        rules[k] = v
+    # Keep canonical duplicate ranking policy required by product.
+    rules["duplicate_resolution_order"] = REQUIRED_DUPLICATE_ORDER.copy()
+    state["dq_rules"] = rules
+
+    log("INFO", f"DQ rule applied: {rid} by {username}")
+    return {"ok": True, "ruleId": rid, "dqRules": rules}
 
 
 
@@ -3221,6 +3520,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         "businessRole": ["businessrole", "business role", "br", "ruolo business", "ruolo_business"],
         "roles": ["ruoli", "roles", "groups", "gruppi", "entitlements"],
         "accountType": ["accounttype", "account type", "tipo utente", "tipo_utente", "type"],
+        "lastLogin": ["lastlogin", "last login", "last_logon", "lastlogon", "ultimo accesso", "ultimologin"],
     }
 
     def _extract_csv_fields(row: dict) -> tuple:
@@ -3230,12 +3530,14 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         brraw = _get_any(row_ci, CSV_KEYS["businessRole"])
         rolesraw = _get_any(row_ci, CSV_KEYS["roles"])
         type_raw = _get_any(row_ci, CSV_KEYS["accountType"])
+        last_login_raw = _get_any(row_ci, CSV_KEYS["lastLogin"])
 
         dn = (dnraw or "").strip()
         dept = (deptraw or "").strip()
         br = (brraw or "").strip()
         roles = (rolesraw or "").strip()
         acct_type = (type_raw or "WhiteCollar").strip()
+        last_login = _normalize_last_login((last_login_raw or "").strip() or None)
 
         if (not dept) and dn and ("," in dn):
             dn, dept = [x.strip() for x in dn.split(",", 1)]
@@ -3243,7 +3545,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         if not br:
             br = dept
 
-        return dnraw, dn, dept, br, roles, acct_type
+        return dnraw, dn, dept, br, roles, acct_type, last_login
 
     state.setdefault("ingest_sources", {})
     state["ingest_sources"]["csv"] = []
@@ -3257,24 +3559,22 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     csv_missing_department = 0
     csv_missing_businessrole = 0
     csv_missing_roles = 0
+    csv_rejects: List[Dict[str, Any]] = []
+    reject_empty_groups = bool((state.get("dq_rules") or {}).get("reject_empty_groups"))
 
-    seen_dn_raw = set()
-    new_users: List[Dict[str, Any]] = []
-    seen_usernames: set[str] = set()
+    existing_users_list = state.get("last_extract", {}).get("users", [])
+    csv_candidates: List[Dict[str, Any]] = []
+    state.setdefault("choice_by_displayName", {})
+    state["duplicate_autoselect"] = {}
 
     for row in reader:
         csv_rows_total += 1
         row_id = f"csv:{csv_rows_total}"
-        dnraw, dn, dept, br, roles, acct_type = _extract_csv_fields(row)
+        dnraw, dn, dept, br, roles, acct_type, last_login = _extract_csv_fields(row)
 
         if not dn:
             csv_missing_displayname += 1
             continue
-
-        if dnraw in seen_dn_raw:
-            csv_dup_dn_rows += 1
-        else:
-            seen_dn_raw.add(dnraw)
 
         if not dept:
             csv_missing_department += 1
@@ -3284,30 +3584,30 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         parsed_roles = [g.strip() for g in (roles or "").split(",") if g.strip()]
         if not parsed_roles:
             csv_missing_roles += 1
-
-        base = _slug_username(dn)
-        uname = base
-        i = 2
-        while uname in seen_usernames:
-            uname = f"{base}{i}"
-            i += 1
-        seen_usernames.add(uname)
-
+            if reject_empty_groups:
+                csv_rejects.append(
+                    {
+                        "source": "csv",
+                        "reason": "Missing groups (rejected by dq rule)",
+                        "user": {"displayName": dn, "department": dept, "businessRole": br},
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                continue
 
         # Favor CSV provided type if it's not the default 'WhiteCollar', otherwise fallback to heuristic
         atype = classify_account(dn, dept, row.get("EmployeeType", ""))
         final_type = acct_type if acct_type not in ["", "WhiteCollar"] else atype
 
-        new_users.append({
-            "username": uname,
+        user_payload = {
             "displayName": dn,
             "groups": parsed_roles,
             "department": dept or None,
             "businessRole": br or None,
             "excluded": False,
-            "lastLogin": None,
+            "lastLogin": last_login,
             "accountType": final_type,
-        })
+        }
 
         rec = {
             "rowId": row_id,
@@ -3315,12 +3615,14 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             "displayNameRaw": dnraw,
             "businessRole": br,
             "department": dept,
+            "lastLogin": last_login,
             "roles": parsed_roles,
             "rawLine": f"{dnraw};{dept};{roles}",
         }
         state["last_csv_rows"].append(rec)
         state["csv_rows_by_dn"][dnraw].append(row_id)
         state["csv_choice_by_dn"].setdefault(dnraw, row_id)
+        csv_candidates.append({"rowId": row_id, "rec": rec, "user": user_payload})
 
         candidate = _mk_candidate(
             source="csv",
@@ -3329,15 +3631,81 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             business_role=br,
             roles=parsed_roles,
             raw=rec["rawLine"],
+            department=dept,
+            last_login=last_login,
         )
         state["ingest_sources"]["csv"].append(candidate)
-        state.setdefault("choice_by_displayName", {})
         state["choice_by_displayName"].setdefault(candidate["displayName"], candidate["candidateId"])
+
+    profile_rows = []
+    for u in existing_users_list:
+        profile_rows.append(
+            {
+                "department": (u.get("department") or "").strip(),
+                "groups": list(u.get("groups") or []),
+            }
+        )
+    for c in csv_candidates:
+        profile_rows.append(
+            {
+                "department": (c["user"].get("department") or "").strip(),
+                "groups": list(c["user"].get("groups") or []),
+            }
+        )
+    dept_profile = _build_dept_group_profile(profile_rows)
+
+    by_dn = defaultdict(list)
+    for c in csv_candidates:
+        dn_key = (c["user"].get("displayName") or "").strip().lower()
+        if dn_key:
+            by_dn[dn_key].append(c)
+
+    csv_dup_dn_rows = 0
+    for rows in by_dn.values():
+        if len(rows) > 1:
+            csv_dup_dn_rows += (len(rows) - 1)
+
+    taken_usernames = {str(u.get("username") or "").strip() for u in existing_users_list if u.get("username")}
+    new_users: List[Dict[str, Any]] = []
+    for _, rows in by_dn.items():
+        scored_rows = []
+        for item in rows:
+            score = _score_duplicate_candidate(item["user"], dept_profile)
+            scored_rows.append({**item, "score": score})
+        scored_rows.sort(key=lambda x: x["score"]["rank"], reverse=True)
+        winner = scored_rows[0]
+        winner_user = dict(winner["user"])
+
+        base = _slug_username(winner_user.get("displayName") or "")
+        uname = base
+        i = 2
+        while uname in taken_usernames:
+            uname = f"{base}{i}"
+            i += 1
+        taken_usernames.add(uname)
+        winner_user["username"] = uname
+        new_users.append(winner_user)
+
+        if len(scored_rows) > 1:
+            display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
+            state["choice_by_displayName"][display_name] = winner["rowId"]
+            state["duplicate_autoselect"][display_name] = {
+                "candidateId": winner["rowId"],
+                "reason": winner["score"]["reason"],
+                "alternatives": [
+                    {
+                        "candidateId": s["rowId"],
+                        "reason": s["score"]["reason"],
+                    }
+                    for s in scored_rows[1:]
+                ],
+            }
+        else:
+            display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
+            state["choice_by_displayName"].setdefault(display_name, winner["rowId"])
 
     # Merge with existing users - match by BOTH displayName AND username
     # When matching: REPLACE groups and department (not merge)
-    existing_users_list = state.get("last_extract", {}).get("users", [])
-    
     # Build dual indexes for matching
     existing_by_dn = {}
     existing_by_uname = {}
@@ -3407,6 +3775,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     rerun_auto_business_roles_after_connector(merged_users, only_depts=touched_depts)
 
     new_brs = sync_roles_from_users(merged_users)
+    csv_auto_resolved_duplicates = len(state.get("duplicate_autoselect") or {})
 
     state["last_ingest_stats"] = {
         "source": "csv",
@@ -3418,6 +3787,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         "missingDisplayName": csv_missing_displayname,
         "missingUsername": 0,
         "missingRoles": csv_missing_roles,
+        "autoResolvedDuplicateUsers": csv_auto_resolved_duplicates,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -3431,6 +3801,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
 
     rebuild_ingest_candidates()
     apply_duplicate_displayname_resolution()
+    state["last_rejects"] = csv_rejects
     state["mining_dirty"] = True
 
     return {
@@ -3439,6 +3810,8 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         "updatedUsers": updated_users,
         "totalUsers": len(merged_users),
         "rowsTotal": csv_rows_total,
+        "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
+        "autoResolvedDuplicateUsers": csv_auto_resolved_duplicates,
         "newBusinessRoles": new_brs,
     }
 

@@ -123,6 +123,9 @@ export const api = {
   roleMiningLast: () => request("/api/rolemining/last"),
 
   kpiDrilldown: (metric) => request(`/api/kpi/drilldown?metric=${encodeURIComponent(metric)}`),
+  dataQualityRuleSuggestions: () => request("/api/data-quality/rules/suggestions"),
+  applyDataQualityRuleSuggestion: (ruleId) =>
+    request(`/api/data-quality/rules/suggestions/${encodeURIComponent(ruleId)}/apply`, { method: "POST" }),
 
   kpi: () => request("/api/kpi"),
   aiDetectionRun: () => request("/api/ai-detection/run", { method: "POST" }),

@@ -178,6 +178,17 @@ def init_default_state():
         "ingest_sources": {},
         "ingest_candidates": [],
         "choice_by_displayName": {},
+        "duplicate_autoselect": {},
+        "dq_rules": {
+            "duplicate_resolution_order": [
+                "last_login",
+                "groups_count",
+                "dept_group_correlation",
+                "has_department",
+            ],
+            "reject_empty_groups": False,
+        },
+        "dq_feedback_events": [],
         "mining_dirty": True,
         "last_mining_params": {"n_clusters": None, "role_support": 0.6},
         "last_rejects": [],

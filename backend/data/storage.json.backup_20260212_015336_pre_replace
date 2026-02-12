@@ -1,0 +1,60 @@
+{
+  "connector": {
+    "server": "mock",
+    "bind_user": "",
+    "bind_password": "",
+    "base_dn": "",
+    "auth": "SIMPLE"
+  },
+  "last_extract": {
+    "ou": "",
+    "users": [],
+    "groups": [],
+    "ts": null
+  },
+  "last_mining": {
+    "clusters": [],
+    "matrix": {},
+    "kpi": {},
+    "ts": null
+  },
+  "logs": [],
+  "role_meta": {},
+  "business_roles": [],
+  "user_business_role": {},
+  "last_ingest_stats": {
+    "source": null,
+    "rowsTotal": 0,
+    "rowsKept": 0,
+    "duplicateDisplayName": 0,
+    "missingDepartment": 0,
+    "missingBusinessRole": 0,
+    "missingDisplayName": 0,
+    "missingUsername": 0,
+    "ts": null
+  },
+  "ingest_sources": {},
+  "ingest_candidates": [],
+  "choice_by_displayName": {},
+  "duplicate_autoselect": {},
+  "dq_rules": {
+    "duplicate_resolution_order": [
+      "dept_group_correlation",
+      "has_department",
+      "groups_count",
+      "last_login"
+    ],
+    "reject_empty_groups": false
+  },
+  "dq_feedback_events": [],
+  "mining_dirty": true,
+  "last_mining_params": {
+    "n_clusters": null,
+    "role_support": 0.6
+  },
+  "last_rejects": [],
+  "brdb_group_stats": {},
+  "brdb_token_stats": {},
+  "brdb_cache": {},
+  "brdb_ready": false
+}
