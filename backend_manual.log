@@ -1,28 +1,48 @@
-INFO:     Started server process [12314]
+INFO:     Started server process [14059]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:65413 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65414 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65421 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65422 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65425 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65426 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65431 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65436 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65439 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65442 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65454 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65456 - "GET /api/ml/patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65455 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65457 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65458 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65461 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65464 - "GET /api/ml/patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65471 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65472 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65473 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65478 - "POST /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65487 - "GET /api/ml/patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65489 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65488 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49594 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49595 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49612 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49613 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49614 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49615 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49618 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49626 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49629 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49633 - "GET /api/kpi HTTP/1.1" 200 OK
+[AI Detection] users_with_anomaly=980, total_users=4920, pct=19.92%
+INFO:     127.0.0.1:49645 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49644 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49647 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49646 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49648 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49654 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49651 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49659 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49660 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49663 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49667 - "DELETE /api/ml/patterns/4 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49673 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49675 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49676 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49679 - "POST /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49689 - "GET /api/ml/br-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49688 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49690 - "GET /api/ml/br-assignment-patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49693 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49696 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49699 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49702 - "GET /api/users?q=svc&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49707 - "GET /api/users?q=svc&limit=50&offset=0&type_q=Adm HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49711 - "GET /api/users?q=svc&limit=50&offset=0&type_q=Adm HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49714 - "GET /api/users?q=svc&limit=50&offset=0&type_q=int HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49717 - "GET /api/users?q=svc&limit=50&offset=0&type_q=ext HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49720 - "GET /api/users?q=svc&limit=50&offset=0&type_q=ser HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49723 - "GET /api/users?q=adm&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49727 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49730 - "GET /api/kpi HTTP/1.1" 200 OK
+[AI Detection] users_with_anomaly=980, total_users=4920, pct=19.92%
+INFO:     127.0.0.1:49733 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49736 - "GET /api/ai-detection/last HTTP/1.1" 200 OK

@@ -822,6 +822,9 @@ def classify_account(
             predicted_type, confidence, method = ml_engine.classify_account(
                 display_name, ou, employee_type, confidence_threshold=0.75, attributes=attributes
             )
+            # Custom rules have top priority and must be applied immediately.
+            if method == "custom_rule":
+                return predicted_type
             if method == "ml" and confidence >= 0.75:
                 return predicted_type
         except Exception:
@@ -855,7 +858,8 @@ def _jaccard(a: set[str], b: set[str]) -> float:
         return 1.0
     return len(a & b) / max(1, len(a | b))
 
-BR_ASSIGNMENT_RULE_WEIGHT = 1.75
+BR_ASSIGNMENT_RULE_WEIGHT = 7.5
+BR_FIELD_RULE_WEIGHT = 8.5
 
 
 def _br_assignment_rule_scores_for_user(user: Dict[str, Any]) -> Dict[str, float]:
@@ -863,8 +867,9 @@ def _br_assignment_rule_scores_for_user(user: Dict[str, Any]) -> Dict[str, float
     Score business-role boosts from regex rules applied on group names.
     The higher the score, the stronger the influence in automatic assignment.
     """
-    rules = list(state.get("br_assignment_pattern_rules") or [])
-    if not rules:
+    group_rules = list(state.get("br_assignment_pattern_rules") or [])
+    field_rules = list(state.get("br_pattern_rules") or [])
+    if not group_rules and not field_rules:
         return {}
 
     groups = [str(g).strip() for g in (user.get("groups") or []) if str(g).strip()]
@@ -874,7 +879,8 @@ def _br_assignment_rule_scores_for_user(user: Dict[str, Any]) -> Dict[str, float
 
     scores: Dict[str, float] = defaultdict(float)
 
-    for rule in rules:
+    # Form 3: regex on group names.
+    for rule in group_rules:
         business_role = (rule.get("business_role") or "").strip()
         regex = (rule.get("regex") or "").strip()
         legacy_role = (rule.get("role") or "").strip()
@@ -898,6 +904,30 @@ def _br_assignment_rule_scores_for_user(user: Dict[str, Any]) -> Dict[str, float
 
         boost = BR_ASSIGNMENT_RULE_WEIGHT * (1.0 + 0.2 * (match_count - 1))
         scores[business_role] += boost
+
+    # Form 2: business role + field + regex, evaluated on user field value.
+    for rule in field_rules:
+        business_role = (rule.get("business_role") or "").strip()
+        field = (rule.get("field") or "").strip()
+        regex = (rule.get("regex") or "").strip()
+        if not business_role or not field or not regex:
+            continue
+
+        raw_val = user.get(field)
+        if raw_val is None:
+            continue
+        if isinstance(raw_val, list):
+            value = " ".join([str(x) for x in raw_val])
+        else:
+            value = str(raw_val)
+        if not value.strip():
+            continue
+
+        try:
+            if re.search(regex, value, re.IGNORECASE):
+                scores[business_role] += BR_FIELD_RULE_WEIGHT
+        except re.error:
+            continue
 
     return dict(scores)
 
@@ -1007,7 +1037,13 @@ def apply_department_mapping(users: List[Dict[str, Any]], only_depts: Optional[s
                 if existing_br and existing_br != "Unassigned":
                     user_br[uname] = existing_br
                 else:
-                    user_br[uname] = chosen_role
+                    user_rule_scores = _br_assignment_rule_scores_for_user(u)
+                    if user_rule_scores:
+                        boosted_role = max(user_rule_scores.items(), key=lambda x: x[1])[0]
+                        _ensure_role_registered(boosted_role)
+                        user_br[uname] = boosted_role
+                    else:
+                        user_br[uname] = chosen_role
 
     # Apply BR assignment rules also to users without department mapping.
     for u in (users or []):
@@ -1764,6 +1800,17 @@ def recalculate_assignments_background(trigger: str, actor: str) -> None:
         users = state.get("last_extract", {}).get("users") or []
         if not users:
             return
+        # Recompute account types so newly added pattern rules are applied to existing users.
+        for u in users:
+            dn = str(u.get("displayName") or u.get("username") or "")
+            dept = str(u.get("department") or "")
+            employee_type = str(u.get("employeeType") or u.get("employee_type") or "")
+            try:
+                new_type = classify_account(dn, dept, employee_type, use_ml=True, attributes=u)
+                if new_type:
+                    u["accountType"] = new_type
+            except Exception:
+                continue
         rerun_auto_business_roles_after_connector(users, only_depts=None)
         sync_roles_from_users(users)
         state["mining_dirty"] = True
@@ -4097,7 +4144,13 @@ def apply_department_mapping_if_missing(users: list[dict]) -> None:
             if (u.get("businessRole") or "").strip():
                 continue
 
-            state["user_business_role"][uname] = chosen_role
+            user_rule_scores = _br_assignment_rule_scores_for_user(u)
+            if user_rule_scores:
+                boosted_role = max(user_rule_scores.items(), key=lambda x: x[1])[0]
+                _ensure_role_registered(boosted_role)
+                state["user_business_role"][uname] = boosted_role
+            else:
+                state["user_business_role"][uname] = chosen_role
 
     # Also evaluate rule-based assignment for users without department.
     state.setdefault("user_business_role", {})
@@ -5496,7 +5549,7 @@ def add_pattern(body: PatternRuleRequest, background_tasks: BackgroundTasks, use
 
 
 @app.delete("/api/ml/patterns/{index}")
-def delete_pattern_endpoint(index: int, username: str = Depends(require_auth)):
+def delete_pattern_endpoint(index: int, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
     """Delete a custom pattern by index."""
     result = ml_engine.delete_pattern(index)
     if not result.get("success"):
@@ -5509,6 +5562,7 @@ def delete_pattern_endpoint(index: int, username: str = Depends(require_auth)):
         entity=str(index),
         details={},
     )
+    background_tasks.add_task(recalculate_assignments_background, "account-pattern-rule-deleted", username)
     return result
 
 
@@ -5557,7 +5611,7 @@ def add_br_pattern(body: BrPatternRuleRequest, background_tasks: BackgroundTasks
 
 
 @app.delete("/api/ml/br-patterns/{index}")
-def delete_br_pattern(index: int, username: str = Depends(require_auth)):
+def delete_br_pattern(index: int, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
     rules = list(state.setdefault("br_pattern_rules", []))
     if index < 0 or index >= len(rules):
         raise HTTPException(status_code=400, detail="Invalid index")
@@ -5572,6 +5626,7 @@ def delete_br_pattern(index: int, username: str = Depends(require_auth)):
         entity=str(index),
         details={},
     )
+    background_tasks.add_task(recalculate_assignments_background, "br-pattern-rule-deleted", username)
     return {"success": True, "removed": removed, "total_custom_rules": len(rules)}
 
 
@@ -5619,7 +5674,7 @@ def add_br_assignment_pattern(body: BrAssignmentPatternRuleRequest, background_t
 
 
 @app.delete("/api/ml/br-assignment-patterns/{index}")
-def delete_br_assignment_pattern(index: int, username: str = Depends(require_auth)):
+def delete_br_assignment_pattern(index: int, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
     rules = list(state.setdefault("br_assignment_pattern_rules", []))
     if index < 0 or index >= len(rules):
         raise HTTPException(status_code=400, detail="Invalid index")
@@ -5634,6 +5689,7 @@ def delete_br_assignment_pattern(index: int, username: str = Depends(require_aut
         entity=str(index),
         details={},
     )
+    background_tasks.add_task(recalculate_assignments_background, "br-assignment-rule-deleted", username)
     return {"success": True, "removed": removed, "total_custom_rules": len(rules)}
 
 

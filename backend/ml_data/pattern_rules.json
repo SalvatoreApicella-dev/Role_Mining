@@ -6,12 +6,6 @@
     "created_at": "2026-02-10T11:22:04.979582"
   },
   {
-    "account_type": "Service",
-    "field": "display_name",
-    "regex": "^User+",
-    "created_at": "2026-02-10T14:31:52.475877"
-  },
-  {
     "account_type": "Administrative",
     "field": "display_name",
     "regex": "^adm+",
@@ -22,5 +16,17 @@
     "field": "display_name",
     "regex": "test",
     "created_at": "2026-02-12T11:32:49.323548"
+  },
+  {
+    "account_type": "Service",
+    "field": "displayName",
+    "regex": "^svc.*",
+    "created_at": "2026-02-12T12:19:47.152452"
+  },
+  {
+    "account_type": "Service",
+    "field": "company",
+    "regex": "^svc.*",
+    "created_at": "2026-02-12T12:23:34.672259"
   }
 ]
