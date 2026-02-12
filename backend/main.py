@@ -246,11 +246,14 @@ def build_ai_detection_items(matrix: dict) -> list[dict]:
 # ---------------------------------------------------------------------------
 ADMIN_MARKERS = {'admin', 'administrator', 'superuser', 'root', 'owner',
                  'elevated', 'privileged', 'sudo', 'godmode'}
+SERVICE_ACCOUNT_MARKERS = {"svc", "service", "serviceaccount", "service-account"}
 RESTRICTED_ACCOUNT_TYPES = {
     'BlueCollar':  ADMIN_MARKERS,
     'External':    ADMIN_MARKERS | {'internal', 'staff', 'employee', 'hr',
                                      'payroll', 'finance', 'accounting'},
     'Contractor':  ADMIN_MARKERS | {'internal', 'staff'},
+    # LLM guardrail: service/svc accounts should not carry administrative access.
+    'Service':     ADMIN_MARKERS,
 }
 PEER_ANOMALY_THRESHOLD = 0.10   # flag if < 10% of peers have the group
 DEPT_ANOMALY_THRESHOLD = 0.05   # flag if < 5% of dept members have group
@@ -330,6 +333,24 @@ def _check_type_violation(group: str, account_type: str) -> str:
     return ""
 
 
+def _is_service_identity(u_data: dict) -> bool:
+    acct_type = str(u_data.get("accountType") or "").strip().lower()
+    if acct_type == "service":
+        return True
+    dn = str(u_data.get("displayName") or "").strip().lower()
+    uname = str(u_data.get("username") or "").strip().lower()
+    dn_toks = set(_tokens(dn))
+    un_toks = set(_tokens(uname))
+    if dn.startswith("svc") or uname.startswith("svc"):
+        return True
+    return bool((dn_toks | un_toks) & SERVICE_ACCOUNT_MARKERS)
+
+
+def _is_admin_group_name(group: str) -> bool:
+    toks = set(_tokens(group))
+    return bool(toks & ADMIN_MARKERS)
+
+
 def run_smart_ai_detection(users: list, matrix: dict) -> dict:
     """On-demand smart redundancy detection.
     Combines:
@@ -343,6 +364,10 @@ def run_smart_ai_detection(users: list, matrix: dict) -> dict:
     kb_policies = kb.get("account_type_policies", {})
     kb_role_defs = kb.get("role_definitions", {})
     kb_dept_norms = kb.get("department_norms", {})
+    # Inject LLM guardrail for Service/SVC accounts.
+    service_forbidden = set(kb_policies.get("Service", []) or [])
+    service_forbidden.update(list(ADMIN_MARKERS))
+    kb_policies["Service"] = sorted(service_forbidden)
 
     # Index users by username for O(1) lookup
     user_by_name: dict[str, dict] = {}
@@ -366,6 +391,7 @@ def run_smart_ai_detection(users: list, matrix: dict) -> dict:
         br = (u_data.get("businessRole") or "Unassigned").strip()
         dept = (u_data.get("department") or "Unknown").strip()
         acct_type = (u_data.get("accountType") or "").strip()
+        is_service_identity = _is_service_identity(u_data)
 
         peer_freqs = role_freq.get(br, {})
         dept_freqs = dept_freq.get(dept, {})
@@ -421,6 +447,11 @@ def run_smart_ai_detection(users: list, matrix: dict) -> dict:
             if any(token in g for token in forbidden):
                  # re-check hardcoded function too just in case
                  pass
+
+            # B2) Service/SVC + admin group guardrail (high confidence).
+            if is_service_identity and _is_admin_group_name(g):
+                reasons.append("LLM Policy: Service/SVC account with administrative group is high-risk")
+                confidence = max(confidence, 0.99)
             
             # (Merged policy check logic)
             violation = _check_type_violation(g, acct_type)
@@ -1821,6 +1852,26 @@ def recalculate_assignments_background(trigger: str, actor: str) -> None:
     except Exception as exc:
         log("ERROR", f"Background assignment recalculation failed (trigger={trigger}, by={actor}): {exc}")
 
+
+def refresh_ai_detection_background(trigger: str, actor: str) -> None:
+    """
+    Recompute mining (if dirty) and AI detection in background after imports.
+    """
+    try:
+        ensure_last_mining(None)  # sync mining inside this background worker
+        last = state.get("last_mining") or {}
+        matrix = last.get("matrix") or {}
+        if not matrix:
+            return
+        users = active_users(state.get("last_extract", {}).get("users") or [])
+        result = run_smart_ai_detection(users, matrix)
+        state["last_ai_detection"] = result
+        RESPONSE_CACHE.invalidate("kpi")
+        state.save()
+        log("INFO", f"Background AI detection refresh completed (trigger={trigger}, by={actor})")
+    except Exception as exc:
+        log("ERROR", f"Background AI detection refresh failed (trigger={trigger}, by={actor}): {exc}")
+
 def active_users(users: list[dict]) -> list[dict]:
     return [u for u in (users or []) if not u.get("excluded")]
 
@@ -2911,7 +2962,7 @@ def set_connector(cfg: ConnectorConfig, username: str = Depends(require_auth)):
 
 
 @app.post("/api/ad/extract", response_model=ExtractResponse)
-def extract(req: ExtractRequest, username: str = Depends(require_auth)):
+def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
 
     
     users = extract_from_ldap(req.ou)
@@ -2950,6 +3001,7 @@ def extract(req: ExtractRequest, username: str = Depends(require_auth)):
 
     rebuild_ingest_candidates()
     apply_duplicate_displayname_resolution()
+    background_tasks.add_task(refresh_ai_detection_background, "ad-import", username)
 
     return ExtractResponse(
         ou=state["last_extract"]["ou"],
@@ -4172,7 +4224,7 @@ def apply_department_mapping_if_missing(users: list[dict]) -> None:
 
 
 @app.post("/api/import/csv")
-async def import_csv(file: UploadFile = File(...), username: str = Depends(require_auth)):
+async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundTasks = None, username: str = Depends(require_auth)):
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="File vuoto")
@@ -4571,6 +4623,8 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     apply_duplicate_displayname_resolution()
     state["last_rejects"] = csv_rejects
     state["mining_dirty"] = True
+    if background_tasks:
+        background_tasks.add_task(refresh_ai_detection_background, "csv-import", username)
 
     return {
         "ok": True,
