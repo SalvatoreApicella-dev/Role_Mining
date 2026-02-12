@@ -26,3 +26,21 @@ INFO:     127.0.0.1:52140 - "POST /api/ad/extract HTTP/1.1" 200 OK
 INFO:     127.0.0.1:52157 - "POST /api/ad/extract HTTP/1.1" 200 OK
 [AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
 [AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
+INFO:     127.0.0.1:54681 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54682 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54683 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54686 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54693 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54696 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54699 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55311 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55312 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55313 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55314 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55317 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55320 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55323 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56678 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56681 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56704 - "GET /api/users?q=alice.testa&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56735 - "GET /api/users?q=rinaldi&limit=50&offset=0 HTTP/1.1" 200 OK
