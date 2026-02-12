@@ -1672,6 +1672,15 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
             by_displayname[dn] = u
     
     previous_groups = set(state["last_extract"].get("groups") or [])
+    previous_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in (base_users or []):
+        uname0 = str(u.get("username") or "").strip()
+        if not uname0:
+            continue
+        for g0 in (u.get("groups") or []):
+            gname = str(g0 or "").strip()
+            if gname:
+                previous_group_members[gname].add(uname0)
 
     clean_new_users: List[Dict[str, Any]] = []
     updated_count = 0
@@ -1706,13 +1715,15 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
         
         if existing_user:
             # REPLACE existing user with new data from import
+            prev_username_for_user = str(existing_user.get("username") or "").strip()
+            prev_display_for_user = str(existing_user.get("displayName") or "").strip()
+            prev_department_for_user = str(existing_user.get("department") or "").strip()
+            prev_business_role_for_user = str(existing_user.get("businessRole") or "").strip()
             prev_groups_for_user = sorted(set(existing_user.get("groups") or []))
             existing_user["displayName"] = nu["displayName"]
             existing_user["department"] = nu["department"]
             # REPLACE groups (not merge)
             existing_user["groups"] = nu.get("groups") or []
-            if prev_groups_for_user != sorted(set(existing_user.get("groups") or [])):
-                updated_groups_count += 1
             if nu.get("businessRole"):
                 existing_user["businessRole"] = nu["businessRole"]
             # Update username if it changed (displayName matched but username different)
@@ -1723,7 +1734,16 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
                 if old_uname in by_username:
                     del by_username[old_uname]
                 by_username[uname] = existing_user
-            updated_count += 1
+
+            changed = (
+                prev_username_for_user != str(existing_user.get("username") or "").strip()
+                or prev_display_for_user != str(existing_user.get("displayName") or "").strip()
+                or prev_department_for_user != str(existing_user.get("department") or "").strip()
+                or prev_business_role_for_user != str(existing_user.get("businessRole") or "").strip()
+                or prev_groups_for_user != sorted(set(existing_user.get("groups") or []))
+            )
+            if changed:
+                updated_count += 1
         else:
             # New user - add to base
             base_users.append(nu)
@@ -1741,6 +1761,23 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
     # Recompute global groups list
     current_groups = recompute_groups_from_users(base_users)
     state["last_extract"]["groups"] = current_groups
+
+    current_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in (base_users or []):
+        uname1 = str(u.get("username") or "").strip()
+        if not uname1:
+            continue
+        for g1 in (u.get("groups") or []):
+            gname = str(g1 or "").strip()
+            if gname:
+                current_group_members[gname].add(uname1)
+
+    common_groups = previous_groups & set(current_groups)
+    updated_groups_count = sum(
+        1 for g in common_groups
+        if previous_group_members.get(g, set()) != current_group_members.get(g, set())
+    )
+
     state["mining_dirty"] = True
     log("INFO", f"Merge complete. Updated: {updated_count}, Added: {added_count}, Total: {len(base_users)}")
     return {
