@@ -37,7 +37,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="/Users/salvo/Dev/Role_Mining/backend/.venv"
+VIRTUAL_ENV="/Users/salvo/Development/Role_Mining/backend/.venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

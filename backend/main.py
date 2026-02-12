@@ -741,7 +741,13 @@ def ensure_role_registered(role: str) -> None:
 DEPT_MERGE_JACCARD = 0.55  # soglia similarità gruppi dept vs BR template
 
 
-def classify_account(display_name: str, ou: str, employee_type: str, use_ml: bool = True) -> str:
+def classify_account(
+    display_name: str,
+    ou: str,
+    employee_type: str,
+    use_ml: bool = True,
+    attributes: Optional[Dict[str, Any]] = None,
+) -> str:
     """
     Classify account type using ML (if available) with rule-based fallback.
     
@@ -752,7 +758,7 @@ def classify_account(display_name: str, ou: str, employee_type: str, use_ml: boo
     if use_ml:
         try:
             predicted_type, confidence, method = ml_engine.classify_account(
-                display_name, ou, employee_type, confidence_threshold=0.75
+                display_name, ou, employee_type, confidence_threshold=0.75, attributes=attributes
             )
             if method == "ml" and confidence >= 0.75:
                 return predicted_type
@@ -1920,7 +1926,11 @@ def run_role_mining(
 
     # scegli k
     auto_k = max(2, int(round(np.sqrt(len(usernames)))))
-    k = int(n_clusters) if n_clusters else min(8, auto_k, len(usernames))
+    if n_clusters:
+        # Safety: never ask KMeans for more clusters than available samples
+        k = max(2, min(int(n_clusters), len(usernames)))
+    else:
+        k = min(8, auto_k, len(usernames))
 
     # clustering su SVD + MiniBatchKMeans (O(N) complexity)
     # SVD reduction
@@ -1978,6 +1988,7 @@ def run_role_mining(
 
 
 def _mining_worker(n_clusters, role_support):
+    ok = False
     try:
         users = active_users(state.get("last_extract", {}).get("users") or [])
         res = run_role_mining(users, n_clusters=n_clusters, role_support=role_support)
@@ -2001,12 +2012,14 @@ def _mining_worker(n_clusters, role_support):
             },
             "mining_dirty": False
         })
+        ok = True
     except Exception as e:
         print(f"[Mining Worker] Error: {e}")
         import traceback
         traceback.print_exc()
     finally:
         state["mining_processing"] = False
+        state["mining_status"] = "ready" if ok else "idle"
 
 def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
     """
@@ -2020,15 +2033,37 @@ def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
     matrix = last_mining.get("matrix") or {}
 
     stale = bool(extract_ts and (not mining_ts or str(extract_ts) > str(mining_ts)))
-    
+
+    # Recovery for stale persisted lock (e.g. crash/restart while mining_processing=True)
     if state.get("mining_processing"):
-        return # Already running
+        started_at = state.get("mining_started_at")
+        lock_stale = False
+        if started_at:
+            try:
+                started_dt = datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
+                if started_dt.tzinfo is None:
+                    started_dt = started_dt.replace(tzinfo=timezone.utc)
+                lock_stale = (datetime.now(timezone.utc) - started_dt).total_seconds() > 300
+            except Exception:
+                # Unknown timestamp format -> treat as stale to unblock system.
+                lock_stale = True
+        else:
+            # No timestamp and no matrix means lock is likely stale
+            lock_stale = not bool(matrix)
+
+        if not lock_stale:
+            return  # Already running
+
+        state["mining_processing"] = False
+        state["mining_status"] = "idle"
 
     if not state.get("mining_dirty") and matrix and not stale:
         return
 
     # Trigger background
     state["mining_processing"] = True
+    state["mining_status"] = "running"
+    state["mining_started_at"] = datetime.now(timezone.utc).isoformat()
     params = state.get("last_mining_params") or {}
     n_clusters = params.get("n_clusters", None)
     role_support = params.get("role_support", 0.6)
@@ -2417,7 +2452,23 @@ def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)
         kpi_data["usersWithRedundancy"] = stats.get("usersWithAnomaly", 0)
 
     if not kpi_data:
-        raise HTTPException(status_code=400, detail="Nessun risultato: dataset vuoto o role mining non eseguibile")
+        # Frontend-safe fallback: return empty KPI instead of 400.
+        # This prevents dashboard hard-fail when dataset is not loaded yet.
+        kpi_data = {
+            "totalUsers": 0,
+            "modelQuality": 0,
+            "orphanGroupsCount": 0,
+            "overprivilegedCount": 0,
+            "zeroGroupCount": 0,
+            "staleAccountCount": 0,
+            "clusterQuality": 0,
+            "clusteringQuality": 0,
+            "aiDetection": 0,
+            "redundantAssignments": 0,
+            "totalAssignments": 0,
+            "usersWithRedundancy": 0,
+            "roleCoverage": 0,
+        }
     
     # Cache KPI data
     RESPONSE_CACHE.set(cache_key, kpi_data, CACHE_TTL_KPI)
@@ -2509,27 +2560,92 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         missing_dept = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("department") or "").strip()]
         missing_br = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("businessRole") or "").strip()]
         
-        # Conflicts from ingest
+        # Conflicts from ingest (legacy source)
         conflicts = state.get("last_ingest_conflicts") or {}
         duplicates_raw = conflicts.get("duplicates") or []
         duplicates = []
         for d in duplicates_raw:
             if isinstance(d, str):
-                # Cerchiamo l'utente nel dataset per avere il displayName
                 u_obj = next((u for u in users if u["username"] == d), None)
                 if u_obj:
                     duplicates.append({"username": d, "displayName": u_obj.get("displayName") or u_obj.get("display_name") or d})
                 else:
                     duplicates.append({"username": d, "displayName": d})
             else:
-                # Se è già un oggetto, verifichiamo displayName
                 d["displayName"] = d.get("displayName") or d.get("display_name") or d.get("username")
                 duplicates.append(d)
+
+        # Primary source: detect duplicate displayName directly from current dataset
+        by_display_name = defaultdict(list)
+        for u in users:
+            dn = (u.get("displayName") or u.get("display_name") or "").strip()
+            if dn:
+                by_display_name[dn].append(u)
+
+        detected_duplicates = []
+        for dn, rows in by_display_name.items():
+            if len(rows) > 1:
+                for u in rows:
+                    detected_duplicates.append({
+                        "username": u.get("username"),
+                        "displayName": dn
+                    })
+
+        # Merge + dedupe by (username, displayName)
+        merged = {}
+        for d in duplicates + detected_duplicates:
+            k = (d.get("username"), d.get("displayName"))
+            merged[k] = {
+                "username": d.get("username"),
+                "displayName": d.get("displayName")
+            }
+        duplicates = list(merged.values())
+
+        # Ingest candidates can contain duplicate displayName rows even if users were later deduped.
+        # Include them so Cluster Quality reflects source-data issues.
+        ingest_candidates = state.get("ingest_candidates") or []
+        by_dn_candidates = defaultdict(list)
+        for c in ingest_candidates:
+            dn = (c.get("displayName") or "").strip()
+            if dn:
+                by_dn_candidates[dn].append(c)
+
+        candidate_dup_items = []
+        candidate_dup_extra_rows = 0
+        for dn, rows in by_dn_candidates.items():
+            if len(rows) > 1:
+                candidate_dup_extra_rows += (len(rows) - 1)
+                for c in rows:
+                    candidate_dup_items.append({
+                        "username": c.get("candidateId") or c.get("source"),
+                        "displayName": dn,
+                    })
+
+        # Also account for duplicate rejects from ingest filtering
+        rejects = state.get("last_rejects") or []
+        reject_dup_items = []
+        for r in rejects:
+            reason = str((r or {}).get("reason") or "")
+            if "Duplicate displayName" in reason:
+                u = (r or {}).get("user") or {}
+                reject_dup_items.append({
+                    "username": u.get("username"),
+                    "displayName": u.get("displayName") or u.get("display_name") or u.get("username"),
+                })
+
+        # Merge all duplicate evidences for drilldown list
+        all_dup = {}
+        for d in duplicates + candidate_dup_items + reject_dup_items:
+            k = (d.get("username"), d.get("displayName"))
+            all_dup[k] = {"username": d.get("username"), "displayName": d.get("displayName")}
+        duplicates = list(all_dup.values())
 
         # Merging stats to reflect calculation on the actual displayed data
         stats = ingest.copy()
         stats["rowsTotal"] = len(users)
-        stats["duplicateDisplayName"] = len(duplicates)
+        # Keep ingest duplicate metric semantics (extra duplicate rows), but never hide detected duplicates.
+        stats_dup = int(ingest.get("duplicateDisplayName") or 0)
+        stats["duplicateDisplayName"] = max(stats_dup, candidate_dup_extra_rows, len(duplicates))
         stats["missingDepartment"] = len(missing_dept)
         stats["missingBusinessRole"] = len(missing_br)
 
@@ -3478,9 +3594,9 @@ def brdb_status_api(username: str = Depends(require_auth)):
     Ritorna lo stato del calcolo BRDB (background).
     """
     return {
-        "calculated": state["brdb_calculated"],
-        "min_confidence": state["brdb_min_confidence"],
-        "last_update": state["brdb_last_update"]
+        "calculated": state.get("brdb_calculated", False),
+        "min_confidence": state.get("brdb_min_confidence", BRDB_MIN_CONF),
+        "last_update": state.get("brdb_last_update")
     }
 
 @app.get("/api/ml/status")

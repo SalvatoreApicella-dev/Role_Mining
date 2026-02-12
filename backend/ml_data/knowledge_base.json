@@ -1,63 +1,926 @@
 {
-    "redundancy_rules": {
-        "G-Admin-All": [
-            "G-Admin-Read",
-            "G-Admin-Write"
-        ],
-        "Azure_All": [
-            "Azure_1",
-            "Azure_Read",
-            "Azure_Write"
-        ],
-        "AWS_FullAccess": [
-            "AWS_ReadOnlyAccess",
-            "AWS_PowerUserAccess"
-        ],
-        "GitLab_Owner": [
-            "GitLab_Developer",
-            "GitLab_Maintainer",
-            "GitLab_Reporter",
-            "GitLab_Guest"
-        ]
-    },
-    "hierarchy_patterns": [
-        {
-            "root": "_Admin",
-            "supersedes": [
-                "_Read",
-                "_Write",
-                "_View",
-                "_List",
-                "_User"
-            ]
-        },
-        {
-            "root": "_Full",
-            "supersedes": [
-                "_Read",
-                "_Write",
-                "_View",
-                "_List",
-                "_User"
-            ]
-        },
-        {
-            "root": "_Write",
-            "supersedes": [
-                "_Read",
-                "_View",
-                "_List"
-            ]
-        },
-        {
-            "root": "_All",
-            "supersedes": [
-                "_1",
-                "_2",
-                "_3",
-                "_Read",
-                "_View"
-            ]
-        }
+  "metadata": {
+    "version": "2.0-enterprise-it",
+    "generated_at": "2026-02-11T23:53:29.075235+00:00",
+    "description": "Enterprise IT knowledge base for redundancy and least-privilege detection",
+    "source": "Synthetic AD-like enterprise dataset"
+  },
+  "redundancy_rules": {
+    "SYS_JIRA_ALL": [
+      "SYS_JIRA_ADMIN",
+      "SYS_JIRA_WRITE",
+      "SYS_JIRA_READ",
+      "SYS_JIRA_VIEW"
+    ],
+    "SYS_JIRA_ADMIN": [
+      "SYS_JIRA_WRITE",
+      "SYS_JIRA_READ",
+      "SYS_JIRA_VIEW"
+    ],
+    "SYS_JIRA_WRITE": [
+      "SYS_JIRA_READ",
+      "SYS_JIRA_VIEW"
+    ],
+    "SYS_JIRA_READ": [
+      "SYS_JIRA_VIEW"
+    ],
+    "SYS_CONFLUENCE_ALL": [
+      "SYS_CONFLUENCE_ADMIN",
+      "SYS_CONFLUENCE_WRITE",
+      "SYS_CONFLUENCE_READ",
+      "SYS_CONFLUENCE_VIEW"
+    ],
+    "SYS_CONFLUENCE_ADMIN": [
+      "SYS_CONFLUENCE_WRITE",
+      "SYS_CONFLUENCE_READ",
+      "SYS_CONFLUENCE_VIEW"
+    ],
+    "SYS_CONFLUENCE_WRITE": [
+      "SYS_CONFLUENCE_READ",
+      "SYS_CONFLUENCE_VIEW"
+    ],
+    "SYS_CONFLUENCE_READ": [
+      "SYS_CONFLUENCE_VIEW"
+    ],
+    "SYS_GITLAB_ALL": [
+      "SYS_GITLAB_ADMIN",
+      "SYS_GITLAB_WRITE",
+      "SYS_GITLAB_READ",
+      "SYS_GITLAB_VIEW"
+    ],
+    "SYS_GITLAB_ADMIN": [
+      "SYS_GITLAB_WRITE",
+      "SYS_GITLAB_READ",
+      "SYS_GITLAB_VIEW"
+    ],
+    "SYS_GITLAB_WRITE": [
+      "SYS_GITLAB_READ",
+      "SYS_GITLAB_VIEW"
+    ],
+    "SYS_GITLAB_READ": [
+      "SYS_GITLAB_VIEW"
+    ],
+    "SYS_GITHUB_ALL": [
+      "SYS_GITHUB_ADMIN",
+      "SYS_GITHUB_WRITE",
+      "SYS_GITHUB_READ",
+      "SYS_GITHUB_VIEW"
+    ],
+    "SYS_GITHUB_ADMIN": [
+      "SYS_GITHUB_WRITE",
+      "SYS_GITHUB_READ",
+      "SYS_GITHUB_VIEW"
+    ],
+    "SYS_GITHUB_WRITE": [
+      "SYS_GITHUB_READ",
+      "SYS_GITHUB_VIEW"
+    ],
+    "SYS_GITHUB_READ": [
+      "SYS_GITHUB_VIEW"
+    ],
+    "SYS_ARGOCD_ALL": [
+      "SYS_ARGOCD_ADMIN",
+      "SYS_ARGOCD_WRITE",
+      "SYS_ARGOCD_READ",
+      "SYS_ARGOCD_VIEW"
+    ],
+    "SYS_ARGOCD_ADMIN": [
+      "SYS_ARGOCD_WRITE",
+      "SYS_ARGOCD_READ",
+      "SYS_ARGOCD_VIEW"
+    ],
+    "SYS_ARGOCD_WRITE": [
+      "SYS_ARGOCD_READ",
+      "SYS_ARGOCD_VIEW"
+    ],
+    "SYS_ARGOCD_READ": [
+      "SYS_ARGOCD_VIEW"
+    ],
+    "SYS_K8S_ALL": [
+      "SYS_K8S_ADMIN",
+      "SYS_K8S_WRITE",
+      "SYS_K8S_READ",
+      "SYS_K8S_VIEW"
+    ],
+    "SYS_K8S_ADMIN": [
+      "SYS_K8S_WRITE",
+      "SYS_K8S_READ",
+      "SYS_K8S_VIEW"
+    ],
+    "SYS_K8S_WRITE": [
+      "SYS_K8S_READ",
+      "SYS_K8S_VIEW"
+    ],
+    "SYS_K8S_READ": [
+      "SYS_K8S_VIEW"
+    ],
+    "SYS_AWS_ALL": [
+      "SYS_AWS_ADMIN",
+      "SYS_AWS_WRITE",
+      "SYS_AWS_READ",
+      "SYS_AWS_VIEW"
+    ],
+    "SYS_AWS_ADMIN": [
+      "SYS_AWS_WRITE",
+      "SYS_AWS_READ",
+      "SYS_AWS_VIEW"
+    ],
+    "SYS_AWS_WRITE": [
+      "SYS_AWS_READ",
+      "SYS_AWS_VIEW"
+    ],
+    "SYS_AWS_READ": [
+      "SYS_AWS_VIEW"
+    ],
+    "SYS_AZURE_ALL": [
+      "SYS_AZURE_ADMIN",
+      "SYS_AZURE_WRITE",
+      "SYS_AZURE_READ",
+      "SYS_AZURE_VIEW"
+    ],
+    "SYS_AZURE_ADMIN": [
+      "SYS_AZURE_WRITE",
+      "SYS_AZURE_READ",
+      "SYS_AZURE_VIEW"
+    ],
+    "SYS_AZURE_WRITE": [
+      "SYS_AZURE_READ",
+      "SYS_AZURE_VIEW"
+    ],
+    "SYS_AZURE_READ": [
+      "SYS_AZURE_VIEW"
+    ],
+    "SYS_GCP_ALL": [
+      "SYS_GCP_ADMIN",
+      "SYS_GCP_WRITE",
+      "SYS_GCP_READ",
+      "SYS_GCP_VIEW"
+    ],
+    "SYS_GCP_ADMIN": [
+      "SYS_GCP_WRITE",
+      "SYS_GCP_READ",
+      "SYS_GCP_VIEW"
+    ],
+    "SYS_GCP_WRITE": [
+      "SYS_GCP_READ",
+      "SYS_GCP_VIEW"
+    ],
+    "SYS_GCP_READ": [
+      "SYS_GCP_VIEW"
+    ],
+    "SYS_SERVICENOW_ALL": [
+      "SYS_SERVICENOW_ADMIN",
+      "SYS_SERVICENOW_WRITE",
+      "SYS_SERVICENOW_READ",
+      "SYS_SERVICENOW_VIEW"
+    ],
+    "SYS_SERVICENOW_ADMIN": [
+      "SYS_SERVICENOW_WRITE",
+      "SYS_SERVICENOW_READ",
+      "SYS_SERVICENOW_VIEW"
+    ],
+    "SYS_SERVICENOW_WRITE": [
+      "SYS_SERVICENOW_READ",
+      "SYS_SERVICENOW_VIEW"
+    ],
+    "SYS_SERVICENOW_READ": [
+      "SYS_SERVICENOW_VIEW"
+    ],
+    "SYS_OKTA_ALL": [
+      "SYS_OKTA_ADMIN",
+      "SYS_OKTA_WRITE",
+      "SYS_OKTA_READ",
+      "SYS_OKTA_VIEW"
+    ],
+    "SYS_OKTA_ADMIN": [
+      "SYS_OKTA_WRITE",
+      "SYS_OKTA_READ",
+      "SYS_OKTA_VIEW"
+    ],
+    "SYS_OKTA_WRITE": [
+      "SYS_OKTA_READ",
+      "SYS_OKTA_VIEW"
+    ],
+    "SYS_OKTA_READ": [
+      "SYS_OKTA_VIEW"
+    ],
+    "SYS_WORKDAY_ALL": [
+      "SYS_WORKDAY_ADMIN",
+      "SYS_WORKDAY_WRITE",
+      "SYS_WORKDAY_READ",
+      "SYS_WORKDAY_VIEW"
+    ],
+    "SYS_WORKDAY_ADMIN": [
+      "SYS_WORKDAY_WRITE",
+      "SYS_WORKDAY_READ",
+      "SYS_WORKDAY_VIEW"
+    ],
+    "SYS_WORKDAY_WRITE": [
+      "SYS_WORKDAY_READ",
+      "SYS_WORKDAY_VIEW"
+    ],
+    "SYS_WORKDAY_READ": [
+      "SYS_WORKDAY_VIEW"
+    ],
+    "SYS_SAP_ALL": [
+      "SYS_SAP_ADMIN",
+      "SYS_SAP_WRITE",
+      "SYS_SAP_READ",
+      "SYS_SAP_VIEW"
+    ],
+    "SYS_SAP_ADMIN": [
+      "SYS_SAP_WRITE",
+      "SYS_SAP_READ",
+      "SYS_SAP_VIEW"
+    ],
+    "SYS_SAP_WRITE": [
+      "SYS_SAP_READ",
+      "SYS_SAP_VIEW"
+    ],
+    "SYS_SAP_READ": [
+      "SYS_SAP_VIEW"
+    ],
+    "SYS_SALESFORCE_ALL": [
+      "SYS_SALESFORCE_ADMIN",
+      "SYS_SALESFORCE_WRITE",
+      "SYS_SALESFORCE_READ",
+      "SYS_SALESFORCE_VIEW"
+    ],
+    "SYS_SALESFORCE_ADMIN": [
+      "SYS_SALESFORCE_WRITE",
+      "SYS_SALESFORCE_READ",
+      "SYS_SALESFORCE_VIEW"
+    ],
+    "SYS_SALESFORCE_WRITE": [
+      "SYS_SALESFORCE_READ",
+      "SYS_SALESFORCE_VIEW"
+    ],
+    "SYS_SALESFORCE_READ": [
+      "SYS_SALESFORCE_VIEW"
+    ],
+    "SYS_POWERBI_ALL": [
+      "SYS_POWERBI_ADMIN",
+      "SYS_POWERBI_WRITE",
+      "SYS_POWERBI_READ",
+      "SYS_POWERBI_VIEW"
+    ],
+    "SYS_POWERBI_ADMIN": [
+      "SYS_POWERBI_WRITE",
+      "SYS_POWERBI_READ",
+      "SYS_POWERBI_VIEW"
+    ],
+    "SYS_POWERBI_WRITE": [
+      "SYS_POWERBI_READ",
+      "SYS_POWERBI_VIEW"
+    ],
+    "SYS_POWERBI_READ": [
+      "SYS_POWERBI_VIEW"
+    ],
+    "SYS_SNOWFLAKE_ALL": [
+      "SYS_SNOWFLAKE_ADMIN",
+      "SYS_SNOWFLAKE_WRITE",
+      "SYS_SNOWFLAKE_READ",
+      "SYS_SNOWFLAKE_VIEW"
+    ],
+    "SYS_SNOWFLAKE_ADMIN": [
+      "SYS_SNOWFLAKE_WRITE",
+      "SYS_SNOWFLAKE_READ",
+      "SYS_SNOWFLAKE_VIEW"
+    ],
+    "SYS_SNOWFLAKE_WRITE": [
+      "SYS_SNOWFLAKE_READ",
+      "SYS_SNOWFLAKE_VIEW"
+    ],
+    "SYS_SNOWFLAKE_READ": [
+      "SYS_SNOWFLAKE_VIEW"
+    ],
+    "SYS_DATADOG_ALL": [
+      "SYS_DATADOG_ADMIN",
+      "SYS_DATADOG_WRITE",
+      "SYS_DATADOG_READ",
+      "SYS_DATADOG_VIEW"
+    ],
+    "SYS_DATADOG_ADMIN": [
+      "SYS_DATADOG_WRITE",
+      "SYS_DATADOG_READ",
+      "SYS_DATADOG_VIEW"
+    ],
+    "SYS_DATADOG_WRITE": [
+      "SYS_DATADOG_READ",
+      "SYS_DATADOG_VIEW"
+    ],
+    "SYS_DATADOG_READ": [
+      "SYS_DATADOG_VIEW"
+    ],
+    "SYS_SPLUNK_ALL": [
+      "SYS_SPLUNK_ADMIN",
+      "SYS_SPLUNK_WRITE",
+      "SYS_SPLUNK_READ",
+      "SYS_SPLUNK_VIEW"
+    ],
+    "SYS_SPLUNK_ADMIN": [
+      "SYS_SPLUNK_WRITE",
+      "SYS_SPLUNK_READ",
+      "SYS_SPLUNK_VIEW"
+    ],
+    "SYS_SPLUNK_WRITE": [
+      "SYS_SPLUNK_READ",
+      "SYS_SPLUNK_VIEW"
+    ],
+    "SYS_SPLUNK_READ": [
+      "SYS_SPLUNK_VIEW"
+    ],
+    "SYS_ZENDESK_ALL": [
+      "SYS_ZENDESK_ADMIN",
+      "SYS_ZENDESK_WRITE",
+      "SYS_ZENDESK_READ",
+      "SYS_ZENDESK_VIEW"
+    ],
+    "SYS_ZENDESK_ADMIN": [
+      "SYS_ZENDESK_WRITE",
+      "SYS_ZENDESK_READ",
+      "SYS_ZENDESK_VIEW"
+    ],
+    "SYS_ZENDESK_WRITE": [
+      "SYS_ZENDESK_READ",
+      "SYS_ZENDESK_VIEW"
+    ],
+    "SYS_ZENDESK_READ": [
+      "SYS_ZENDESK_VIEW"
+    ],
+    "SYS_JENKINS_ALL": [
+      "SYS_JENKINS_ADMIN",
+      "SYS_JENKINS_WRITE",
+      "SYS_JENKINS_READ",
+      "SYS_JENKINS_VIEW"
+    ],
+    "SYS_JENKINS_ADMIN": [
+      "SYS_JENKINS_WRITE",
+      "SYS_JENKINS_READ",
+      "SYS_JENKINS_VIEW"
+    ],
+    "SYS_JENKINS_WRITE": [
+      "SYS_JENKINS_READ",
+      "SYS_JENKINS_VIEW"
+    ],
+    "SYS_JENKINS_READ": [
+      "SYS_JENKINS_VIEW"
+    ],
+    "INF_VPN_ALL": [
+      "INF_VPN_ADMIN",
+      "INF_VPN_WRITE",
+      "INF_VPN_READ",
+      "INF_VPN_VIEW"
+    ],
+    "INF_VPN_ADMIN": [
+      "INF_VPN_WRITE",
+      "INF_VPN_READ",
+      "INF_VPN_VIEW"
+    ],
+    "INF_VPN_WRITE": [
+      "INF_VPN_READ",
+      "INF_VPN_VIEW"
+    ],
+    "INF_VPN_READ": [
+      "INF_VPN_VIEW"
+    ],
+    "INF_BASTION_ALL": [
+      "INF_BASTION_ADMIN",
+      "INF_BASTION_WRITE",
+      "INF_BASTION_READ",
+      "INF_BASTION_VIEW"
+    ],
+    "INF_BASTION_ADMIN": [
+      "INF_BASTION_WRITE",
+      "INF_BASTION_READ",
+      "INF_BASTION_VIEW"
+    ],
+    "INF_BASTION_WRITE": [
+      "INF_BASTION_READ",
+      "INF_BASTION_VIEW"
+    ],
+    "INF_BASTION_READ": [
+      "INF_BASTION_VIEW"
+    ],
+    "INF_DBAAS_ALL": [
+      "INF_DBAAS_ADMIN",
+      "INF_DBAAS_WRITE",
+      "INF_DBAAS_READ",
+      "INF_DBAAS_VIEW"
+    ],
+    "INF_DBAAS_ADMIN": [
+      "INF_DBAAS_WRITE",
+      "INF_DBAAS_READ",
+      "INF_DBAAS_VIEW"
+    ],
+    "INF_DBAAS_WRITE": [
+      "INF_DBAAS_READ",
+      "INF_DBAAS_VIEW"
+    ],
+    "INF_DBAAS_READ": [
+      "INF_DBAAS_VIEW"
+    ],
+    "INF_STORAGE_ALL": [
+      "INF_STORAGE_ADMIN",
+      "INF_STORAGE_WRITE",
+      "INF_STORAGE_READ",
+      "INF_STORAGE_VIEW"
+    ],
+    "INF_STORAGE_ADMIN": [
+      "INF_STORAGE_WRITE",
+      "INF_STORAGE_READ",
+      "INF_STORAGE_VIEW"
+    ],
+    "INF_STORAGE_WRITE": [
+      "INF_STORAGE_READ",
+      "INF_STORAGE_VIEW"
+    ],
+    "INF_STORAGE_READ": [
+      "INF_STORAGE_VIEW"
+    ],
+    "INF_SECRETS_ALL": [
+      "INF_SECRETS_ADMIN",
+      "INF_SECRETS_WRITE",
+      "INF_SECRETS_READ",
+      "INF_SECRETS_VIEW"
+    ],
+    "INF_SECRETS_ADMIN": [
+      "INF_SECRETS_WRITE",
+      "INF_SECRETS_READ",
+      "INF_SECRETS_VIEW"
+    ],
+    "INF_SECRETS_WRITE": [
+      "INF_SECRETS_READ",
+      "INF_SECRETS_VIEW"
+    ],
+    "INF_SECRETS_READ": [
+      "INF_SECRETS_VIEW"
+    ],
+    "INF_CI_ALL": [
+      "INF_CI_ADMIN",
+      "INF_CI_WRITE",
+      "INF_CI_READ",
+      "INF_CI_VIEW"
+    ],
+    "INF_CI_ADMIN": [
+      "INF_CI_WRITE",
+      "INF_CI_READ",
+      "INF_CI_VIEW"
+    ],
+    "INF_CI_WRITE": [
+      "INF_CI_READ",
+      "INF_CI_VIEW"
+    ],
+    "INF_CI_READ": [
+      "INF_CI_VIEW"
+    ],
+    "INF_CD_ALL": [
+      "INF_CD_ADMIN",
+      "INF_CD_WRITE",
+      "INF_CD_READ",
+      "INF_CD_VIEW"
+    ],
+    "INF_CD_ADMIN": [
+      "INF_CD_WRITE",
+      "INF_CD_READ",
+      "INF_CD_VIEW"
+    ],
+    "INF_CD_WRITE": [
+      "INF_CD_READ",
+      "INF_CD_VIEW"
+    ],
+    "INF_CD_READ": [
+      "INF_CD_VIEW"
+    ],
+    "INF_ARTIFACTORY_ALL": [
+      "INF_ARTIFACTORY_ADMIN",
+      "INF_ARTIFACTORY_WRITE",
+      "INF_ARTIFACTORY_READ",
+      "INF_ARTIFACTORY_VIEW"
+    ],
+    "INF_ARTIFACTORY_ADMIN": [
+      "INF_ARTIFACTORY_WRITE",
+      "INF_ARTIFACTORY_READ",
+      "INF_ARTIFACTORY_VIEW"
+    ],
+    "INF_ARTIFACTORY_WRITE": [
+      "INF_ARTIFACTORY_READ",
+      "INF_ARTIFACTORY_VIEW"
+    ],
+    "INF_ARTIFACTORY_READ": [
+      "INF_ARTIFACTORY_VIEW"
+    ],
+    "INF_BACKUP_ALL": [
+      "INF_BACKUP_ADMIN",
+      "INF_BACKUP_WRITE",
+      "INF_BACKUP_READ",
+      "INF_BACKUP_VIEW"
+    ],
+    "INF_BACKUP_ADMIN": [
+      "INF_BACKUP_WRITE",
+      "INF_BACKUP_READ",
+      "INF_BACKUP_VIEW"
+    ],
+    "INF_BACKUP_WRITE": [
+      "INF_BACKUP_READ",
+      "INF_BACKUP_VIEW"
+    ],
+    "INF_BACKUP_READ": [
+      "INF_BACKUP_VIEW"
+    ],
+    "INF_IAM_ALL": [
+      "INF_IAM_ADMIN",
+      "INF_IAM_WRITE",
+      "INF_IAM_READ",
+      "INF_IAM_VIEW"
+    ],
+    "INF_IAM_ADMIN": [
+      "INF_IAM_WRITE",
+      "INF_IAM_READ",
+      "INF_IAM_VIEW"
+    ],
+    "INF_IAM_WRITE": [
+      "INF_IAM_READ",
+      "INF_IAM_VIEW"
+    ],
+    "INF_IAM_READ": [
+      "INF_IAM_VIEW"
+    ],
+    "INF_NETWORK_ALL": [
+      "INF_NETWORK_ADMIN",
+      "INF_NETWORK_WRITE",
+      "INF_NETWORK_READ",
+      "INF_NETWORK_VIEW"
+    ],
+    "INF_NETWORK_ADMIN": [
+      "INF_NETWORK_WRITE",
+      "INF_NETWORK_READ",
+      "INF_NETWORK_VIEW"
+    ],
+    "INF_NETWORK_WRITE": [
+      "INF_NETWORK_READ",
+      "INF_NETWORK_VIEW"
+    ],
+    "INF_NETWORK_READ": [
+      "INF_NETWORK_VIEW"
+    ],
+    "INF_FIREWALL_ALL": [
+      "INF_FIREWALL_ADMIN",
+      "INF_FIREWALL_WRITE",
+      "INF_FIREWALL_READ",
+      "INF_FIREWALL_VIEW"
+    ],
+    "INF_FIREWALL_ADMIN": [
+      "INF_FIREWALL_WRITE",
+      "INF_FIREWALL_READ",
+      "INF_FIREWALL_VIEW"
+    ],
+    "INF_FIREWALL_WRITE": [
+      "INF_FIREWALL_READ",
+      "INF_FIREWALL_VIEW"
+    ],
+    "INF_FIREWALL_READ": [
+      "INF_FIREWALL_VIEW"
+    ],
+    "INF_DNS_ALL": [
+      "INF_DNS_ADMIN",
+      "INF_DNS_WRITE",
+      "INF_DNS_READ",
+      "INF_DNS_VIEW"
+    ],
+    "INF_DNS_ADMIN": [
+      "INF_DNS_WRITE",
+      "INF_DNS_READ",
+      "INF_DNS_VIEW"
+    ],
+    "INF_DNS_WRITE": [
+      "INF_DNS_READ",
+      "INF_DNS_VIEW"
+    ],
+    "INF_DNS_READ": [
+      "INF_DNS_VIEW"
+    ],
+    "INF_MAIL_ALL": [
+      "INF_MAIL_ADMIN",
+      "INF_MAIL_WRITE",
+      "INF_MAIL_READ",
+      "INF_MAIL_VIEW"
+    ],
+    "INF_MAIL_ADMIN": [
+      "INF_MAIL_WRITE",
+      "INF_MAIL_READ",
+      "INF_MAIL_VIEW"
+    ],
+    "INF_MAIL_WRITE": [
+      "INF_MAIL_READ",
+      "INF_MAIL_VIEW"
+    ],
+    "INF_MAIL_READ": [
+      "INF_MAIL_VIEW"
+    ],
+    "INF_FILESHARE_ALL": [
+      "INF_FILESHARE_ADMIN",
+      "INF_FILESHARE_WRITE",
+      "INF_FILESHARE_READ",
+      "INF_FILESHARE_VIEW"
+    ],
+    "INF_FILESHARE_ADMIN": [
+      "INF_FILESHARE_WRITE",
+      "INF_FILESHARE_READ",
+      "INF_FILESHARE_VIEW"
+    ],
+    "INF_FILESHARE_WRITE": [
+      "INF_FILESHARE_READ",
+      "INF_FILESHARE_VIEW"
+    ],
+    "INF_FILESHARE_READ": [
+      "INF_FILESHARE_VIEW"
+    ],
+    "INF_EDR_ALL": [
+      "INF_EDR_ADMIN",
+      "INF_EDR_WRITE",
+      "INF_EDR_READ",
+      "INF_EDR_VIEW"
+    ],
+    "INF_EDR_ADMIN": [
+      "INF_EDR_WRITE",
+      "INF_EDR_READ",
+      "INF_EDR_VIEW"
+    ],
+    "INF_EDR_WRITE": [
+      "INF_EDR_READ",
+      "INF_EDR_VIEW"
+    ],
+    "INF_EDR_READ": [
+      "INF_EDR_VIEW"
+    ],
+    "INF_SIEM_ALL": [
+      "INF_SIEM_ADMIN",
+      "INF_SIEM_WRITE",
+      "INF_SIEM_READ",
+      "INF_SIEM_VIEW"
+    ],
+    "INF_SIEM_ADMIN": [
+      "INF_SIEM_WRITE",
+      "INF_SIEM_READ",
+      "INF_SIEM_VIEW"
+    ],
+    "INF_SIEM_WRITE": [
+      "INF_SIEM_READ",
+      "INF_SIEM_VIEW"
+    ],
+    "INF_SIEM_READ": [
+      "INF_SIEM_VIEW"
+    ],
+    "INF_MDM_ALL": [
+      "INF_MDM_ADMIN",
+      "INF_MDM_WRITE",
+      "INF_MDM_READ",
+      "INF_MDM_VIEW"
+    ],
+    "INF_MDM_ADMIN": [
+      "INF_MDM_WRITE",
+      "INF_MDM_READ",
+      "INF_MDM_VIEW"
+    ],
+    "INF_MDM_WRITE": [
+      "INF_MDM_READ",
+      "INF_MDM_VIEW"
+    ],
+    "INF_MDM_READ": [
+      "INF_MDM_VIEW"
+    ],
+    "INF_ERP_ALL": [
+      "INF_ERP_ADMIN",
+      "INF_ERP_WRITE",
+      "INF_ERP_READ",
+      "INF_ERP_VIEW"
+    ],
+    "INF_ERP_ADMIN": [
+      "INF_ERP_WRITE",
+      "INF_ERP_READ",
+      "INF_ERP_VIEW"
+    ],
+    "INF_ERP_WRITE": [
+      "INF_ERP_READ",
+      "INF_ERP_VIEW"
+    ],
+    "INF_ERP_READ": [
+      "INF_ERP_VIEW"
+    ],
+    "INF_CRM_ALL": [
+      "INF_CRM_ADMIN",
+      "INF_CRM_WRITE",
+      "INF_CRM_READ",
+      "INF_CRM_VIEW"
+    ],
+    "INF_CRM_ADMIN": [
+      "INF_CRM_WRITE",
+      "INF_CRM_READ",
+      "INF_CRM_VIEW"
+    ],
+    "INF_CRM_WRITE": [
+      "INF_CRM_READ",
+      "INF_CRM_VIEW"
+    ],
+    "INF_CRM_READ": [
+      "INF_CRM_VIEW"
     ]
+  },
+  "hierarchy_patterns": [
+    {
+      "root": "_ALL",
+      "supersedes": [
+        "_ADMIN",
+        "_WRITE",
+        "_READ",
+        "_VIEW"
+      ]
+    },
+    {
+      "root": "_ADMIN",
+      "supersedes": [
+        "_WRITE",
+        "_READ",
+        "_VIEW"
+      ]
+    },
+    {
+      "root": "_WRITE",
+      "supersedes": [
+        "_READ",
+        "_VIEW"
+      ]
+    },
+    {
+      "root": "_READ",
+      "supersedes": [
+        "_VIEW"
+      ]
+    }
+  ],
+  "account_type_policies": {
+    "External": [
+      "_ADMIN",
+      "_ALL",
+      "SECRETS",
+      "FIREWALL",
+      "IAM"
+    ],
+    "Service": [
+      "WORKDAY",
+      "PAYROLL",
+      "HR",
+      "EXECUTIVE"
+    ],
+    "BlueCollar": [
+      "_ADMIN",
+      "_ALL",
+      "K8S",
+      "AWS",
+      "AZURE",
+      "GCP"
+    ],
+    "Contractor": [
+      "PAYROLL",
+      "HR",
+      "SECRETS",
+      "IAM"
+    ]
+  },
+  "role_definitions": {
+    "Backend Engineer": [
+      "SYS_GITLAB_WRITE",
+      "SYS_JIRA_WRITE",
+      "SYS_AWS_WRITE",
+      "SYS_K8S_READ"
+    ],
+    "Frontend Engineer": [
+      "SYS_GITHUB_WRITE",
+      "SYS_JIRA_WRITE",
+      "SYS_CONFLUENCE_WRITE"
+    ],
+    "SRE Engineer": [
+      "SYS_K8S_ADMIN",
+      "SYS_AWS_ADMIN",
+      "SYS_DATADOG_ADMIN",
+      "SYS_SPLUNK_READ"
+    ],
+    "DevOps Engineer": [
+      "SYS_JENKINS_ADMIN",
+      "SYS_ARGOCD_ADMIN",
+      "INF_CI_WRITE",
+      "INF_CD_WRITE"
+    ],
+    "SOC Analyst": [
+      "SYS_SPLUNK_WRITE",
+      "INF_SIEM_WRITE",
+      "INF_EDR_READ",
+      "INF_FIREWALL_READ"
+    ],
+    "Data Engineer": [
+      "SYS_SNOWFLAKE_WRITE",
+      "SYS_AWS_WRITE",
+      "INF_DBAAS_WRITE",
+      "SYS_POWERBI_READ"
+    ],
+    "Data Scientist": [
+      "SYS_SNOWFLAKE_READ",
+      "SYS_POWERBI_WRITE",
+      "SYS_AWS_READ"
+    ],
+    "IT Support": [
+      "SYS_SERVICENOW_WRITE",
+      "INF_MDM_WRITE",
+      "INF_MAIL_READ",
+      "INF_FILESHARE_READ"
+    ],
+    "Controller": [
+      "SYS_SAP_WRITE",
+      "INF_ERP_WRITE",
+      "SYS_POWERBI_READ"
+    ],
+    "Payroll Specialist": [
+      "SYS_WORKDAY_WRITE",
+      "SYS_SAP_READ",
+      "INF_FILESHARE_READ"
+    ],
+    "Administrator": [
+      "INF_IAM_ADMIN",
+      "INF_SECRETS_ADMIN",
+      "SYS_OKTA_ADMIN"
+    ],
+    "Service Account": [
+      "INF_CI_WRITE",
+      "INF_CD_WRITE",
+      "INF_SECRETS_ADMIN"
+    ]
+  },
+  "department_norms": {
+    "Engineering": [
+      "GIT",
+      "JIRA",
+      "CONFLUENCE",
+      "AWS",
+      "K8S",
+      "JENKINS"
+    ],
+    "Platform": [
+      "K8S",
+      "ARGOCD",
+      "AWS",
+      "AZURE",
+      "GCP",
+      "DATADOG",
+      "SPLUNK"
+    ],
+    "Security": [
+      "SPLUNK",
+      "SIEM",
+      "EDR",
+      "FIREWALL",
+      "IAM",
+      "OKTA"
+    ],
+    "Data": [
+      "SNOWFLAKE",
+      "POWERBI",
+      "DBAAS",
+      "AWS",
+      "GCP"
+    ],
+    "IT": [
+      "SERVICENOW",
+      "MDM",
+      "MAIL",
+      "FILESHARE",
+      "OKTA"
+    ],
+    "Finance": [
+      "SAP",
+      "ERP",
+      "POWERBI",
+      "FILESHARE"
+    ],
+    "HR": [
+      "WORKDAY",
+      "FILESHARE",
+      "CONFLUENCE"
+    ],
+    "Sales": [
+      "SALESFORCE",
+      "CRM",
+      "POWERBI"
+    ],
+    "Customer Success": [
+      "ZENDESK",
+      "SALESFORCE",
+      "CONFLUENCE"
+    ],
+    "Support": [
+      "ZENDESK",
+      "SERVICENOW",
+      "SPLUNK"
+    ]
+  }
 }
