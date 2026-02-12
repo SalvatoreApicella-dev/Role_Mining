@@ -5,6 +5,17 @@ import {
   api,
 } from "../api";
 
+const IDENTITY_INDICATOR_DESCRIPTIONS = {
+  invalid_identity_keys: "Rileva valori non validi in email, UPN o employeeId. Questi errori riducono affidabilita nella correlazione tra sorgenti identitarie.",
+  identity_collisions: "Rileva chiavi identitarie duplicate su utenti diversi (email, UPN o employeeId). E un rischio alto per governance e assegnazioni corrette.",
+  invalid_lastlogon: "Rileva LastLogon non parseabile o data futura. Questo degrada analisi temporali e prioritizzazione remediation.",
+  department_vocab_drift: "Rileva varianti lessicali dello stesso dipartimento (es. IT, I.T., Information Technology), che frammentano clustering e reporting.",
+  businessrole_vocab_drift: "Rileva naming incoerente dei business role che aumenta rumore nel modello e riduce precisione delle regole.",
+  orphan_references: "Rileva riferimenti a manager/owner non presenti nel dataset, con impatto su ownership e flussi approvativi.",
+  inactive_source_mismatch: "Rileva mismatch di stato tra AD e HR (es. AD attivo ma HR terminated), segnale di sincronizzazione sorgenti incompleta.",
+  import_reject_rate: "Misura righe scartate o incoerenti in ingestione. Valori alti indicano feed sorgente da normalizzare a monte.",
+};
+
 export default function KpiDrilldownPage() {
   const { metric } = useParams();
   const [data, setData] = useState(null);
@@ -15,6 +26,8 @@ export default function KpiDrilldownPage() {
   const [dqRules, setDqRules] = useState(null);
   const [dqLoading, setDqLoading] = useState(false);
   const [dqApplying, setDqApplying] = useState("");
+  const [openSections, setOpenSections] = useState({});
+  const [indicatorPopup, setIndicatorPopup] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,6 +37,7 @@ export default function KpiDrilldownPage() {
       setData(null);
       setExpanded({});
       setPendingChoice({});
+      setOpenSections({});
       setDqRules(null);
 
       try {
@@ -108,10 +122,109 @@ export default function KpiDrilldownPage() {
     ));
   }
 
+  function csvEscape(v) {
+    const s = String(v ?? "");
+    if (s.includes(",") || s.includes("\"") || s.includes("\n")) return `"${s.replace(/"/g, "\"\"")}"`;
+    return s;
+  }
+
+  function downloadCsv(filename, headers, rows) {
+    const lines = [];
+    lines.push((headers || []).map(csvEscape).join(","));
+    (rows || []).forEach((r) => lines.push((r || []).map(csvEscape).join(",")));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function sectionLabel(type) {
+    if (type === "Duplicates") return "Duplicati";
+    if (type === "Missing Business Role") return "Business Role Mancante";
+    if (type === "Missing Department") return "Dipartimento Mancante";
+    if (type === "Identity Integrity") return "Integrita Identita";
+    return String(type || "Sezione");
+  }
+
+  function toggleSection(type) {
+    setOpenSections((prev) => ({ ...prev, [type]: !prev[type] }));
+  }
+
+  function openSectionFromCard(type) {
+    setOpenSections((prev) => ({ ...prev, [type]: true }));
+  }
+
+  function exportSectionCsv(section) {
+    const type = section?.type || "section";
+    if (type === "Duplicates") {
+      const rows = [];
+      (section.users || []).forEach((u, i) => {
+        const dn = u.displayName || `dup-${i}`;
+        const chosen = u.chosen || {};
+        const alternatives = u.alternatives || [];
+        const allCandidates = [chosen, ...alternatives].filter((x) => x && x.candidateId);
+        allCandidates.forEach((c) => {
+          rows.push([
+            dn,
+            c.candidateId || "",
+            c.businessRole || "",
+            c.department || "",
+            (c.roles || []).length,
+            c.lastLogin || "",
+            (u.chosenCandidateId || chosen.candidateId || "") === c.candidateId ? "selected" : "",
+          ]);
+        });
+      });
+      downloadCsv(
+        "cluster_quality_duplicati.csv",
+        ["displayName", "candidateId", "businessRole", "department", "groupCount", "lastLogin", "status"],
+        rows
+      );
+      return;
+    }
+    if (type === "Identity Integrity") {
+      const rows = [];
+      (section.cases || []).forEach((c) => {
+        if ((c.users || []).length === 0) {
+          rows.push([c.label, c.count || 0, c.rate || "", "", ""]);
+          return;
+        }
+        (c.users || []).forEach((u) => {
+          rows.push([c.label, c.count || 0, c.rate || "", u.displayName || "", u.username || ""]);
+        });
+      });
+      downloadCsv(
+        "cluster_quality_integrita_identita.csv",
+        ["indicatore", "count", "rate", "displayName", "username"],
+        rows
+      );
+      return;
+    }
+    const rows = (section.users || []).map((u) => [typeof u === "string" ? u : (u.displayName || u.username || "")]);
+    downloadCsv(
+      `cluster_quality_${String(type).toLowerCase()}.csv`,
+      ["username"],
+      rows
+    );
+  }
+
+  const visibleClusterSections = (data?.items || []).filter(
+    (s) => s?.type === "Duplicates" || s?.type === "Missing Business Role" || s?.type === "Identity Integrity"
+  );
+
   return (
     <div className="main">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 24 }}>
-        <h2 style={{ margin: 0 }}>Drilldown: <span style={{ color: metric === "cluster-quality" ? "#fff" : "var(--accent)", textTransform: "capitalize" }}>{metric.replace("-", " ")}</span></h2>
+        {metric === "cluster-quality" ? (
+          <h2 style={{ margin: 0 }}>Cluster quality</h2>
+        ) : (
+          <h2 style={{ margin: 0 }}>Drilldown: <span style={{ color: "var(--accent)", textTransform: "capitalize" }}>{metric.replace("-", " ")}</span></h2>
+        )}
         <Link to="/" className="primary" style={{ display: "inline-flex", alignItems: "center", padding: "8px 16px", borderRadius: 10, border: "1px solid var(--border)", background: "rgba(255,255,255,0.05)" }}>
           Indietro al Dashboard
         </Link>
@@ -186,18 +299,43 @@ export default function KpiDrilldownPage() {
         <div className="panel">
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ marginTop: 0, fontSize: 16, textTransform: "uppercase", letterSpacing: 1 }}>Riepilogo Qualità Dati</h3>
-            <div className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+            <div className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
               <div className="card">
                 <div className="k">Righe Totali</div>
                 <div className="v">{data.stats?.rowsTotal || 0}</div>
               </div>
-              <div className="card" style={{ borderLeft: "3px solid " + ((data.stats?.duplicateDisplayName || 0) > 0 ? "var(--danger)" : "#71ffb2") }}>
+              <div
+                className="card"
+                onClick={() => openSectionFromCard("Duplicates")}
+                style={{
+                  borderLeft: "3px solid " + ((data.stats?.duplicateDisplayName || 0) > 0 ? "var(--danger)" : "#71ffb2"),
+                  cursor: "pointer",
+                }}
+              >
                 <div className="k">Duplicati</div>
                 <div className="v" style={{ color: (data.stats?.duplicateDisplayName || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.duplicateDisplayName || 0}</div>
               </div>
-              <div className="card" style={{ borderLeft: "3px solid " + ((data.stats?.missingDepartment || 0) > 0 ? "var(--danger)" : "#71ffb2") }}>
-                <div className="k">Dipartimento Mancanti</div>
-                <div className="v" style={{ color: (data.stats?.missingDepartment || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.missingDepartment || 0}</div>
+              <div
+                className="card"
+                onClick={() => openSectionFromCard("Missing Business Role")}
+                style={{
+                  borderLeft: "3px solid " + ((data.stats?.missingBusinessRole || 0) > 0 ? "var(--danger)" : "#71ffb2"),
+                  cursor: "pointer",
+                }}
+              >
+                <div className="k">Missing Business Roles</div>
+                <div className="v" style={{ color: (data.stats?.missingBusinessRole || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.missingBusinessRole || 0}</div>
+              </div>
+              <div
+                className="card"
+                onClick={() => openSectionFromCard("Identity Integrity")}
+                style={{
+                  borderLeft: "3px solid " + ((data.stats?.identityIntegrityIssues || 0) > 0 ? "var(--danger)" : "#71ffb2"),
+                  cursor: "pointer",
+                }}
+              >
+                <div className="k">Integrita Identita</div>
+                <div className="v" style={{ color: (data.stats?.identityIntegrityIssues || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.identityIntegrityIssues || 0}</div>
               </div>
             </div>
           </div>
@@ -246,12 +384,43 @@ export default function KpiDrilldownPage() {
             )}
           </div>
 
-          {(data.items || []).map((section, idx) => (
+          {visibleClusterSections.map((section, idx) => (
             <div key={idx} style={{ marginBottom: 32 }}>
-              <h4 style={{ color: "var(--muted)", borderBottom: "1px solid var(--border)", paddingBottom: 8, marginBottom: 16 }}>
-                {section.type} <span style={{ float: "right", fontSize: 12 }}>Conteggio: {section.count}</span>
-              </h4>
-              {section.type === "Duplicates" ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderBottom: "1px solid var(--border)", paddingBottom: 8, marginBottom: 16 }}>
+                <button
+                  onClick={() => toggleSection(section.type)}
+                  style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}
+                >
+                  <h4 style={{ color: "var(--muted)", margin: 0 }}>
+                    {sectionLabel(section.type)} <span style={{ marginLeft: 8, fontSize: 12 }}>Conteggio: {section.count}</span>
+                  </h4>
+                </button>
+                <button
+                  onClick={() => exportSectionCsv(section)}
+                  title="Esporta CSV"
+                  aria-label="Esporta CSV"
+                  style={{
+                    width: 42,
+                    height: 42,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "none",
+                    border: "1px solid var(--border)",
+                    borderRadius: 10,
+                    color: "var(--text)",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3v11" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M4 20h16" />
+                  </svg>
+                </button>
+              </div>
+              {openSections[section.type] && (section.type === "Duplicates" ? (
                 section.count > 0 ? (
                   <div style={{ display: "grid", gap: 10 }}>
                     {(section.users || []).map((u, i) => {
@@ -354,6 +523,52 @@ export default function KpiDrilldownPage() {
                     Nessun problema riscontrato per questa categoria.
                   </div>
                 )
+              ) : section.type === "Identity Integrity" ? (
+                (section.cases || []).length > 0 ? (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Indicatore</th>
+                        <th style={{ width: 120 }}>Count</th>
+                        <th style={{ width: 140 }}>Rate (%)</th>
+                        <th>Utenti impattati</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(section.cases || []).map((c) => (
+                        <tr key={c.id}>
+                          <td>
+                            <button
+                              onClick={() => setIndicatorPopup({ id: c.id, label: c.label })}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                                margin: 0,
+                                color: "var(--text)",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                textAlign: "left",
+                              }}
+                            >
+                              {c.label}
+                            </button>
+                          </td>
+                          <td>{c.count || 0}</td>
+                          <td>{c.rate ?? "-"}</td>
+                          <td style={{ color: "var(--muted)", fontSize: 13 }}>
+                            {(c.users || []).slice(0, 8).map((u) => u.displayName || u.username).join(", ") || "-"}
+                            {(c.users || []).length > 8 ? ` (+${(c.users || []).length - 8})` : ""}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ color: "#71ffb2", fontSize: 13, background: "rgba(113, 255, 178, 0.05)", padding: 10, borderRadius: 8 }}>
+                    Nessun problema riscontrato per questa categoria.
+                  </div>
+                )
               ) : section.count > 0 ? (
                 <table className="table">
                   <thead>
@@ -375,9 +590,50 @@ export default function KpiDrilldownPage() {
                 <div style={{ color: "#71ffb2", fontSize: 13, background: "rgba(113, 255, 178, 0.05)", padding: 10, borderRadius: 8 }}>
                   Nessun problema riscontrato per questa categoria.
                 </div>
-              )}
+              ))}
             </div>
           ))}
+
+          {indicatorPopup && (
+            <div
+              onClick={() => setIndicatorPopup(null)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(3, 8, 20, 0.66)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 80,
+                padding: 16,
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "min(560px, 96vw)",
+                  background: "#0f1a2d",
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+                  padding: 16,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, marginBottom: 10 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{indicatorPopup.label}</div>
+                  <button
+                    onClick={() => setIndicatorPopup(null)}
+                    style={{ background: "none", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 8, padding: "4px 8px", cursor: "pointer" }}
+                  >
+                    Chiudi
+                  </button>
+                </div>
+                <div style={{ color: "var(--muted)", lineHeight: 1.5, fontSize: 13 }}>
+                  {IDENTITY_INDICATOR_DESCRIPTIONS[indicatorPopup.id] || "Descrizione non disponibile."}
+                </div>
+              </div>
+            </div>
+          )}
 
           {data.rejects?.length > 0 && (
             <div style={{ marginTop: 40 }}>

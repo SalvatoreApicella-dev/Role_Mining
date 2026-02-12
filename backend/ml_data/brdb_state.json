@@ -1,22 +1,22 @@
 {
   "role_group_counts": {
     "Backend Engineer": {
-      "INF_MAIL_READ": 182.0,
+      "INF_MAIL_READ": 203.0,
       "INF_STORAGE_VIEW": 1.0,
       "INF_VPN_ALL": 14.0,
-      "INF_VPN_READ": 182.0,
+      "INF_VPN_READ": 203.0,
       "SYS_AWS_ALL": 15.0,
-      "SYS_AWS_READ": 98.0,
-      "SYS_CONFLUENCE_READ": 182.0,
+      "SYS_AWS_READ": 99.0,
+      "SYS_CONFLUENCE_READ": 202.0,
       "SYS_CONFLUENCE_VIEW": 78.0,
-      "SYS_GITLAB_WRITE": 64.0,
+      "SYS_GITLAB_WRITE": 83.0,
       "SYS_JENKINS_WRITE": 57.0,
       "SYS_JIRA_WRITE": 59.0,
       "SYS_K8S_READ": 85.0,
       "SYS_AWS_WRITE": 67.0,
       "SYS_GITLAB_READ": 56.0,
-      "SYS_JIRA_READ": 57.0,
-      "SYS_JENKINS_READ": 53.0,
+      "SYS_JIRA_READ": 77.0,
+      "SYS_JENKINS_READ": 54.0,
       "SYS_K8S_WRITE": 80.0,
       "SYS_JIRA_VIEW": 59.0,
       "SYS_GITLAB_VIEW": 53.0,
@@ -38,17 +38,18 @@
       "SYS_K8S_ADMIN": 6.0,
       "SYS_CONFLUENCE_ALL": 3.0,
       "INF_CD_WRITE": 7.0,
-      "INF_CI_WRITE": 7.0
+      "INF_CI_WRITE": 7.0,
+      "INF_STORAGE_READ": 20.0
     },
     "Frontend Engineer": {
-      "INF_MAIL_READ": 116.0,
+      "INF_MAIL_READ": 134.0,
       "INF_STORAGE_READ": 1.0,
-      "INF_VPN_READ": 116.0,
-      "SYS_AWS_READ": 46.0,
+      "INF_VPN_READ": 134.0,
+      "SYS_AWS_READ": 64.0,
       "SYS_CONFLUENCE_READ": 116.0,
       "SYS_CONFLUENCE_WRITE": 41.0,
       "SYS_GITHUB_WRITE": 37.0,
-      "SYS_JENKINS_READ": 36.0,
+      "SYS_JENKINS_READ": 54.0,
       "SYS_JIRA_READ": 43.0,
       "SYS_AWS_WRITE": 56.0,
       "SYS_JENKINS_VIEW": 39.0,
@@ -1185,6 +1186,68 @@
       "SYS_SALESFORCE_ADMIN": 5.0,
       "SYS_SERVICENOW_ADMIN": 3.0,
       "SYS_WORKDAY_READ": 37.0
+    },
+    "HR Manager": {
+      "INF_MAIL_READ": 1.0,
+      "SYS_CONFLUENCE_READ": 1.0,
+      "SYS_JIRA_READ": 1.0
+    },
+    "Security Analyst": {
+      "INF_MAIL_READ": 19.0,
+      "INF_STORAGE_READ": 19.0,
+      "INF_VPN_READ": 19.0,
+      "SYS_CONFLUENCE_READ": 19.0,
+      "SYS_JIRA_READ": 19.0
+    },
+    "Finance Specialist": {
+      "INF_MAIL_READ": 19.0,
+      "INF_STORAGE_READ": 19.0,
+      "INF_VPN_READ": 19.0,
+      "SYS_CONFLUENCE_READ": 19.0,
+      "SYS_JIRA_READ": 19.0,
+      "SYS_GITLAB_WRITE": 19.0
+    },
+    "Sales Specialist": {
+      "INF_MAIL_READ": 18.0,
+      "INF_VPN_READ": 18.0,
+      "SYS_AWS_READ": 18.0,
+      "SYS_JENKINS_READ": 18.0
+    },
+    "HR Specialist": {
+      "INF_MAIL_READ": 17.0,
+      "INF_STORAGE_READ": 17.0,
+      "INF_VPN_READ": 17.0,
+      "SYS_CONFLUENCE_READ": 17.0,
+      "SYS_JIRA_READ": 17.0
+    },
+    "Back-end Engineer": {
+      "INF_MAIL_READ": 3.0,
+      "INF_STORAGE_READ": 2.0,
+      "INF_VPN_READ": 3.0,
+      "SYS_CONFLUENCE_READ": 2.0,
+      "SYS_JIRA_READ": 2.0,
+      "SYS_GITLAB_WRITE": 1.0,
+      "SYS_AWS_READ": 1.0,
+      "SYS_JENKINS_READ": 1.0
+    },
+    "BE Engineer": {
+      "INF_MAIL_READ": 2.0,
+      "INF_STORAGE_READ": 1.0,
+      "INF_VPN_READ": 2.0,
+      "SYS_CONFLUENCE_READ": 1.0,
+      "SYS_JIRA_READ": 1.0,
+      "SYS_GITLAB_WRITE": 1.0,
+      "SYS_AWS_READ": 1.0,
+      "SYS_JENKINS_READ": 1.0
+    },
+    "Backend Eng.": {
+      "INF_MAIL_READ": 2.0,
+      "INF_VPN_READ": 2.0,
+      "SYS_AWS_READ": 1.0,
+      "SYS_JENKINS_READ": 1.0,
+      "INF_STORAGE_READ": 1.0,
+      "SYS_CONFLUENCE_READ": 1.0,
+      "SYS_JIRA_READ": 1.0
     }
   },
   "group_role_primary": {
@@ -1200,7 +1263,7 @@
     "SYS_JENKINS_WRITE": "Backend Engineer",
     "SYS_JIRA_WRITE": "Backend Engineer",
     "SYS_K8S_READ": "Backend Engineer",
-    "INF_STORAGE_READ": "Frontend Engineer",
+    "INF_STORAGE_READ": "Backend Engineer",
     "SYS_CONFLUENCE_WRITE": "Backend Engineer",
     "SYS_GITHUB_WRITE": "Frontend Engineer",
     "SYS_JENKINS_READ": "Backend Engineer",
@@ -1377,5 +1440,5 @@
     "INF_IAM_VIEW": "IAM Specialist",
     "INF_FIREWALL_VIEW": "SOC Analyst"
   },
-  "total_assignments": 4743
+  "total_assignments": 4863
 }

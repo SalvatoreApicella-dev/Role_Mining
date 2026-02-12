@@ -3159,6 +3159,168 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
             if "Duplicate displayName" in reason:
                 reject_dup_count += 1
 
+        # Identity integrity metrics (focused on source/identity data quality)
+        def _norm_txt(s: Any) -> str:
+            return re.sub(r"[^a-z0-9]+", "", str(s or "").lower())
+
+        def _is_valid_email(s: str) -> bool:
+            return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", str(s or "").strip()))
+
+        def _is_valid_upn(s: str) -> bool:
+            v = str(s or "").strip().lower()
+            return bool(v and "@" in v and _is_valid_email(v))
+
+        def _is_valid_empid(s: str) -> bool:
+            v = str(s or "").strip()
+            return bool(re.match(r"^[A-Za-z0-9_-]{4,}$", v))
+
+        now_utc = datetime.now(timezone.utc)
+        known_usernames = {str(u.get("username") or "").strip().lower() for u in users if u.get("username")}
+        known_emails = {str(u.get("email") or "").strip().lower() for u in users if u.get("email")}
+        known_upns = {str(u.get("upn") or "").strip().lower() for u in users if u.get("upn")}
+
+        invalid_identity_users = []
+        invalid_lastlogon_users = []
+        orphan_ref_users = []
+        inactive_mismatch_users = []
+
+        by_email = defaultdict(list)
+        by_upn = defaultdict(list)
+        by_empid = defaultdict(list)
+        dept_variants = defaultdict(set)
+        role_variants = defaultdict(set)
+        dept_users_by_variant = defaultdict(list)
+        role_users_by_variant = defaultdict(list)
+
+        inactive_markers = {"inactive", "disabled", "terminated", "offboarded", "left"}
+        active_markers = {"active", "enabled"}
+
+        for u in users:
+            uname = str(u.get("username") or "").strip()
+            disp = str(u.get("displayName") or uname).strip()
+            dept = str(u.get("department") or "").strip()
+            br = str(u.get("businessRole") or "").strip()
+            email = str(u.get("email") or "").strip().lower()
+            upn = str(u.get("upn") or "").strip().lower()
+            empid = str(u.get("employeeId") or "").strip()
+            manager = str(u.get("manager") or "").strip()
+            last_login = str(u.get("lastLogin") or "").strip()
+            status_ad = str(u.get("statusAd") or "").strip().lower()
+            status_hr = str(u.get("statusHr") or "").strip().lower()
+
+            row_user = {"username": uname, "displayName": disp}
+
+            if email:
+                by_email[email].append(row_user)
+            if upn:
+                by_upn[upn].append(row_user)
+            if empid:
+                by_empid[empid].append(row_user)
+
+            if dept:
+                dnorm = _norm_txt(dept)
+                if dnorm:
+                    dept_variants[dnorm].add(dept)
+                    dept_users_by_variant[(dnorm, dept)].append(row_user)
+            if br:
+                rnorm = _norm_txt(br)
+                if rnorm:
+                    role_variants[rnorm].add(br)
+                    role_users_by_variant[(rnorm, br)].append(row_user)
+
+            invalid_identity = False
+            if email and not _is_valid_email(email):
+                invalid_identity = True
+            if upn and not _is_valid_upn(upn):
+                invalid_identity = True
+            if empid and not _is_valid_empid(empid):
+                invalid_identity = True
+            if invalid_identity:
+                invalid_identity_users.append(row_user)
+
+            if last_login:
+                try:
+                    dt = datetime.fromisoformat(last_login.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt > now_utc + timedelta(days=1):
+                        invalid_lastlogon_users.append(row_user)
+                except Exception:
+                    invalid_lastlogon_users.append(row_user)
+
+            if manager:
+                m = manager.lower()
+                if (m not in known_usernames) and (m not in known_emails) and (m not in known_upns):
+                    orphan_ref_users.append(row_user)
+
+            if status_ad and status_hr:
+                ad_inactive = any(k in status_ad for k in inactive_markers)
+                hr_inactive = any(k in status_hr for k in inactive_markers)
+                ad_active = any(k in status_ad for k in active_markers)
+                hr_active = any(k in status_hr for k in active_markers)
+                mismatch = (ad_inactive and hr_active) or (hr_inactive and ad_active)
+                if mismatch:
+                    inactive_mismatch_users.append(row_user)
+
+        collision_users = []
+        for bucket in (by_email, by_upn, by_empid):
+            for _, vals in bucket.items():
+                if len(vals) > 1:
+                    collision_users.extend(vals)
+
+        dept_drift_users = []
+        for norm_k, variants in dept_variants.items():
+            if len(variants) > 1:
+                for v in variants:
+                    dept_drift_users.extend(dept_users_by_variant.get((norm_k, v), []))
+
+        role_drift_users = []
+        for norm_k, variants in role_variants.items():
+            if len(variants) > 1:
+                for v in variants:
+                    role_drift_users.extend(role_users_by_variant.get((norm_k, v), []))
+
+        def _dedupe_users(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            out = []
+            seen = set()
+            for r in rows:
+                k = (str(r.get("username") or "").lower(), str(r.get("displayName") or "").lower())
+                if k in seen:
+                    continue
+                seen.add(k)
+                out.append(r)
+            return out
+
+        invalid_identity_users = _dedupe_users(invalid_identity_users)
+        invalid_lastlogon_users = _dedupe_users(invalid_lastlogon_users)
+        orphan_ref_users = _dedupe_users(orphan_ref_users)
+        inactive_mismatch_users = _dedupe_users(inactive_mismatch_users)
+        collision_users = _dedupe_users(collision_users)
+        dept_drift_users = _dedupe_users(dept_drift_users)
+        role_drift_users = _dedupe_users(role_drift_users)
+
+        ingest_rejects = len(state.get("last_rejects") or [])
+        import_reject_events = max(
+            ingest_rejects,
+            int(ingest.get("missingDisplayName") or 0)
+            + int(ingest.get("missingRoles") or 0)
+            + int(ingest.get("missingDepartment") or 0)
+            + int(ingest.get("missingBusinessRole") or 0),
+        )
+        import_reject_rate = round((import_reject_events / max(1, len(users))) * 100.0, 2)
+
+        identity_cases = [
+            {"id": "invalid_identity_keys", "label": "Chiavi identita non valide", "count": len(invalid_identity_users), "users": invalid_identity_users},
+            {"id": "identity_collisions", "label": "Collisioni identita", "count": len(collision_users), "users": collision_users},
+            {"id": "invalid_lastlogon", "label": "LastLogon non valido", "count": len(invalid_lastlogon_users), "users": invalid_lastlogon_users},
+            {"id": "department_vocab_drift", "label": "Deriva vocabolario dipartimento", "count": len(dept_drift_users), "users": dept_drift_users},
+            {"id": "businessrole_vocab_drift", "label": "Deriva vocabolario business role", "count": len(role_drift_users), "users": role_drift_users},
+            {"id": "orphan_references", "label": "Riferimenti orfani", "count": len(orphan_ref_users), "users": orphan_ref_users},
+            {"id": "inactive_source_mismatch", "label": "Mismatch stato AD/HR", "count": len(inactive_mismatch_users), "users": inactive_mismatch_users},
+            {"id": "import_reject_rate", "label": "Import reject rate", "count": import_reject_events, "rate": import_reject_rate, "users": []},
+        ]
+        identity_total = sum(int(c.get("count") or 0) for c in identity_cases)
+
         # Merging stats to reflect calculation on the actual displayed data
         stats = ingest.copy()
         stats["rowsTotal"] = len(users)
@@ -3167,6 +3329,7 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         stats["duplicateDisplayName"] = max(stats_dup, candidate_dup_extra_rows, reject_dup_count)
         stats["missingDepartment"] = len(missing_dept)
         stats["missingBusinessRole"] = len(missing_br)
+        stats["identityIntegrityIssues"] = identity_total
 
         return {
             "metric": "cluster-quality",
@@ -3175,6 +3338,7 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
                 {"type": "Duplicates", "count": len(duplicate_items), "users": duplicate_items},
                 {"type": "Missing Department", "count": len(missing_dept), "users": missing_dept},
                 {"type": "Missing Business Role", "count": len(missing_br), "users": missing_br},
+                {"type": "Identity Integrity", "count": identity_total, "cases": identity_cases, "users": []},
             ],
             "rejects": state.get("last_rejects") or []
         }
@@ -3754,28 +3918,52 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
 
     CSV_KEYS = {
         "displayName": ["displayname", "display name", "name", "utente", "user"],
+        "username": ["username", "userprincipalname", "samaccountname", "login", "accountname"],
         "department": ["department", "dept", "dipartimento", "area", "funzione"],
         "businessRole": ["businessrole", "business role", "br", "ruolo business", "ruolo_business"],
         "roles": ["ruoli", "roles", "groups", "gruppi", "entitlements"],
         "accountType": ["accounttype", "account type", "tipo utente", "tipo_utente", "type"],
         "lastLogin": ["lastlogin", "last login", "last_logon", "lastlogon", "ultimo accesso", "ultimologin"],
+        "email": ["email", "mail", "emailaddress", "posta"],
+        "upn": ["upn", "user principal name", "userprincipalname"],
+        "employeeId": ["employeeid", "employee id", "matricola", "badgeid"],
+        "manager": ["manager", "owner", "responsabile"],
+        "statusAd": ["statusad", "adstatus", "accountstatusad", "statoad"],
+        "statusHr": ["statushr", "hrstatus", "accountstatushr", "statohr"],
+        "orphanGroups": ["orphangroups", "orphan_groups", "cataloggroups", "catalog_groups", "groupscatalog"],
     }
 
     def _extract_csv_fields(row: dict) -> tuple:
         row_ci = {_norm_header(k): v for k, v in (row or {}).items()}
         dnraw = _get_any(row_ci, CSV_KEYS["displayName"])
+        usernameraw = _get_any(row_ci, CSV_KEYS["username"])
         deptraw = _get_any(row_ci, CSV_KEYS["department"])
         brraw = _get_any(row_ci, CSV_KEYS["businessRole"])
         rolesraw = _get_any(row_ci, CSV_KEYS["roles"])
         type_raw = _get_any(row_ci, CSV_KEYS["accountType"])
         last_login_raw = _get_any(row_ci, CSV_KEYS["lastLogin"])
+        email_raw = _get_any(row_ci, CSV_KEYS["email"])
+        upn_raw = _get_any(row_ci, CSV_KEYS["upn"])
+        employee_id_raw = _get_any(row_ci, CSV_KEYS["employeeId"])
+        manager_raw = _get_any(row_ci, CSV_KEYS["manager"])
+        status_ad_raw = _get_any(row_ci, CSV_KEYS["statusAd"])
+        status_hr_raw = _get_any(row_ci, CSV_KEYS["statusHr"])
+        orphan_groups_raw = _get_any(row_ci, CSV_KEYS["orphanGroups"])
 
         dn = (dnraw or "").strip()
+        preferred_username = (usernameraw or "").strip()
         dept = (deptraw or "").strip()
         br = (brraw or "").strip()
         roles = (rolesraw or "").strip()
         acct_type = (type_raw or "WhiteCollar").strip()
         last_login = _normalize_last_login((last_login_raw or "").strip() or None)
+        email = (email_raw or "").strip().lower()
+        upn = (upn_raw or "").strip().lower()
+        employee_id = (employee_id_raw or "").strip()
+        manager = (manager_raw or "").strip()
+        status_ad = (status_ad_raw or "").strip()
+        status_hr = (status_hr_raw or "").strip()
+        orphan_groups = [g.strip() for g in (orphan_groups_raw or "").split(",") if g and g.strip()]
 
         if (not dept) and dn and ("," in dn):
             dn, dept = [x.strip() for x in dn.split(",", 1)]
@@ -3783,7 +3971,23 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         if not br:
             br = dept
 
-        return dnraw, dn, dept, br, roles, acct_type, last_login
+        return (
+            dnraw,
+            dn,
+            preferred_username,
+            dept,
+            br,
+            roles,
+            acct_type,
+            last_login,
+            email,
+            upn,
+            employee_id,
+            manager,
+            status_ad,
+            status_hr,
+            orphan_groups,
+        )
 
     state.setdefault("ingest_sources", {})
     state["ingest_sources"]["csv"] = []
@@ -3797,6 +4001,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     csv_missing_department = 0
     csv_missing_businessrole = 0
     csv_missing_roles = 0
+    csv_orphan_groups_catalog: set[str] = set()
     csv_rejects: List[Dict[str, Any]] = []
     reject_empty_groups = bool((state.get("dq_rules") or {}).get("reject_empty_groups"))
 
@@ -3808,7 +4013,25 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
     for row in reader:
         csv_rows_total += 1
         row_id = f"csv:{csv_rows_total}"
-        dnraw, dn, dept, br, roles, acct_type, last_login = _extract_csv_fields(row)
+        (
+            dnraw,
+            dn,
+            preferred_username,
+            dept,
+            br,
+            roles,
+            acct_type,
+            last_login,
+            email,
+            upn,
+            employee_id,
+            manager,
+            status_ad,
+            status_hr,
+            orphan_groups,
+        ) = _extract_csv_fields(row)
+        for g in orphan_groups:
+            csv_orphan_groups_catalog.add(g)
 
         if not dn:
             csv_missing_displayname += 1
@@ -3845,16 +4068,28 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
             "excluded": False,
             "lastLogin": last_login,
             "accountType": final_type,
+            "preferredUsername": preferred_username or None,
+            "email": email or None,
+            "upn": upn or None,
+            "employeeId": employee_id or None,
+            "manager": manager or None,
+            "statusAd": status_ad or None,
+            "statusHr": status_hr or None,
         }
 
         rec = {
             "rowId": row_id,
             "displayName": dn,
             "displayNameRaw": dnraw,
+            "preferredUsername": preferred_username,
             "businessRole": br,
             "department": dept,
             "lastLogin": last_login,
             "roles": parsed_roles,
+            "email": email,
+            "upn": upn,
+            "employeeId": employee_id,
+            "manager": manager,
             "rawLine": f"{dnraw};{dept};{roles}",
         }
         state["last_csv_rows"].append(rec)
@@ -3914,7 +4149,8 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         winner = scored_rows[0]
         winner_user = dict(winner["user"])
 
-        base = _slug_username(winner_user.get("displayName") or "")
+        preferred_uname = (winner_user.get("preferredUsername") or "").strip()
+        base = _slug_username(preferred_uname or winner_user.get("displayName") or "")
         uname = base
         i = 2
         while uname in taken_usernames:
@@ -3977,6 +4213,11 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
                 existing_user["displayName"] = user["displayName"]
             if user.get("accountType"):
                 existing_user["accountType"] = user["accountType"]
+            if user.get("lastLogin"):
+                existing_user["lastLogin"] = user["lastLogin"]
+            for k in ("email", "upn", "employeeId", "manager", "statusAd", "statusHr"):
+                if user.get(k) is not None:
+                    existing_user[k] = user.get(k)
             
             # Update username if it changed (displayName matched but username different)
             if existing_user.get("username") != uname:
@@ -3996,7 +4237,9 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
 
     merged_users = list(existing_by_uname.values())
     state["last_extract"]["users"] = merged_users
-    state["last_extract"]["groups"] = recompute_groups_from_users(merged_users)
+    computed_groups = set(recompute_groups_from_users(merged_users))
+    computed_groups.update(csv_orphan_groups_catalog)
+    state["last_extract"]["groups"] = sorted(computed_groups)
     state["last_extract"]["ou"] = "MERGED"
     state["last_extract"]["ts"] = time.time()
 
@@ -4025,6 +4268,7 @@ async def import_csv(file: UploadFile = File(...), username: str = Depends(requi
         "missingDisplayName": csv_missing_displayname,
         "missingUsername": 0,
         "missingRoles": csv_missing_roles,
+        "orphanGroupsCatalog": len(csv_orphan_groups_catalog),
         "autoResolvedDuplicateUsers": csv_auto_resolved_duplicates,
         "ts": datetime.now(timezone.utc).isoformat(),
     }

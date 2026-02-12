@@ -16,11 +16,51 @@ const INDICATOR_DESCRIPTIONS = {
     generalization: "Misura il gap di generalizzazione del modello su utenti reali. Un valore alto indica che la confidenza media e bassa e che il modello potrebbe degradare su nuovi dati.",
 };
 
-const StatCard = ({ label, value, color }) => (
-    <div className="card" style={{ borderLeft: `3px solid ${color}`, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+const StatCard = ({ label, value, color, onClick }) => (
+    <div
+        className="card"
+        onClick={onClick}
+        style={{
+            borderLeft: `3px solid ${color}`,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            cursor: onClick ? "pointer" : "default",
+        }}
+    >
         <div className="k" style={{ textTransform: "uppercase", letterSpacing: 1, fontSize: 10 }}>{label}</div>
         <div className="v" style={{ color: color }}>{value}</div>
     </div>
+);
+
+const ExportCsvButton = ({ onClick }) => (
+    <button
+        onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+        }}
+        title="Esporta CSV"
+        aria-label="Esporta CSV"
+        style={{
+            width: 42,
+            height: 42,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "none",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            color: "var(--text)",
+            cursor: "pointer",
+            flexShrink: 0,
+        }}
+    >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3v11" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M4 20h16" />
+        </svg>
+    </button>
 );
 
 export default function ModelQualityPage() {
@@ -28,9 +68,6 @@ export default function ModelQualityPage() {
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState("");
     const [activeTab, setActiveTab] = useState("groups");
-    const [presetInfo, setPresetInfo] = useState(null);
-    const [selectedPreset, setSelectedPreset] = useState("manufacturing");
-    const [applyingPreset, setApplyingPreset] = useState(false);
     const [groupsOpen, setGroupsOpen] = useState(true);
     const [openUserSection, setOpenUserSection] = useState("stale");
     const [indicatorPopup, setIndicatorPopup] = useState(null);
@@ -44,9 +81,6 @@ export default function ModelQualityPage() {
                 api.kpiDrilldown("model-quality")
             ]);
             setData({ ...res, modelQualityScore: kpi.modelQuality });
-            const p = await api.modelQualityPresets();
-            setPresetInfo(p);
-            setSelectedPreset(p?.activePreset || res?.modelPreset || "manufacturing");
         } catch (e) {
             setErr(String(e.message || e));
         } finally {
@@ -54,32 +88,18 @@ export default function ModelQualityPage() {
         }
     };
 
-    async function applyPreset() {
-        if (!selectedPreset) return;
-        try {
-            setApplyingPreset(true);
-            setErr("");
-            await api.applyModelQualityPreset(selectedPreset);
-            await load();
-        } catch (e) {
-            setErr(String(e.message || e));
-        } finally {
-            setApplyingPreset(false);
-        }
-    }
-
     useEffect(() => { load(); }, []);
 
     if (loading) return (
         <div className="main">
-            <h2 style={{ marginTop: 0 }}>Model Score Details</h2>
+            <h2 style={{ marginTop: 0 }}>Model Score</h2>
             <div className="panel" style={{ color: "var(--muted)" }}>Caricamento dati Model Score...</div>
         </div>
     );
 
     if (err) return (
         <div className="main">
-            <h2 style={{ marginTop: 0 }}>Model Score Details</h2>
+            <h2 style={{ marginTop: 0 }}>Model Score</h2>
             <div className="err panel">Errore: {err}</div>
         </div>
     );
@@ -98,37 +118,65 @@ export default function ModelQualityPage() {
         setOpenUserSection((prev) => (prev === key ? null : key));
     }
 
+    function csvEscape(v) {
+        const s = String(v ?? "");
+        if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
+            return `"${s.replace(/"/g, "\"\"")}"`;
+        }
+        return s;
+    }
+
+    function downloadCsv(filename, headers, rows) {
+        const lines = [];
+        lines.push((headers || []).map(csvEscape).join(","));
+        (rows || []).forEach((r) => {
+            lines.push((r || []).map(csvEscape).join(","));
+        });
+        const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function openFromCard(target) {
+        if (target === "groups") {
+            setActiveTab("groups");
+            setGroupsOpen(true);
+            return;
+        }
+        if (target === "indicators") {
+            setActiveTab("indicators");
+            return;
+        }
+        setActiveTab("users");
+        if (target === "users") {
+            setOpenUserSection("stale");
+        } else {
+            setOpenUserSection(target);
+        }
+    }
+
     return (
         <div className="main">
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 24 }}>
-                <h2 style={{ margin: 0 }}>Dettagli <span style={{ color: "var(--accent)" }}>Model Score</span></h2>
+                <h2 style={{ margin: 0 }}>Model Score</h2>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select
-                        value={selectedPreset}
-                        onChange={(e) => setSelectedPreset(e.target.value)}
-                        style={{ background: "#111a2e", color: "#e9eefc", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}
-                    >
-                        {((presetInfo?.availablePresets) || (data?.availableModelPresets) || ["banking", "manufacturing", "retail"]).map((p) => (
-                            <option key={p} value={p}>{p}</option>
-                        ))}
-                    </select>
-                    <button className="primary" onClick={applyPreset} disabled={applyingPreset} style={{ padding: "8px 14px", borderRadius: 10 }}>
-                        {applyingPreset ? "Applicazione..." : "Applica Preset"}
-                    </button>
                     <button className="primary" onClick={load} style={{ padding: "8px 20px", borderRadius: 10 }}>Aggiorna</button>
                 </div>
             </div>
-            <div style={{ marginBottom: 12, color: "var(--muted)", fontSize: 13 }}>
-                Preset attivo: <b style={{ color: "var(--text)" }}>{data?.modelPreset || presetInfo?.activePreset || "-"}</b>
-            </div>
 
-            <div className="grid" style={{ marginBottom: 24 }}>
-                <StatCard label="Model Score" value={`${score}%`} color={score > 80 ? "#71ffb2" : score > 50 ? "#ff9f1c" : "#ff6a6a"} />
-                <StatCard label="Gruppi Orfani" value={orphanCount} color={orphanCount > 0 ? "var(--danger)" : "#71ffb2"} />
-                <StatCard label="Account Stale" value={staleCount} color={staleCount > 0 ? "var(--danger)" : "#71ffb2"} />
-                <StatCard label="Issue Utenti" value={totalUserIssues} color={totalUserIssues > 0 ? "var(--danger)" : "#71ffb2"} />
-                <StatCard label="Policy Violations" value={policyCount} color={policyCount > 0 ? "var(--danger)" : "#71ffb2"} />
-                <StatCard label="Utenti Ambigui" value={ambiguousCount} color={ambiguousCount > 0 ? "var(--danger)" : "#71ffb2"} />
+            <div className="grid" style={{ marginBottom: 24, gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>
+                <StatCard label="Model Score" value={`${score}%`} color={score > 80 ? "#71ffb2" : score > 50 ? "#ff9f1c" : "#ff6a6a"} onClick={() => openFromCard("indicators")} />
+                <StatCard label="Gruppi Orfani" value={orphanCount} color={orphanCount > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("groups")} />
+                <StatCard label="Account Stale" value={staleCount} color={staleCount > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("stale")} />
+                <StatCard label="Issue Utenti" value={totalUserIssues} color={totalUserIssues > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("users")} />
+                <StatCard label="Policy Violations" value={policyCount} color={policyCount > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("policy")} />
+                <StatCard label="Utenti Ambigui" value={ambiguousCount} color={ambiguousCount > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("ambiguous")} />
             </div>
 
             <div className="panel">
@@ -173,15 +221,25 @@ export default function ModelQualityPage() {
 
                 {activeTab === "groups" && (
                     <div>
-                        <button
-                            onClick={() => setGroupsOpen((x) => !x)}
-                            style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}
-                        >
-                            {groupsOpen ? "Nascondi lista gruppi" : "Mostra lista gruppi"}
-                        </button>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                            <button
+                                onClick={() => setGroupsOpen((x) => !x)}
+                                style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}
+                            >
+                                <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 0 }}>Gruppi Orfani (0 Membri)</h3>
+                            </button>
+                            <ExportCsvButton
+                                onClick={() =>
+                                    downloadCsv(
+                                        "gruppi_impattati.csv",
+                                        ["groupName", "userCount"],
+                                        (data?.groupsIssues || []).map((g) => [g.groupName, g.userCount])
+                                    )
+                                }
+                            />
+                        </div>
                         {groupsOpen && (
                             <>
-                                <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Gruppi Orfani (0 Membri)</h3>
                                 {orphanCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun gruppo orfano trovato.</div> : (
                                     <table className="table">
                                         <thead><tr><th>Nome Gruppo</th><th style={{ width: 120, textAlign: "center" }}>Utenti</th></tr></thead>
@@ -203,12 +261,22 @@ export default function ModelQualityPage() {
                 {activeTab === "users" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 48 }}>
                         <section>
-                            <button onClick={() => toggleUserSection("stale")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
-                                {openUserSection === "stale" ? "Nascondi Account Stale" : "Mostra Account Stale"}
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                                <button onClick={() => toggleUserSection("stale")} style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 0 }}>Account Stale (&gt; 1 anno inattivi)</h3>
+                                </button>
+                                <ExportCsvButton
+                                    onClick={() =>
+                                        downloadCsv(
+                                            "utenti_impattati_stale.csv",
+                                            ["displayName", "username", "lastLogon"],
+                                            (data?.staleAccounts || []).map((u) => [u.displayName, u.username, u.lastLogon])
+                                        )
+                                    }
+                                />
+                            </div>
                             {openUserSection === "stale" && (
                                 <>
-                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Account Stale (&gt; 1 anno inattivi)</h3>
                                     {staleCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun account stale trovato.</div> : (
                                         <table className="table">
                                             <thead><tr><th>Nome Visualizzato</th><th>Username</th><th>Ultimo Accesso</th></tr></thead>
@@ -228,12 +296,22 @@ export default function ModelQualityPage() {
                         </section>
 
                         <section>
-                            <button onClick={() => toggleUserSection("zero")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
-                                {openUserSection === "zero" ? "Nascondi Utenti senza Gruppi" : "Mostra Utenti senza Gruppi"}
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                                <button onClick={() => toggleUserSection("zero")} style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 0 }}>Utenti senza Gruppi</h3>
+                                </button>
+                                <ExportCsvButton
+                                    onClick={() =>
+                                        downloadCsv(
+                                            "utenti_impattati_senza_gruppi.csv",
+                                            ["displayName", "username"],
+                                            (data?.zeroGroupsUsers || []).map((u) => [u.displayName, u.username])
+                                        )
+                                    }
+                                />
+                            </div>
                             {openUserSection === "zero" && (
                                 <>
-                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti senza Gruppi</h3>
                                     {zeroCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente orfano trovato.</div> : (
                                         <table className="table">
                                             <thead><tr><th>Nome Visualizzato</th><th>Username</th></tr></thead>
@@ -252,12 +330,22 @@ export default function ModelQualityPage() {
                         </section>
 
                         <section>
-                            <button onClick={() => toggleUserSection("over")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
-                                {openUserSection === "over" ? "Nascondi Overprivileged" : "Mostra Overprivileged"}
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                                <button onClick={() => toggleUserSection("over")} style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 0 }}>Utenti Overprivileged (Top 10%)</h3>
+                                </button>
+                                <ExportCsvButton
+                                    onClick={() =>
+                                        downloadCsv(
+                                            "utenti_impattati_overprivileged.csv",
+                                            ["username", "groupCount"],
+                                            (data?.overprivilegedUsers || []).map((u) => [u.username, u.groupCount])
+                                        )
+                                    }
+                                />
+                            </div>
                             {openUserSection === "over" && (
                                 <>
-                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti Overprivileged (Top 10%)</h3>
                                     {overCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente overprivileged trovato.</div> : (
                                         <table className="table">
                                             <thead><tr><th>Username</th><th>Conteggio Gruppi</th></tr></thead>
@@ -279,12 +367,22 @@ export default function ModelQualityPage() {
                         </section>
 
                         <section>
-                            <button onClick={() => toggleUserSection("policy")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
-                                {openUserSection === "policy" ? "Nascondi Policy Violations" : "Mostra Policy Violations"}
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                                <button onClick={() => toggleUserSection("policy")} style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 0 }}>Policy Violations</h3>
+                                </button>
+                                <ExportCsvButton
+                                    onClick={() =>
+                                        downloadCsv(
+                                            "utenti_impattati_policy_violations.csv",
+                                            ["username", "conflicts"],
+                                            (data?.policyViolations || []).map((u) => [u.username, (u.conflicts || []).join(" | ")])
+                                        )
+                                    }
+                                />
+                            </div>
                             {openUserSection === "policy" && (
                                 <>
-                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Policy Violations</h3>
                                     {policyCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessuna violazione rilevata.</div> : (
                                         <table className="table">
                                             <thead><tr><th>Username</th><th>Conflitti</th></tr></thead>
@@ -303,12 +401,22 @@ export default function ModelQualityPage() {
                         </section>
 
                         <section>
-                            <button onClick={() => toggleUserSection("ambiguous")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
-                                {openUserSection === "ambiguous" ? "Nascondi Utenti Ambigui" : "Mostra Utenti Ambigui"}
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                                <button onClick={() => toggleUserSection("ambiguous")} style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 0 }}>Utenti Ambigui (Confidenza bassa)</h3>
+                                </button>
+                                <ExportCsvButton
+                                    onClick={() =>
+                                        downloadCsv(
+                                            "utenti_impattati_ambigui.csv",
+                                            ["displayName", "username", "confidence"],
+                                            (data?.ambiguousUsers || []).map((u) => [u.displayName, u.username, u.confidence])
+                                        )
+                                    }
+                                />
+                            </div>
                             {openUserSection === "ambiguous" && (
                                 <>
-                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti Ambigui (Confidenza bassa)</h3>
                                     {ambiguousCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente ambiguo.</div> : (
                                         <table className="table">
                                             <thead><tr><th>Display Name</th><th>Username</th><th>Confidence</th></tr></thead>
