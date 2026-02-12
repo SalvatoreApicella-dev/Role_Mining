@@ -16,9 +16,6 @@ services:
   frontend:
     build: ./frontend
     container_name: rolemining-frontend
-    environment:
-         - VITE_API_BASE=http://serverinobello.freedynamicdns.net:5173
-
     ports:
       - "5173:5173"
     depends_on:
