@@ -1655,8 +1655,13 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
         uname = nu["username"]
         dn_key = (nu.get("displayName") or "").strip().lower()
         
-        # Match by displayName first, then by username
-        existing_user = by_displayname.get(dn_key) or by_username.get(uname)
+        # Merge policy:
+        # 1) Match by username
+        # 2) If not found, match by displayName and update existing record
+        #    (required for connector updates with renamed/changed usernames)
+        existing_user = by_username.get(uname)
+        if existing_user is None:
+            existing_user = by_displayname.get(dn_key)
         
         if existing_user:
             # REPLACE existing user with new data from import
@@ -1694,24 +1699,30 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
     state["mining_dirty"] = True
     log("INFO", f"Merge complete. Updated: {updated_count}, Added: {added_count}, Total: {len(base_users)}")
 
-def rerun_auto_business_roles_after_connector(users: List[Dict[str, Any]], only_depts: Optional[set[str]] = None) -> None:
-    # CRITICAL: Preserve existing valid Business Roles from user objects BEFORE resetting mapping
-    # This ensures CSV-assigned BRs survive the auto-assignment process
+def rerun_auto_business_roles_after_connector(
+    users: List[Dict[str, Any]],
+    only_depts: Optional[set[str]] = None,
+    preserve_existing_brs: bool = True,
+) -> None:
     preserved_brs = {}
-    for u in (users or []):
-        uname = u.get("username")
-        br = (u.get("businessRole") or "").strip()
-        if uname and br and br != "Unassigned":
-            preserved_brs[uname] = br
-    
+    if preserve_existing_brs:
+        # Preserve existing valid Business Roles from user objects BEFORE resetting mapping
+        # Useful for CSV imports where BR is explicitly curated.
+        for u in (users or []):
+            uname = u.get("username")
+            br = (u.get("businessRole") or "").strip()
+            if uname and br and br != "Unassigned":
+                preserved_brs[uname] = br
+
     # Reset mapping (partial or full)
     if not only_depts:
-        # Full rebuild - start fresh but preserve existing BRs
-        state["user_business_role"] = preserved_brs.copy()
+        # Full rebuild. For AD import we can start clean and let department/rules reassign.
+        state["user_business_role"] = preserved_brs.copy() if preserve_existing_brs else {}
     else:
         # Partial update: merge preserved into existing
         state.setdefault("user_business_role", {})
-        state["user_business_role"].update(preserved_brs)
+        if preserve_existing_brs:
+            state["user_business_role"].update(preserved_brs)
 
     
     # Do NOT wipe existing business roles on the user objects themselves,
@@ -1767,6 +1778,21 @@ def build_over_rows_only(matrix: Dict[str, Dict[str, int]], threshold: Optional[
 def log(level: str, message: str) -> None:
     state["logs"].insert(0, {"ts": datetime.now(timezone.utc).isoformat(), "level": level, "message": message})
     state["logs"] = state["logs"][:500]
+
+def _json_safe_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            key = k.decode("utf-8", errors="replace") if isinstance(k, bytes) else str(k)
+            out[key] = _json_safe_value(v)
+        return out
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_value(v) for v in value]
+    return str(value)
 
 
 def record_manual_user_change(
@@ -1995,16 +2021,41 @@ def _mk_ldap_server(cfg: Dict[str, Any]):
     raw = (cfg.get("server") or "").strip()
     if not raw:
         raise HTTPException(status_code=400, detail="Configura server LDAP")
-    host = raw.replace("ldaps://", "").replace("ldap://", "").split(":")[0]
 
     if Connection is None:
         raise HTTPException(status_code=500, detail="ldap3 non disponibile")
 
-    # Use configured port or default to 389/636 based on SSL
-    port = int(cfg.get("port") or 389)
-    use_ssl = bool(cfg.get("use_ssl") or False)
-    
-    return Server(host, port=port, use_ssl=use_ssl, get_info=NONE, connect_timeout=15)
+    raw_lower = raw.lower()
+    scheme_ssl = raw_lower.startswith("ldaps://")
+    host_port = raw.replace("ldaps://", "").replace("ldap://", "")
+    host = host_port.split(":")[0].strip()
+    server_port = None
+    if ":" in host_port:
+        try:
+            server_port = int(host_port.rsplit(":", 1)[1].strip())
+        except Exception:
+            server_port = None
+
+    cfg_use_ssl = cfg.get("use_ssl")
+    use_ssl = bool(cfg_use_ssl) if cfg_use_ssl is not None else scheme_ssl
+
+    cfg_port = cfg.get("port")
+    port = None
+    try:
+        port = int(cfg_port) if cfg_port is not None else None
+    except Exception:
+        port = None
+    if port is None:
+        port = server_port
+    if port is None:
+        port = 636 if use_ssl else 389
+
+    return {
+        "server": Server(host, port=port, use_ssl=use_ssl, get_info=NONE, connect_timeout=15),
+        "host": host,
+        "port": port,
+        "use_ssl": use_ssl,
+    }
 
 
 
@@ -2027,7 +2078,12 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
     
     conn = None
     try:
-        server = _mk_ldap_server(cfg)
+        resolved = _mk_ldap_server(cfg)
+        server = resolved["server"]
+        host = resolved["host"]
+        port = resolved["port"]
+        use_ssl = resolved["use_ssl"]
+        log("INFO", f"LDAP target resolved to {host}:{port} (use_ssl={use_ssl})")
         auth_mode = cfg.get("auth", "SIMPLE").upper()
         
         try:
@@ -2039,8 +2095,8 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
             error_msg = str(e)
             log("ERROR", f"LDAP Connection failed: {error_msg}")
             if "timeout" in error_msg.lower():
-                 raise HTTPException(status_code=504, detail=f"Timeout connettendosi al server LDAP {cfg['server']}")
-            raise HTTPException(status_code=503, detail=f"Impossibile connettersi al server LDAP {cfg['server']}:389 - {error_msg}")
+                 raise HTTPException(status_code=504, detail=f"Timeout connettendosi al server LDAP {host}:{port} (use_ssl={use_ssl})")
+            raise HTTPException(status_code=503, detail=f"Impossibile connettersi al server LDAP {host}:{port} (use_ssl={use_ssl}) - {error_msg}")
 
         # objectClass=user può includere account tecnici: in produzione aggiungere filtri più stretti
         search_filter = "(&(objectClass=user)(sAMAccountName=*))"
@@ -2050,8 +2106,22 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
         log("INFO", f"Searching LDAP base='{ou_dn}' filter='{search_filter}'")
 
         if not conn.search(search_base=ou_dn, search_filter=search_filter, attributes=attrs):
-             log("ERROR", f"LDAP search returned False. Result: {conn.result}")
-             raise HTTPException(status_code=500, detail=f"LDAP search failed: {conn.result}")
+             result = conn.result or {}
+             log("ERROR", f"LDAP search returned False. Result: {result}")
+             result_desc = str(result.get("description") or "").lower()
+             diagnostic = {
+                 "message": f"LDAP search failed on base '{ou_dn}'",
+                 "result": result,
+                 "hints": [
+                     "Verifica OU DN: deve esistere nel dominio LDAP (es. OU=Users,DC=example,DC=internal).",
+                     f"Controlla coerenza con base_dn configurato: '{cfg.get('base_dn') or ''}'.",
+                 ],
+             }
+             if "no such object" in result_desc or "nosuchobject" in result_desc:
+                 raise HTTPException(status_code=400, detail=diagnostic)
+             if "invalid dn syntax" in result_desc or "invaliddnsyntax" in result_desc:
+                 raise HTTPException(status_code=400, detail=diagnostic)
+             raise HTTPException(status_code=500, detail=diagnostic)
         
         log("INFO", f"LDAP search found {len(conn.entries)} entries. Parsing...")
         
@@ -2117,8 +2187,9 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
                 # Use department or parse OU from DN as fallback for classification
                 ou_for_class = department or dn_str_val
 
-                # Pass ALL attributes to classification (d is the dict of attributes)
-                account_type = classify_account(display or username, ou_for_class, etype, attributes=d)
+                # Pass sanitized attributes to avoid bytes serialization errors in API responses.
+                safe_attrs = _json_safe_value(d)
+                account_type = classify_account(display or username, ou_for_class, etype, attributes=safe_attrs)
 
                 if username:
                     users.append({
@@ -2128,7 +2199,7 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
                         "department": department,
                         "lastLogin": last_login,
                         "accountType": account_type,
-                        "attributes": d # Store raw attributes for future reference/rules
+                        "attributes": safe_attrs
                     })
             except Exception as entry_ex:
                 # Log but continue processing other users
@@ -2987,9 +3058,12 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
     users = filter_and_dedupe_connector_users(users, source="ad")
     merge_from_connector(users, ou=req.ou, source="ad")
     
-    # rerun_auto_business_roles_after_connector already calls rerun_auto_business_roles_after_connector
-    # which calls brdb_rebuild and apply_department_mapping.
-    rerun_auto_business_roles_after_connector(state["last_extract"]["users"])
+    # For AD import, re-evaluate assignments from AD signals (department/groups/rules)
+    # instead of preserving stale BR values from previous imports.
+    rerun_auto_business_roles_after_connector(
+        state["last_extract"]["users"],
+        preserve_existing_brs=False,
+    )
     new_brs = sync_roles_from_users(state["last_extract"]["users"])
 
     # 3) Batch updates to state to minimize disk I/O

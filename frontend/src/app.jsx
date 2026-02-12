@@ -240,6 +240,9 @@ function Connettori() {
       setErr("");
       const c = await api.getConnector();
       setCfg(c);
+      if (c?.base_dn) {
+        setOu(c.base_dn);
+      }
     } catch (e) {
       setErr(String(e.message || e));
     }

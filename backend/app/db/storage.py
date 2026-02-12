@@ -47,13 +47,30 @@ class JsonFileStore:
     
     def _prepare_for_json(self, obj: Any) -> Any:
         """Recursively convert non-JSON-serializable types."""
+        if isinstance(obj, (str, int, float, bool)) or obj is None:
+            return obj
+        if isinstance(obj, bytes):
+            try:
+                return obj.decode("utf-8")
+            except UnicodeDecodeError:
+                return obj.hex()
         if isinstance(obj, set):
             return list(obj)
         elif isinstance(obj, dict):
-            return {k: self._prepare_for_json(v) for k, v in obj.items()}
+            prepared = {}
+            for k, v in obj.items():
+                if isinstance(k, bytes):
+                    try:
+                        key = k.decode("utf-8")
+                    except UnicodeDecodeError:
+                        key = k.hex()
+                else:
+                    key = str(k) if not isinstance(k, str) else k
+                prepared[key] = self._prepare_for_json(v)
+            return prepared
         elif isinstance(obj, list):
             return [self._prepare_for_json(item) for item in obj]
-        return obj
+        return str(obj)
     
     def _restore_from_json(self, obj: Any, key: str = "") -> Any:
         """Restore sets from lists where appropriate."""

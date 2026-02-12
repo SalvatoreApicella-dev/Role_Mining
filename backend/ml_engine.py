@@ -961,7 +961,8 @@ class MLEngine:
         self.brdb["total_assignments"] = 0
         
         for u in users:
-            role = u.get("businessRole", "").strip()
+            # Defensive: AD extracts may contain null businessRole
+            role = (u.get("businessRole") or "").strip()
             groups = u.get("groups", [])
             
             if role and role != "Unassigned" and groups:
