@@ -1962,7 +1962,7 @@ class ConnectorConfig(BaseModel):
 
 
 class ExtractRequest(BaseModel):
-    ou: str = Field(..., description="OU DN (es: OU=Users,DC=example,DC=local)")
+    ou: str = Field("", description="OU DN (opzionale: fallback a base_dn connettore)")
 
 
 class ExtractResponse(BaseModel):
@@ -3034,9 +3034,12 @@ def set_connector(cfg: ConnectorConfig, username: str = Depends(require_auth)):
 
 @app.post("/api/ad/extract", response_model=ExtractResponse)
 def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    connector_cfg = state.get("connector") or {}
+    ou_dn = (req.ou or "").strip() or (connector_cfg.get("base_dn") or "").strip()
+    if not ou_dn:
+        raise HTTPException(status_code=400, detail="OU/base_dn non valorizzato: imposta base_dn in Connettori o passa OU nella richiesta")
 
-    
-    users = extract_from_ldap(req.ou)
+    users = extract_from_ldap(ou_dn)
 
     # 1) Costruisci candidati AD
     ad_candidates = []
@@ -3056,7 +3059,7 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
 
     # 2) DB di sistema: filter, replace, auto-assign
     users = filter_and_dedupe_connector_users(users, source="ad")
-    merge_from_connector(users, ou=req.ou, source="ad")
+    merge_from_connector(users, ou=ou_dn, source="ad")
     
     # For AD import, re-evaluate assignments from AD signals (department/groups/rules)
     # instead of preserving stale BR values from previous imports.

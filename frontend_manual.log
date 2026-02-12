@@ -1,56 +1,20 @@
 
-> role-mining-ui@1.0.0 dev
-> vite --host 127.0.0.1 --port 5173 --strictPort
+  VITE v5.4.21  ready in 222 ms
 
-Re-optimizing dependencies because lockfile has changed
-
-  VITE v5.4.21  ready in 225 ms
-
-  ➜  Local:   http://127.0.0.1:5173/
-5:15:53 PM [vite] http proxy error: /api/me
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.1.46:5173/
+5:55:02 PM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-5:15:53 PM [vite] http proxy error: /api/businessroles
+5:55:02 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-5:15:53 PM [vite] http proxy error: /api/me
+5:55:02 PM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-5:15:53 PM [vite] http proxy error: /api/businessroles
+5:55:02 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-5:15:53 PM [vite] http proxy error: /api/businessroles
+5:55:02 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-5:17:07 PM [vite] vite.config.js changed, restarting server...
-5:17:07 PM [vite] server restarted.
-5:17:08 PM [vite] http proxy error: /api/businessroles
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/me
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/businessroles
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/me
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/businessroles
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/me
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/businessroles
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/me
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/businessroles
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
-5:17:08 PM [vite] http proxy error: /api/businessroles
-Error: getaddrinfo ENOTFOUND backend
-    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
