@@ -30,70 +30,102 @@ const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 function Sidebar({ onLogout, roles }) {
   const [openCfg, setOpenCfg] = useState(true);
-  const [openBr, setOpenBr] = useState(true);
   const [openAiGym, setOpenAiGym] = useState(true);
-  const [xlsxFile, setXlsxFile] = useState(null);
-  const [importMsg, setImportMsg] = useState("");
-  const [csvFile, setCsvFile] = useState(null);
-
-
-
-  // const [openAllRoles, setOpenAllRoles] = useState(false);
-
-
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar bip-sidebar">
+      <div className="sidebar-utility">
+        <NavLink to="/analytics" className="sidebar-overview-btn">
+          <img
+            src="/BIP-Thumbnail-RED-on-BLUE.png"
+            alt="Logo"
+            className="sidebar-overview-btn__logo"
+          />
+          <span className="sidebar-overview-btn__label">Role Builder AI</span>
+        </NavLink>
+      </div>
 
       <div className="menu">
-        <div className="menu-section">Insights</div>
-        <NavLink to="/analytics" className={({ isActive }) => (isActive ? "active" : "")}>Analytics</NavLink>
+        <div className="menu-block nav-section">
+          <div className="menu-section">Management</div>
+          <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+            <span className="nav-item__dot" />
+            <span className="nav-item__text">Business Roles</span>
+          </NavLink>
+          <NavLink to="/cluster" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+            <span className="nav-item__dot" />
+            <span className="nav-item__text">Cluster</span>
+          </NavLink>
+          <NavLink to="/utenti" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+            <span className="nav-item__dot" />
+            <span className="nav-item__text">Users</span>
+          </NavLink>
+        </div>
 
-        <div className="menu-section">Management</div>
-        <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "active" : "")}>Business Roles</NavLink>
-        <NavLink to="/cluster" className={({ isActive }) => (isActive ? "active" : "")}>Cluster</NavLink>
-        <NavLink to="/utenti" className={({ isActive }) => (isActive ? "active" : "")}>Users</NavLink>
-
-        <div className="menu-section">System</div>
-        <button className="link" onClick={() => setOpenAiGym(v => !v)}>
-          AI Training ▾
-        </button>
-        {openAiGym && (
-          <div className="submenu">
-            <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "active" : "")}>Pattern Rules</NavLink>
-            <NavLink to="/ai-lab/drift" className={({ isActive }) => (isActive ? "active" : "")}>Data Drift</NavLink>
-            <NavLink to="/ai-lab/timeline" className={({ isActive }) => (isActive ? "active" : "")}>Training Timeline</NavLink>
-            <NavLink to="/ai-lab/ab-playground" className={({ isActive }) => (isActive ? "active" : "")}>A/B Playground</NavLink>
-            <NavLink to="/ai-lab/fairness" className={({ isActive }) => (isActive ? "active" : "")}>Bias & Fairness</NavLink>
-            <NavLink to="/ai-lab/synthetic" className={({ isActive }) => (isActive ? "active" : "")}>Synthetic Cases</NavLink>
-            <NavLink to="/ai-lab/feedback" className={({ isActive }) => (isActive ? "active" : "")}>Feedback Loop</NavLink>
-          </div>
-        )}
-        <button className="link" onClick={() => setOpenCfg(v => !v)}>
-          Configurazioni ▾
-        </button>
-        {openCfg && (
-          <div className="submenu">
-            <NavLink to="/config/connettori" className={({ isActive }) => (isActive ? "active" : "")}>Connettori</NavLink>
-            <NavLink to="/config/logs" className={({ isActive }) => (isActive ? "active" : "")}>Logs</NavLink>
-          </div>
-        )}
+        <div className="menu-block nav-section">
+          <div className="menu-section">System</div>
+          <button className={`link nav-toggle ${openAiGym ? "is-open" : ""}`} onClick={() => setOpenAiGym(v => !v)}>
+            <span className="nav-toggle__label">
+              <span className="nav-item__dot" />
+              <span className="nav-item__text">AI Training</span>
+            </span>
+          </button>
+          {openAiGym && (
+            <div className="submenu nav-submenu">
+              <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Pattern Rules</span>
+              </NavLink>
+              <NavLink to="/ai-lab/drift" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Data Drift</span>
+              </NavLink>
+              <NavLink to="/ai-lab/timeline" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Training Timeline</span>
+              </NavLink>
+              <NavLink to="/ai-lab/ab-playground" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">A/B Playground</span>
+              </NavLink>
+              <NavLink to="/ai-lab/fairness" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Bias & Fairness</span>
+              </NavLink>
+              <NavLink to="/ai-lab/synthetic" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Synthetic Cases</span>
+              </NavLink>
+              <NavLink to="/ai-lab/feedback" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Feedback Loop</span>
+              </NavLink>
+            </div>
+          )}
+          <button className={`link nav-toggle ${openCfg ? "is-open" : ""}`} onClick={() => setOpenCfg(v => !v)}>
+            <span className="nav-toggle__label">
+              <span className="nav-item__dot" />
+              <span className="nav-item__text">Configurazioni</span>
+            </span>
+          </button>
+          {openCfg && (
+            <div className="submenu nav-submenu">
+              <NavLink to="/config/connettori" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Connettori</span>
+              </NavLink>
+              <NavLink to="/config/logs" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Logs</span>
+              </NavLink>
+            </div>
+          )}
+        </div>
       </div>
+
       <div className="sidebar-actions">
         <hr className="sep" />
         <button className="danger" onClick={onLogout}>Logout</button>
-      </div>
-
-      <div className="brand">
-        <img
-          src="/BIP-Thumbnail-RED-on-BLUE.png"
-          alt="Logo"
-          style={{ width: "100%", maxHeight: 140, objectFit: "contain", display: "block" }}
-        />
-        <div style={{ marginTop: 8, fontSize: 20, color: "var(--muted)", textAlign: "center" }}>
-          Role Builder AI
-        </div>
-
       </div>
 
     </aside>
@@ -150,12 +182,6 @@ function Analytics() {
 
   const navigate = useNavigate();
 
-  const kpiRouteByLabel = {
-    "Cluster Quality": "/kpi/cluster-quality",
-    "Model Score": "/model-quality",
-    "AI Detection": "/ai-detection",
-  };
-
 
   useEffect(() => {
     (async () => {
@@ -169,60 +195,211 @@ function Analytics() {
     })();
   }, []);
 
-  const plotData = [
+  const pct = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+  const clusterPct = pct(kpi.clusterQuality);
+  const modelPct = pct(kpi.modelQuality);
+  const aiPct = pct(kpi.aiDetection);
+  const kpiItems = [
+    {
+      label: "Cluster Quality",
+      value: clusterPct,
+      color: "#75adff",
+      route: "/kpi/cluster-quality",
+      helper: "Coerenza tra utenti e cluster proposti.",
+    },
+    {
+      label: "Model Score",
+      value: modelPct,
+      color: "#ff8ea7",
+      route: "/model-quality",
+      helper: "Precisione complessiva del modello.",
+    },
+    {
+      label: "AI Detection",
+      value: aiPct,
+      color: "#7effc2",
+      route: "/ai-detection",
+      helper: "Capacita di rilevare anomalie e deviazioni.",
+    },
+  ];
+  const routeByLabel = Object.fromEntries(kpiItems.map((item) => [item.label, item.route]));
+  const rankedByGap = [...kpiItems].sort((a, b) => (100 - b.value) - (100 - a.value));
+  const railItems = [...rankedByGap];
+  const railModelIdx = railItems.findIndex((item) => item.label === "Model Score");
+  const railAiIdx = railItems.findIndex((item) => item.label === "AI Detection");
+  if (railModelIdx >= 0 && railAiIdx >= 0) {
+    [railItems[railModelIdx], railItems[railAiIdx]] = [railItems[railAiIdx], railItems[railModelIdx]];
+  }
+  const modelScoreItem = kpiItems.find((item) => item.label === "Model Score") || kpiItems[1];
+  const biggestGap = rankedByGap[0];
+  const smallestGap = rankedByGap[rankedByGap.length - 1];
+  const overall = Math.round((clusterPct + modelPct + aiPct) / 3);
+  const dispersion = Math.max(...kpiItems.map((i) => i.value)) - Math.min(...kpiItems.map((i) => i.value));
+  const balanceIndex = Math.max(0, 100 - dispersion).toFixed(1);
+
+  const radarData = [
+    {
+      type: "scatterpolar",
+      mode: "lines+markers",
+      r: [...kpiItems.map((item) => item.value), kpiItems[0].value],
+      theta: [...kpiItems.map((item) => item.label), kpiItems[0].label],
+      fill: "toself",
+      fillcolor: "rgba(106,166,255,0.24)",
+      line: { color: "#8ab8ff", width: 2.2 },
+      marker: {
+        size: 9,
+        color: kpiItems.map((item) => item.color).concat([kpiItems[0].color]),
+      },
+      customdata: [...kpiItems.map((item) => [100 - item.value, item.helper]), [100 - kpiItems[0].value, kpiItems[0].helper]],
+      hovertemplate:
+        "<b>%{theta}</b><br>Score: %{r:.0f}%<br>Gap: %{customdata[0]:.0f}%<br>%{customdata[1]}<extra></extra>",
+      showlegend: false,
+    },
+  ];
+
+  const gapData = [
     {
       type: "bar",
-      x: ["Cluster Quality", "Model Score", "AI Detection"],
-      y: [kpi.clusterQuality, kpi.modelQuality, kpi.aiDetection],
-      marker: { color: ["#3b82f6", "#f43f5e", "#10b981"] }
-    }
+      orientation: "h",
+      x: rankedByGap.map((item) => 100 - item.value),
+      y: rankedByGap.map((item) => item.label),
+      marker: {
+        color: rankedByGap.map((item) => item.color),
+        line: { color: "rgba(255,255,255,0.28)", width: 1 },
+      },
+      customdata: rankedByGap.map((item) => [item.value]),
+      hovertemplate:
+        "<b>%{y}</b><br>Gap: %{x:.0f}%<br>Score corrente: %{customdata[0]:.0f}%<extra></extra>",
+    },
   ];
 
   return (
-    <div className="main">
-      <h2 style={{ marginTop: 0 }}>Dashboard KPI</h2>
+    <div className="main analytics-main">
+      <div className="analytics-headline">
+        <h2 style={{ marginTop: 0, marginBottom: 6 }}>Analytics</h2>
+        <div className="analytics-subtitle">Cockpit KPI orientato all'azione con insight contestuali su hover</div>
+      </div>
 
-      <div className="grid">
-        <div className="card"><div className="k">Total Users</div><div className="v">{kpi.totalUsers}</div></div>
-        <div className="card" style={{ cursor: "pointer" }} onClick={() => navigate("/kpi/cluster-quality")}>
-          <div className="k">Cluster Quality</div>
-          <div className="v">{kpi.clusterQuality}%</div>
+      <div className="analytics-hero">
+        <div className="analytics-widget analytics-widget--hero">
+          <div className="analytics-widget__label">Total Users</div>
+          <div className="analytics-widget__value">{kpi.totalUsers ?? 0}</div>
+          <div className="analytics-hero-meta">
+            <span>Overall Score {overall}%</span>
+            <span>Balance Index {balanceIndex}%</span>
+            <span style={{ color: modelScoreItem.color }}>Focus Area: {modelScoreItem.label} (target 0%)</span>
+          </div>
         </div>
-        <div className="card" style={{ cursor: "pointer" }} onClick={() => navigate("/model-quality")}>
-          <div className="k">Model Score</div>
-          <div className="v">{kpi.modelQuality}%</div>
-        </div>
-        <div className="card" style={{ cursor: "pointer" }} onClick={() => navigate("/ai-detection")}>
-          <div className="k">AI Detection</div>
-          <div className="v">{kpi.aiDetection}%</div>
+        <div className="analytics-widget analytics-widget--focus">
+          <div className="analytics-widget__label">Current Focus</div>
+          <div className="analytics-focus-title">{modelScoreItem.label}</div>
+          <div className="analytics-focus-helper">Target operativo: portare il valore verso 0%.</div>
+          <button className="analytics-focus-btn" onClick={() => navigate(modelScoreItem.route)}>
+            Apri analisi prioritaria
+          </button>
         </div>
       </div>
 
-      <hr className="sep" />
+      <div className="analytics-chart-layout">
+        <div className="panel analytics-plot-panel">
+          <div className="analytics-plot-head">
+            <div className="analytics-plot-title">KPI Landscape</div>
+            <div className="analytics-plot-subtitle">Radar interattivo: hover per dettagli, click sul punto per drill-down.</div>
+          </div>
+          <Suspense fallback={<div style={{ height: 310 }} />}>
+            <Plot
+              data={radarData}
+              layout={{
+                autosize: true,
+                paper_bgcolor: "rgba(5,10,20,0)",
+                plot_bgcolor: "rgba(7,14,28,0.70)",
+                font: { color: "#e9eefc" },
+                margin: { l: 26, r: 20, t: 8, b: 14 },
+                polar: {
+                  bgcolor: "rgba(7,14,28,0.70)",
+                  radialaxis: {
+                    range: [0, 100],
+                    ticksuffix: "%",
+                    gridcolor: "rgba(255,255,255,0.12)",
+                    linecolor: "rgba(255,255,255,0.15)",
+                  },
+                  angularaxis: {
+                    gridcolor: "rgba(255,255,255,0.10)",
+                  },
+                },
+                showlegend: false,
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: "100%", height: 310 }}
+              onClick={(ev) => {
+                const label = ev?.points?.[0]?.theta;
+                const route = routeByLabel[label];
+                if (route) navigate(route);
+              }}
+            />
+          </Suspense>
+        </div>
 
-      <div className="panel">
-        <Suspense fallback={<div style={{ height: 320 }} />}>
-          <Plot
-            data={plotData}
-            layout={{
-              paper_bgcolor: "rgba(0,0,0,0)",
-              plot_bgcolor: "rgba(0,0,0,0)",
-              font: { color: "#e9eefc" },
-              margin: { l: 40, r: 10, t: 20, b: 50 },
-              yaxis: { range: [0, 100] }
-            }}
-            style={{ width: "100%", height: 320 }}
-            config={{ displayModeBar: false }}
-            onClick={(ev) => {
-              const label = ev?.points?.[0]?.x;
-              const route = kpiRouteByLabel[label];
-              if (route) navigate(route);
-            }}
-          />
-        </Suspense>
-
-        {err && <div className="err">{err}</div>}
+        <div className="panel analytics-plot-panel">
+          <div className="analytics-plot-head">
+            <div className="analytics-plot-title">Target Gap Ranking</div>
+            <div className="analytics-plot-subtitle">Classifica aree per distanza dal target; priorita in alto.</div>
+          </div>
+          <Suspense fallback={<div style={{ height: 310 }} />}>
+            <Plot
+              data={gapData}
+              layout={{
+                autosize: true,
+                paper_bgcolor: "rgba(5,10,20,0)",
+                plot_bgcolor: "rgba(7,14,28,0.70)",
+                font: { color: "#e9eefc" },
+                margin: { l: 124, r: 10, t: 8, b: 30 },
+                xaxis: {
+                  range: [0, 100],
+                  ticksuffix: "%",
+                  gridcolor: "rgba(255,255,255,0.10)",
+                  zeroline: false,
+                },
+                yaxis: {
+                  automargin: true,
+                  ticklabelposition: "outside",
+                  ticklabelstandoff: 16,
+                  tickfont: { size: 12 },
+                },
+                showlegend: false,
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: "100%", height: 310 }}
+              onClick={(ev) => {
+                const label = ev?.points?.[0]?.y;
+                const route = routeByLabel[label];
+                if (route) navigate(route);
+              }}
+            />
+          </Suspense>
+        </div>
       </div>
+
+      <div className="analytics-rail">
+        {railItems.map((item, idx) => (
+          <button
+            key={item.label}
+            className="analytics-rail-card analytics-widget--clickable"
+            onClick={() => navigate(item.route)}
+          >
+            <div className="analytics-rail-rank">#{idx + 1}</div>
+            <div>
+              <div className="analytics-rail-label">{item.label}</div>
+              <div className="analytics-rail-meta">
+                {idx === 0 ? "Priorita alta" : idx === railItems.length - 1 ? "Stabile" : "Da monitorare"}
+              </div>
+            </div>
+            <div className="analytics-rail-arrow" style={{ color: item.color }}>Apri</div>
+          </button>
+        ))}
+      </div>
+
+      {err && <div className="err">{err}</div>}
     </div>
   );
 }
@@ -529,6 +706,10 @@ function Utenti() {
   }
 
   useEffect(() => { load(0); }, []);
+  useEffect(() => {
+    const t = setTimeout(() => { load(0); }, 220);
+    return () => clearTimeout(t);
+  }, [q, typeQ]);
 
   function goPrev() {
     if (offset - limit >= 0) load(offset - limit);
@@ -572,9 +753,15 @@ function Utenti() {
 
       <div className="panel">
         <div className="row">
-          <input style={{ width: 360 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Filtro (username/displayName)" aria-label="Filter Users" />
+          <input
+            type="search"
+            style={{ width: 420 }}
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search users..."
+            aria-label="Filter Users"
+          />
           <input style={{ width: 140, marginLeft: 10 }} value={typeQ} onChange={e => setTypeQ(e.target.value)} placeholder="Type (es. Service)" aria-label="Filter by Type" />
-          <button className="primary" onClick={() => load(0)} style={{ marginLeft: 10 }}>Cerca</button>
           <input
             ref={csvInputRef}
             type="file"
@@ -588,7 +775,7 @@ function Utenti() {
             aria-label="Extract CSV"
             onClick={() => csvInputRef.current?.click()}
             disabled={csvImporting}
-            style={{ marginLeft: 6, width: 36, height: 36, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            style={{ marginLeft: 6, width: 42, height: 42, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
           >
             <svg
               viewBox="0 0 24 24"
@@ -613,10 +800,10 @@ function Utenti() {
         <table className="table">
           <thead>
             <tr>
-              <th style={{ cursor: "pointer" }} onClick={() => handleSort("username")}>Username{sortIcon("username")}</th>
               <th style={{ cursor: "pointer" }} onClick={() => handleSort("displayName")}>Display Name{sortIcon("displayName")}</th>
               <th style={{ cursor: "pointer" }} onClick={() => handleSort("accountType")}>Type{sortIcon("accountType")}</th>
-              <th>Groups (memberOf)</th>
+              <th>Business Roles</th>
+              <th>Ruoli</th>
             </tr>
           </thead>
           <tbody>
@@ -626,11 +813,14 @@ function Utenti() {
                 onClick={() => nav(`/utenti/${encodeURIComponent(u.username)}`)}
                 style={{ cursor: "pointer" }}
               >
-
-                <td>{u.username}</td>
                 <td>{u.displayName}</td>
                 <td style={{ color: "var(--muted)", fontSize: 13 }}>{u.accountType || "Internal"}</td>
-                <td style={{ color: "var(--muted)" }}>{(u.groups || []).join(", ")}</td>
+                <td style={{ color: "var(--muted)" }}>
+                  {Array.isArray(u.businessRole)
+                    ? (u.businessRole.length ? u.businessRole.join(", ") : "Unassigned")
+                    : (u.businessRole || "Unassigned")}
+                </td>
+                <td style={{ color: "var(--muted)", fontSize: 13 }}>{(u.groups || []).length}</td>
               </tr>
             ))}
           </tbody>
@@ -993,13 +1183,6 @@ function Cluster() {
   const pendingCellTogglesRef = useRef(new Set());
 
   const containerRef = React.useRef(null);
-  const SPLIT_KEY = "cluster_assignments_height_v1";
-  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-  const [assignH, setAssignH] = useState(() => {
-    const v = Number(localStorage.getItem(SPLIT_KEY));
-    return Number.isFinite(v) && v > 0 ? v : 260;
-  });
 
   function patchMiningCell(prevMining, username, group, enabled) {
     if (!prevMining?.matrix || !username || !group) return prevMining;
@@ -1074,10 +1257,23 @@ function Cluster() {
     }
   }
 
+  function onCellClicked(p) {
+    const field = p?.colDef?.field;
+    if (
+      !field ||
+      field === "displayName" ||
+      field === "clusterId" ||
+      field === "businessRole" ||
+      field === "roleColor" ||
+      field === "username"
+    ) {
+      return;
+    }
 
-  useEffect(() => {
-    localStorage.setItem(SPLIT_KEY, String(assignH));
-  }, [assignH]);
+    const roleForColumn = groupRoleMap?.[field] || "Unassigned";
+    setRowColorFilter((prev) => (prev === roleForColumn ? "All" : roleForColumn));
+  }
+
 
   function hexToRgba(hex, a) {
     if (!hex || !hex.startsWith("#") || hex.length !== 7) return `rgba(17,26,46,${a})`;
@@ -1086,33 +1282,6 @@ function Cluster() {
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgba(${r},${g},${b},${a})`;
   }
-
-  function startDrag(e) {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startH = assignH;
-
-    const onMove = (ev) => {
-      const dy = ev.clientY - startY;
-      const el = containerRef.current;
-      const total = el?.clientHeight || 800;
-
-      const minH = 160;
-      const maxH = Math.floor(total * 0.75);
-
-      // trascini su => aumenti assegnazioni; giù => diminuisci
-      setAssignH(clamp(startH - dy, minH, maxH));
-    };
-
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }
-
 
   function textColorForBg(hex) {
     // hex: "#RRGGBB"
@@ -1125,19 +1294,28 @@ function Cluster() {
     return yiq >= 140 ? "#06101e" : "#ffffff";
   }
 
+  function getMatrixDensity(groupCount) {
+    if (groupCount >= 180) return { colWidth: 24, minWidth: 20, maxWidth: 30, rowHeight: 24, headerHeight: 30, className: "is-ultra-dense" };
+    if (groupCount >= 120) return { colWidth: 28, minWidth: 24, maxWidth: 34, rowHeight: 25, headerHeight: 32, className: "is-dense" };
+    if (groupCount >= 80) return { colWidth: 34, minWidth: 30, maxWidth: 40, rowHeight: 26, headerHeight: 34, className: "is-compact" };
+    if (groupCount >= 50) return { colWidth: 40, minWidth: 36, maxWidth: 48, rowHeight: 27, headerHeight: 36, className: "is-regular" };
+    return { colWidth: 46, minWidth: 42, maxWidth: 54, rowHeight: 28, headerHeight: 38, className: "is-relaxed" };
+  }
+
   const [roleSupport, setRoleSupport] = useState(0.5);
   const [nClusters, setNClusters] = useState("");
   const [mining, setMining] = useState(null);
   const [err, setErr] = useState("");
+  const [isRunBusy, setIsRunBusy] = useState(false);
 
   // filtri UI (NON trasparenti)
   const [quick, setQuick] = useState("");
-  const [roleFilter, setRoleFilter] = useState("All");
+  const [rowColorFilter, setRowColorFilter] = useState("All");
+  const [isHeatmapCollapsed, setIsHeatmapCollapsed] = useState(true);
+  const [matrixZoom, setMatrixZoom] = useState(0);
+  const [rowColorOrder, setRowColorOrder] = useState([]);
 
   const [roleData, setRoleData] = useState({ roles: [], assignments: {} });
-  const [assignPage, setAssignPage] = useState(0);
-  const [assignDisplayNameFilter, setAssignDisplayNameFilter] = useState("");
-  const ASSIGN_PAGE_SIZE = 50;
 
   async function loadRoles() {
     const r = await api.businessRoles(); // {roles:[{role, count, color, groups}], assignments:{user:role}}
@@ -1199,11 +1377,14 @@ function Cluster() {
 
   // Run new mining (called when user clicks button)
   async function run() {
+    if (isRunBusy) return;
     try {
+      setIsRunBusy(true);
       setErr("");
       setMining(null); // Clear previous mining to show loading
       const n = nClusters ? Number(nClusters) : null;
-      await api.roleMiningRun(Number.isFinite(n) ? n : null, Number(roleSupport));
+      const roleSupportSafe = Number.isFinite(Number(roleSupport)) ? Number(roleSupport) : 0.6;
+      await api.roleMiningRun(Number.isFinite(n) ? n : null, roleSupportSafe);
 
       // Polling
       let last = await api.roleMiningLast();
@@ -1223,16 +1404,28 @@ function Cluster() {
       await loadRoles();
     } catch (e) {
       setErr(String(e.message || e));
+    } finally {
+      setIsRunBusy(false);
     }
   }
 
   useEffect(() => { load(); }, []);
 
-  const { columnDefs, rowData } = useMemo(() => {
-    if (mining?.isComputing) return { columnDefs: [], rowData: [] };
-    if (!mining || !mining.matrix || !mining.groups) return { columnDefs: [], rowData: [] };
+  const { columnDefs, rowData, matrixDensity } = useMemo(() => {
+    if (mining?.isComputing) return { columnDefs: [], rowData: [], matrixDensity: getMatrixDensity(0) };
+    if (!mining || !mining.matrix || !mining.groups) return { columnDefs: [], rowData: [], matrixDensity: getMatrixDensity(0) };
 
     const groups = mining.groups;
+    const baseDensity = getMatrixDensity(groups.length);
+    const zoomFactor = Math.pow(1.12, matrixZoom);
+    const density = {
+      ...baseDensity,
+      colWidth: Math.max(0.5, baseDensity.colWidth * zoomFactor),
+      minWidth: Math.max(0.5, baseDensity.minWidth * zoomFactor),
+      maxWidth: Math.max(0.5, baseDensity.maxWidth * zoomFactor),
+      rowHeight: Math.max(0.5, baseDensity.rowHeight * zoomFactor),
+      headerHeight: Math.max(0.5, baseDensity.headerHeight * zoomFactor),
+    };
     const usernames = Object.keys(mining.matrix);
 
     const clusterByUser = {};
@@ -1266,17 +1459,26 @@ function Cluster() {
     });
 
 
-    if (roleFilter !== "All") {
-      rows = rows.filter(r => r.businessRole === roleFilter);
+    if (rowColorFilter !== "All") {
+      rows = rows.filter(r => r.businessRole === rowColorFilter);
     }
+
+    const colorOrderIndex = {};
+    const visibleRowColorOrder = rowColorOrder.length
+      ? rowColorOrder
+      : Array.from(new Set(rows.map((r) => String(r?.roleColor || "").toLowerCase())));
+    visibleRowColorOrder.forEach((c, i) => {
+      colorOrderIndex[String(c).toLowerCase()] = i;
+    });
 
     const cols = [
       {
         field: "displayName",
-        headerName: "User",
+        headerName: "Users",
         pinned: "left",
         filter: true,
         width: 220,
+        headerClass: "cluster-users-header",
         sortable: true,
         comparator: (valueA, valueB, nodeA, nodeB) => {
           const ca = nodeA?.data?.roleColor || "";
@@ -1284,6 +1486,7 @@ function Cluster() {
           if (ca === cb) return String(valueA || "").localeCompare(String(valueB || ""));
           return ca.localeCompare(cb);
         },
+        cellClass: "cluster-user-cell",
         cellStyle: (p) => {
           const role = p.data?.businessRole || "Unassigned";
           const bg = roleMetaByRole?.[role]?.color || "#6aa6ff";
@@ -1291,7 +1494,8 @@ function Cluster() {
             backgroundColor: bg,
             color: textColorForBg(bg),
             fontWeight: 800,
-            borderRight: "1px solid rgba(255,255,255,0.10)"
+            borderRight: "1px solid rgba(255,255,255,0.10)",
+            letterSpacing: "0.01em"
           };
         }
       },
@@ -1302,12 +1506,22 @@ function Cluster() {
     const groupsSorted = [...(groups || [])].sort((a, b) => {
       const ra = groupRoleMap?.[a] || "Unassigned";
       const rb = groupRoleMap?.[b] || "Unassigned";
+      const ca = String(roleMetaByRole?.[ra]?.color || "").toLowerCase();
+      const cb = String(roleMetaByRole?.[rb]?.color || "").toLowerCase();
 
-      // 1) prima per Business Role
+      // Group columns by color blocks following row color order.
+      const ia = colorOrderIndex[ca] ?? Number.MAX_SAFE_INTEGER;
+      const ib = colorOrderIndex[cb] ?? Number.MAX_SAFE_INTEGER;
+      if (ia !== ib) return ia - ib;
+
+      // Stable fallback by color.
+      const byColor = ca.localeCompare(cb);
+      if (byColor !== 0) return byColor;
+
+      // Then by business role and group name.
       const c1 = ra.localeCompare(rb);
       if (c1 !== 0) return c1;
 
-      // 2) poi per nome gruppo
       return a.localeCompare(b);
     });
 
@@ -1315,16 +1529,32 @@ function Cluster() {
       cols.push({
         headerName: g,
         field: g,
+        width: density.colWidth,
+        minWidth: density.minWidth,
+        maxWidth: density.maxWidth,
+        headerClass: "cluster-group-header",
+        cellClass: "cluster-group-cell",
+        tooltipValueGetter: (p) => {
+          const isOn = Number(p.value || 0) === 1;
+          const who = p.data?.displayName || p.data?.username || "User";
+          return `${who} • ${g} • ${isOn ? "Enabled" : "Disabled"}`;
+        },
 
         valueGetter: (p) => Number(p.data?.[g] || 0),
         valueFormatter: () => "",
 
         cellStyle: (p) => {
-          const v = Number(p.value || 0); // resta 0/1, ma non viene più mostrato
-          const roleForGroup = groupRoleMap?.[g];
-          const hex = roleMetaByRole?.[roleForGroup]?.color || "#d3ca48";
-          const bg = v ? hexToRgba(hex, 0.95) : hexToRgba(hex, 0.10);
-          return { backgroundColor: bg };
+          const v = Number(p.value || 0);
+          const roleForGroup = groupRoleMap?.[g] || "Unassigned";
+          const hex = roleMetaByRole?.[roleForGroup]?.color || "#6aa6ff";
+          const bg = v ? hexToRgba(hex, 0.92) : hexToRgba(hex, 0.08);
+          return {
+            backgroundColor: bg,
+            boxShadow: v
+              ? `inset 0 0 0 1px ${hexToRgba("#ffffff", 0.16)}, inset 0 -12px 24px ${hexToRgba(hex, 0.28)}`
+              : `inset 0 0 0 1px ${hexToRgba(hex, 0.18)}`,
+            transition: "background-color 140ms ease, box-shadow 140ms ease"
+          };
         },
       });
 
@@ -1334,233 +1564,170 @@ function Cluster() {
 
 
 
-    return { columnDefs: cols, rowData: rows };
-  }, [mining, roleData, roleFilter, roleMetaByRole, groupRoleMap]);
+    return { columnDefs: cols, rowData: rows, matrixDensity: density };
+  }, [mining, roleData, rowColorFilter, roleMetaByRole, groupRoleMap, matrixZoom, rowColorOrder]);
 
-  const filteredAssignments = useMemo(() => {
-    const q = assignDisplayNameFilter.trim().toLowerCase();
-    const entries = Object.entries(roleData.assignments || {});
-    if (!q) return entries;
-    return entries.filter(([u]) => {
-      const dn = usersIndex?.[u] || u;
-      return String(dn || "").toLowerCase().includes(q);
+  const roleCount = (roleData.roles || []).length;
+  const usersInMatrix = rowData.length;
+  const groupsInMatrix = mining?.groups?.length || 0;
+  const roleLegend = (roleData.roles || []).slice().sort((a, b) => String(a.role || "").localeCompare(String(b.role || "")));
+
+  function onGridSortOrFilterChanged(p) {
+    const next = [];
+    const seen = new Set();
+    p.api.forEachNodeAfterFilterAndSort((node) => {
+      const c = String(node?.data?.roleColor || "").toLowerCase();
+      if (!seen.has(c)) {
+        seen.add(c);
+        next.push(c);
+      }
     });
-  }, [roleData.assignments, assignDisplayNameFilter, usersIndex]);
-
-  const assignTotal = filteredAssignments.length;
-  const assignPageCount = Math.max(1, Math.ceil(assignTotal / ASSIGN_PAGE_SIZE));
-  const assignRows = filteredAssignments.slice(
-    assignPage * ASSIGN_PAGE_SIZE,
-    (assignPage + 1) * ASSIGN_PAGE_SIZE
-  );
-
-  useEffect(() => {
-    if (assignPage >= assignPageCount) {
-      setAssignPage(Math.max(0, assignPageCount - 1));
-    }
-  }, [assignPage, assignPageCount]);
+    setRowColorOrder(next);
+  }
 
   return (
-    <div className="main">
-      <h2 style={{ marginTop: 0 }}>
-        Business Role Model
-        {mining?.isComputing && <span style={{ fontSize: "0.6em", marginLeft: 10, color: "var(--accent)" }}>Computing...</span>}
-      </h2>
+    <div className="main cluster-page">
+      <div className="cluster-page__head">
+        <div>
+          <h2 style={{ marginTop: 0, marginBottom: 6 }}>
+            Cluster Intelligence
+            {mining?.isComputing && <span style={{ fontSize: "0.6em", marginLeft: 10, color: "var(--accent)" }}>Computing...</span>}
+          </h2>
+          <div className="cluster-page__subtitle">
+            Matrice utenti-gruppi con codifica colore per Business Role e assegnazioni operative in tempo reale
+          </div>
+        </div>
+      </div>
 
-      {/* FILTRI NON trasparenti */}
-      <div className="filtersBar">
-        <div className="row">
-          <label>Search</label>
+      <div className="filtersBar cluster-toolbar">
+        <div className="row cluster-toolbar__row">
+          <label className="cluster-toolbar__label">Search</label>
           <input
             style={{ width: 260 }}
             value={quick}
             onChange={(e) => setQuick(e.target.value)}
             placeholder="Username / Ruolo…"
           />
+          <div className="cluster-zoom cluster-toolbar__zoom">
+            <button
+              type="button"
+              className="ghost cluster-zoom__btn"
+              onClick={() => setMatrixZoom((z) => z - 1)}
+              title="Zoom out matrix"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              className="ghost cluster-zoom__btn"
+              onClick={() => setMatrixZoom(0)}
+              title="Reset zoom matrix"
+            >
+              =
+            </button>
+            <button
+              type="button"
+              className="ghost cluster-zoom__btn"
+              onClick={() => setMatrixZoom((z) => z + 1)}
+              title="Zoom in matrix"
+            >
+              +
+            </button>
+          </div>
+          <div className="cluster-kpis cluster-toolbar__kpis">
+            <div className="cluster-kpi-chip">Users: <b>{usersInMatrix}</b></div>
+            <div className="cluster-kpi-chip">Roles: <b>{groupsInMatrix}</b></div>
+            <div className="cluster-kpi-chip">Business Roles: <b>{roleCount}</b></div>
+          </div>
 
-          <label>Business Role</label>
-          {/* <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-            <option value="All">All</option>
-            {(roleData.roles || []).map(r => (
-              <option key={r.role} value={r.role}>{r.role}</option>
-            ))}
-          </select> */}
-
-          <label>Business Role</label>
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            style={{
-              backgroundColor:
-                roleFilter === "All"
-                  ? "#111a2e"
-                  : (roleMetaByRole?.[roleFilter]?.color || "#111a2e"),
-              color:
-                roleFilter === "All"
-                  ? "#e9eefc"
-                  : textColorForBg(roleMetaByRole?.[roleFilter]?.color || "#111a2e"),
-              border: "1px solid rgba(255,255,255,0.18)",
-              borderRadius: 10,
-              padding: "10px 12px"
-            }}
-          >
-            <option value="All">All</option>
-            {(roleData.roles || []).map(x => (
-              <option key={x.role} value={x.role}>{x.role}</option>
-            ))}
-          </select>
-
-
-
-          {/* 
-          <label>n_clusters</label>
-          <input style={{ width: 110 }} value={nClusters} onChange={e => setNClusters(e.target.value)} placeholder="auto" />
-
-          <label>role_support</label>
-          <input style={{ width: 110 }} value={roleSupport} onChange={e => setRoleSupport(e.target.value)} /> */}
-
-          <button className="primary" onClick={run}>Ricalcola</button>
+          <button className="primary cluster-toolbar__run" onClick={run} disabled={isRunBusy}>
+            {isRunBusy ? "Ricalcolo..." : "Ricalcola modello"}
+          </button>
         </div>
       </div>
 
-      <div style={{ height: 12 }} />
-
-      <div style={{ height: 12 }} />
-
       <div
         ref={containerRef}
-        className="panel"
+        className="panel cluster-shell"
         style={{
-          height: "calc(100vh - 190px)",
+          height: "calc(100vh - 220px)",
           display: "flex",
           flexDirection: "column",
-          overflow: "hidden",
+          overflow: "auto",
         }}
       >
-        {/* TOP: matrice */}
-        <div style={{ flex: "1 1 auto", minHeight: 240, overflow: "hidden" }}>
+        <div className="cluster-legend">
+          <div className="cluster-legend__main">
+            <span className="cluster-legend__title">Association Heatmap</span>
+            <div className="cluster-legend__actions">
+              {!isHeatmapCollapsed && (
+                <span className="cluster-legend__scale">
+                  <span className="cluster-legend__dot cluster-legend__dot--off" /> No Access
+                  <span className="cluster-legend__dot cluster-legend__dot--on" /> Access Enabled
+                </span>
+              )}
+              <button
+                type="button"
+                className="ghost cluster-legend__toggle"
+                onClick={() => setIsHeatmapCollapsed((v) => !v)}
+              >
+                {isHeatmapCollapsed ? "Expand" : "Collapse"}
+              </button>
+            </div>
+          </div>
+          {!isHeatmapCollapsed && (
+            <>
+              <div className="cluster-legend__active">
+                Row filter:
+                <b>{rowColorFilter === "All" ? " All Colors" : ` ${rowColorFilter}`}</b>
+                {rowColorFilter !== "All" && (
+                  <button className="ghost cluster-legend__clear" onClick={() => setRowColorFilter("All")}>
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div className="cluster-legend__roles">
+                {roleLegend.map((r) => (
+                  <button
+                    key={r.role}
+                    type="button"
+                    className={`cluster-role-pill ${rowColorFilter === r.role ? "is-active" : ""}`}
+                    onClick={() => setRowColorFilter((prev) => (prev === r.role ? "All" : r.role))}
+                    title={`Filtra righe per ${r.role}`}
+                  >
+                    <span className="cluster-role-pill__swatch" style={{ backgroundColor: r.color || "#6aa6ff" }} />
+                    {r.role}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className={`cluster-matrix ${matrixDensity.className}`} style={{ flex: "1 1 auto", minHeight: 240, overflow: "auto" }}>
           <div className="ag-theme-quartz-dark" style={{ height: "100%", width: "100%" }}>
             <AgGridReact
               rowData={rowData}
               columnDefs={columnDefs}
+              onCellClicked={onCellClicked}
               onCellDoubleClicked={onCellDoubleClicked}
-              defaultColDef={{ resizable: true, sortable: true, filter: true }}
+              onSortChanged={onGridSortOrFilterChanged}
+              onFilterChanged={onGridSortOrFilterChanged}
+              defaultColDef={{
+                resizable: true,
+                sortable: true,
+                filter: true,
+                floatingFilter: false,
+                suppressHeaderMenuButton: true,
+                suppressHeaderFilterButton: true
+              }}
               animateRows={true}
               quickFilterText={quick}
-              rowHeight={24}
-              headerHeight={34}
+              rowHeight={matrixDensity.rowHeight}
+              headerHeight={matrixDensity.headerHeight}
+              alwaysShowHorizontalScroll={true}
+              alwaysShowVerticalScroll={true}
             />
-
-
-          </div>
-        </div>
-
-        {/* HANDLE */}
-        <div
-          onMouseDown={startDrag}
-          title="Trascina per ridimensionare"
-          style={{
-            height: 10,
-            cursor: "row-resize",
-            background: "rgba(255,255,255,0.08)",
-            borderTop: "1px solid rgba(255,255,255,0.10)",
-            borderBottom: "1px solid rgba(255,255,255,0.10)",
-          }}
-        />
-
-        {/* BOTTOM: assegnazioni */}
-        <div style={{ flex: `0 0 ${assignH}px`, minHeight: 160, overflow: "auto" }}>
-          <div style={{ padding: "12px 12px 0 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <h3 style={{ marginTop: 0, marginBottom: 4 }}>Business Roles (assegnazioni)</h3>
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                Totale: {Object.keys(roleData.assignments || {}).length}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                disabled={assignPage === 0}
-                onClick={() => setAssignPage(p => Math.max(0, p - 1))}
-                style={{ padding: "4px 10px" }}
-              >
-                ◀ Prev
-              </button>
-              <span style={{ color: "var(--muted)", fontSize: 12 }}>
-                Pag. {assignPage + 1} / {assignPageCount}
-              </span>
-              <button
-                disabled={(assignPage + 1) * ASSIGN_PAGE_SIZE >= assignTotal}
-                onClick={() => setAssignPage(p => p + 1)}
-                style={{ padding: "4px 10px" }}
-              >
-                Next ▶
-              </button>
-            </div>
-          </div>
-
-          <div style={{ padding: "0 12px 12px 12px" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                      <span>Display Name</span>
-                      <input
-                        style={{ width: 160, minWidth: 120, padding: "4px 8px", fontSize: 12 }}
-                        value={assignDisplayNameFilter}
-                        onChange={(e) => {
-                          setAssignDisplayNameFilter(e.target.value);
-                          setAssignPage(0);
-                        }}
-                        placeholder="Filtro..."
-                        aria-label="Filtro display name assegnazioni"
-                      />
-                    </div>
-                  </th>
-                  <th>Business Role</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assignRows.map(([u, role]) => {
-                    const bg = roleMetaByRole?.[role]?.color || "#111a2e";
-                    const fg = textColorForBg(bg);
-                    const dn = usersIndex?.[u] || u;
-
-                    return (
-                      <tr key={u}>
-                        <td>{dn}</td>
-                        <td>
-                          <select
-                            value={role}
-                            onChange={async (e) => {
-                              const newRole = e.target.value;
-                              try {
-                                await api.businessRoleAddUser(newRole, u);
-                                const refreshed = await api.businessRoles();
-                                setRoleData(refreshed);
-                              } catch (e2) {
-                                setErr(String(e2.message || e2));
-                              }
-                            }}
-                            style={{
-                              backgroundColor: bg,
-                              color: fg,
-                              border: "1px solid rgba(255,255,255,0.18)",
-                              borderRadius: 10,
-                              padding: "10px 12px",
-                              minWidth: 110
-                            }}
-                          >
-                            {(roleData.roles || []).map(x => (
-                              <option key={x.role} value={x.role}>{x.role}</option>
-                            ))}
-                          </select>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
           </div>
         </div>
 
@@ -1618,11 +1785,13 @@ function Logs() {
 
 function BusinessRolesHome() {
   const [roles, setRoles] = useState([]);
+  const [searchRole, setSearchRole] = useState("");
   const [err, setErr] = useState("");
   const [newRole, setNewRole] = useState("");
   const [ok, setOk] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const [csvImporting, setCsvImporting] = useState(false);
+  const [recalcBusy, setRecalcBusy] = useState(false);
   const csvInputRef = useRef(null);
 
 
@@ -1650,6 +1819,12 @@ function BusinessRolesHome() {
       <div className="panel">
         <div className="row">
           <input
+            style={{ width: 190 }}
+            value={searchRole}
+            onChange={(e) => setSearchRole(e.target.value)}
+            placeholder="Cerca..."
+          />
+          <input
             style={{ width: 260 }}
             value={newRole}
             onChange={(e) => setNewRole(e.target.value)}
@@ -1670,6 +1845,25 @@ function BusinessRolesHome() {
             }}
           >
             + Crea
+          </button>
+          <button
+            className="primary"
+            onClick={async () => {
+              try {
+                setErr(""); setOk("");
+                setRecalcBusy(true);
+                const res = await api.businessRolesRecalculateGroups();
+                setOk(`Assegnazioni gruppi ricalcolate (${res.groupsAssigned} gruppi).`);
+                await refreshRoles();
+              } catch (e) {
+                setErr(String(e.message || e));
+              } finally {
+                setRecalcBusy(false);
+              }
+            }}
+            disabled={recalcBusy}
+          >
+            {recalcBusy ? "Ricalcolo..." : "Ricalcola Gruppi"}
           </button>
           <input
             ref={csvInputRef}
@@ -1700,7 +1894,7 @@ function BusinessRolesHome() {
             aria-label="Extract CSV"
             onClick={() => csvInputRef.current?.click()}
             disabled={csvImporting}
-            style={{ width: 36, height: 36, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            style={{ width: 42, height: 42, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
           >
             <svg
               viewBox="0 0 24 24"
@@ -1727,9 +1921,11 @@ function BusinessRolesHome() {
         <hr className="sep" />
 
         <table className="table">
-          <thead><tr><th>Role</th><th>Users</th></tr></thead>
+          <thead><tr><th>Business Role</th><th>Users</th></tr></thead>
           <tbody>
-            {roles.map(r => (
+            {roles
+              .filter((r) => String(r?.role || "").toLowerCase().includes(searchRole.trim().toLowerCase()))
+              .map(r => (
               <tr key={r.role}>
                 <td>
                   <NavLink
@@ -1742,7 +1938,7 @@ function BusinessRolesHome() {
                 <td>
                   <NavLink
                     to={`/business-roles/${encodeURIComponent(r.role)}`}
-                    className="roleRowLink mutedLink"
+                    className="roleRowLink roleRowLinkCount mutedLink"
                   >
                     {r.count}
                   </NavLink>

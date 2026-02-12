@@ -6,12 +6,6 @@
     "created_at": "2026-02-10T11:22:04.979582"
   },
   {
-    "account_type": "Administrative",
-    "field": "display_name",
-    "regex": "^adm+",
-    "created_at": "2026-02-12T10:38:13.754244"
-  },
-  {
     "account_type": "Test",
     "field": "display_name",
     "regex": "test",
@@ -28,5 +22,11 @@
     "field": "company",
     "regex": "^svc.*",
     "created_at": "2026-02-12T12:23:34.672259"
+  },
+  {
+    "account_type": "Administrative",
+    "field": "displayName",
+    "regex": "^adm.*",
+    "created_at": "2026-02-12T23:05:17.712577"
   }
 ]

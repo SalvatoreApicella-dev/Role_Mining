@@ -1,28 +1,37 @@
 
-  VITE v5.4.21  ready in 192 ms
+  VITE v5.4.21  ready in 113 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.46:5173/
-7:25:11 PM [vite] http proxy error: /api/me
+10:47:34 PM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-7:25:11 PM [vite] http proxy error: /api/businessroles
+10:47:34 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-7:25:11 PM [vite] http proxy error: /api/me
+10:47:34 PM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-7:25:11 PM [vite] http proxy error: /api/businessroles
+10:47:34 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-7:25:11 PM [vite] http proxy error: /api/businessroles
+10:47:34 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-7:25:27 PM [vite] hmr update /src/app.jsx
-7:26:36 PM [vite] hmr update /src/app.jsx
-7:28:04 PM [vite] hmr update /src/app.jsx
-7:29:01 PM [vite] hmr update /src/app.jsx
-7:30:09 PM [vite] hmr update /src/app.jsx
-7:30:21 PM [vite] hmr update /src/app.jsx
-7:39:07 PM [vite] hmr update /src/app.jsx
-7:40:46 PM [vite] hmr update /src/app.jsx
+10:49:34 PM [vite] hmr update /src/app.jsx
+10:50:03 PM [vite] hmr update /src/app.jsx
+10:52:10 PM [vite] hmr update /src/app.jsx
+10:53:57 PM [vite] hmr update /src/app.jsx
+10:54:51 PM [vite] hmr update /src/app.jsx
+10:54:56 PM [vite] hmr update /src/styles.css
+10:55:29 PM [vite] hmr update /src/app.jsx
+10:55:35 PM [vite] hmr update /src/styles.css
+10:56:17 PM [vite] hmr update /src/app.jsx
+10:56:27 PM [vite] hmr update /src/styles.css
+10:57:57 PM [vite] hmr update /src/app.jsx
+10:59:20 PM [vite] hmr update /src/app.jsx
+10:59:29 PM [vite] hmr update /src/styles.css
+11:00:23 PM [vite] hmr update /src/app.jsx
+11:01:32 PM [vite] hmr update /src/app.jsx
+11:02:15 PM [vite] hmr update /src/app.jsx
+11:03:36 PM [vite] hmr update /src/app.jsx

@@ -181,6 +181,8 @@ export const api = {
   businessRoleDetail: (role) => request(`/api/businessroles/${encodeURIComponent(role)}`),
   businessRoleAddUser: (role, username) =>
     request(`/api/businessroles/${encodeURIComponent(role)}/add`, { method: "POST", body: { username } }),
+  businessRolesRecalculateGroups: () =>
+    request("/api/businessroles/recalculate/groups", { method: "POST" }),
 
   updateAccountType: (username, accountType) => request(`/api/users/${encodeURIComponent(username)}/update`, { method: "POST", body: { accountType } }),
   peerAnalysis: (username) => request(`/api/users/${encodeURIComponent(username)}/peer-analysis`),

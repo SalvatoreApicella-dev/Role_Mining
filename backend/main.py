@@ -4458,6 +4458,58 @@ def businessrole_remove_group(role: str, body: RoleGroupRequest, username: str =
     return {"ok": True}
 
 
+@app.post("/api/businessroles/recalculate/groups")
+def businessroles_recalculate_groups(username: str = Depends(require_auth)):
+    """
+    Recompute group -> Business Role assignment from current users.
+    Each group is assigned to the role where it appears most frequently.
+    """
+    users = active_users(state.get("last_extract", {}).get("users") or [])
+    apply_business_roles(users)
+
+    # group -> role -> count
+    group_role_counts: Dict[str, Dict[str, int]] = {}
+    for u in users:
+        role = (u.get("businessRole") or "Unassigned").strip()
+        for g in (u.get("groups") or []):
+            if not g:
+                continue
+            bucket = group_role_counts.setdefault(g, {})
+            bucket[role] = int(bucket.get(role, 0)) + 1
+
+    # Build exclusive assignment: each group belongs to the role with max count.
+    role_groups: Dict[str, set] = {}
+    for g, counts in group_role_counts.items():
+        best_role = None
+        best_count = -1
+        for role, cnt in counts.items():
+            if cnt > best_count:
+                best_role = role
+                best_count = cnt
+        if not best_role:
+            continue
+        role_groups.setdefault(best_role, set()).add(g)
+
+    state.setdefault("role_meta", {})
+    state.setdefault("business_roles", set())
+    for role in set(state["business_roles"]).union(set(role_groups.keys())):
+        _ensure_role_registered(role)
+
+    for role in state["business_roles"]:
+        assigned = sorted(role_groups.get(role, set()))
+        state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
+        state["role_meta"][role]["groups"] = assigned
+
+    state["mining_dirty"] = True
+    log("INFO", f"Business role groups recalculated by {username}")
+    invalidate_hot_caches(roles=True, kpi=True, mining=True)
+    return {
+        "ok": True,
+        "rolesUpdated": len(state["business_roles"]),
+        "groupsAssigned": len(group_role_counts),
+    }
+
+
 @app.post("/api/businessroles/create")
 def businessrole_create(body: RoleCreateRequest, username: str = Depends(require_auth)):
     role = body.role.strip()
