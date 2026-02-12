@@ -1,26 +1,53 @@
-INFO:     Started server process [77456]
+INFO:     Started server process [78383]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:59319 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59320 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59333 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59334 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59335 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59338 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59343 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59344 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59347 - "GET /api/kpi HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:59350 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:59353 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59356 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59359 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59378 - "POST /api/data-quality/rules/suggestions/dq-reject-empty-groups/apply HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): []
-INFO:     127.0.0.1:59384 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59383 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59485 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59486 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59505 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59506 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59507 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59508 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59509 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59510 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59513 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59519 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59522 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59525 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59528 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59532 - "POST /api/users/groups/toggle HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59535 - "POST /api/users/groups/toggle HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59538 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59541 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59544 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59547 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59550 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59553 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59556 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59559 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59568 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59569 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59570 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59573 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59576 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59579 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59582 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59585 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59588 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59591 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59594 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59597 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59600 - "GET /api/ai-detection/last HTTP/1.1" 200 OK
+[AI Detection] users_with_anomaly=954, total_users=4800, pct=19.88%
+INFO:     127.0.0.1:59603 - "POST /api/ai-detection/run HTTP/1.1" 200 OK
+[AI Detection] users_with_anomaly=954, total_users=4800, pct=19.88%
+INFO:     127.0.0.1:59617 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59620 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59623 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59626 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59629 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59632 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59637 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59638 - "GET /api/ml/patterns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59641 - "GET /api/config/ad-fields HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59644 - "GET /api/ml/patterns HTTP/1.1" 200 OK

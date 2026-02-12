@@ -838,6 +838,7 @@ function Cluster() {
   const [roleMetaByRole, setRoleMetaByRole] = useState({});   // {"IT": {color, groups}, ... }
   const [groupRoleMap, setGroupRoleMap] = useState({});       // {"VPN": "IT", "Payroll": "HR", ... }
   const [usersIndex, setUsersIndex] = useState({});
+  const pendingCellTogglesRef = useRef(new Set());
 
   const containerRef = React.useRef(null);
   const SPLIT_KEY = "cluster_assignments_height_v1";
@@ -847,6 +848,25 @@ function Cluster() {
     const v = Number(localStorage.getItem(SPLIT_KEY));
     return Number.isFinite(v) && v > 0 ? v : 260;
   });
+
+  function patchMiningCell(prevMining, username, group, enabled) {
+    if (!prevMining?.matrix || !username || !group) return prevMining;
+
+    const row = prevMining.matrix?.[username];
+    if (row == null) return prevMining;
+
+    const matrix = { ...(prevMining.matrix || {}) };
+    if (Array.isArray(row)) {
+      const next = new Set(row);
+      if (enabled) next.add(group);
+      else next.delete(group);
+      matrix[username] = Array.from(next).sort();
+    } else {
+      matrix[username] = { ...(row || {}), [group]: enabled ? 1 : 0 };
+    }
+
+    return { ...prevMining, matrix };
+  }
 
   async function onCellDoubleClicked(p) {
     try {
@@ -869,30 +889,36 @@ function Cluster() {
       }
 
       const v = Number(row[field] ?? 0);
+      const enabled = v !== 1;
+      const lockKey = `${row.username}::${field}`;
+      if (pendingCellTogglesRef.current.has(lockKey)) return;
 
-      // Carica l'utente reale per avere lo stato corrente dei gruppi
-      const ud = await api.get(`/api/users/${encodeURIComponent(row.username)}`);
-      const curr = (ud.user?.groups || []).slice();
+      pendingCellTogglesRef.current.add(lockKey);
 
-      let next;
-      if (v === 1) {
-        // doppio click su "1" => rimuovi
-        next = curr.filter((g) => g !== field);
-      } else {
-        // doppio click su "0" => assegna
-        if (curr.includes(field)) return; // safety
-        next = curr.concat(field).sort();
-      }
+      // Optimistic UI: aggiorna subito solo la cella, senza ricaricare tutta la matrice.
+      setMining((prev) => patchMiningCell(prev, row.username, field, enabled));
 
-      await api.post(`/api/users/${encodeURIComponent(row.username)}/update`, {
-        groups: next,
-        businessRole: ud.user?.businessRole || "Unassigned",
+      await api.post("/api/users/groups/toggle", {
+        username: row.username,
+        group: field,
+        enabled,
       });
-
-      // Refresh: riallinea matrix/cluster
-      await run();
     } catch (e) {
+      // Rollback locale in caso di errore.
+      const field = p?.colDef?.field;
+      const row = p?.data;
+      if (field && row?.username) {
+        const v = Number(row[field] ?? 0);
+        const rollbackEnabled = v === 1;
+        setMining((prev) => patchMiningCell(prev, row.username, field, rollbackEnabled));
+      }
       setErr(String(e?.message || e));
+    } finally {
+      const field = p?.colDef?.field;
+      const row = p?.data;
+      if (field && row?.username) {
+        pendingCellTogglesRef.current.delete(`${row.username}::${field}`);
+      }
     }
   }
 
