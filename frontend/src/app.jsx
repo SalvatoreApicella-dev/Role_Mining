@@ -4,7 +4,7 @@ import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 import { api, clearToken, getToken, setToken } from "./api.js";
 import Select from "react-select";
-import { importBusinessRolesCsv } from "./api";
+import { importBusinessRolesCsv, exportLastAdExtractCsv } from "./api";
 
 import React, { useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
 
@@ -78,12 +78,13 @@ function Sidebar({ onLogout, roles }) {
             <NavLink to="/config/logs" className={({ isActive }) => (isActive ? "active" : "")}>Logs</NavLink>
           </div>
         )}
-
+      </div>
+      <div className="sidebar-actions">
         <hr className="sep" />
         <button className="danger" onClick={onLogout}>Logout</button>
       </div>
 
-      <div className="brand" style={{ marginTop: "auto" }}>
+      <div className="brand">
         <img
           src="/BIP-Thumbnail-RED-on-BLUE.png"
           alt="Logo"
@@ -232,6 +233,7 @@ function Connettori() {
   const [statusMsg, setStatusMsg] = useState("");
   const [err, setErr] = useState("");
   const [adLoading, setAdLoading] = useState(false);
+  const [adExporting, setAdExporting] = useState(false);
 
   const [csvFile, setCsvFile] = useState(null);
   const [importMsg, setImportMsg] = useState("");
@@ -273,16 +275,44 @@ function Connettori() {
       setErr(""); setStatusMsg("");
       const res = await api.extract(ou);
       const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+      const parts = [
+        ["Nuovi utenti", n(res.new_users)],
+        ["Nuovi gruppi", n(res.new_groups)],
+        ["Utenti aggiornati", n(res.updated_users)],
+        ["Aggiornati per displayName", n(res.updated_by_displayname ?? res.updated_users)],
+        ["Gruppi aggiornati", n(res.updated_groups)],
+      ]
+        .filter(([, value]) => value > 0)
+        .map(([label, value]) => `${label}: ${value}`);
       setStatusMsg(
-        `Nuovi utenti: ${n(res.new_users)}, ` +
-        `Nuovi gruppi: ${n(res.new_groups)}, ` +
-        `Utenti aggiornati: ${n(res.updated_users)}, ` +
-        `Gruppi aggiornati: ${n(res.updated_groups)}`
+        `Snapshot AD completato.` +
+        `${parts.length ? ` ${parts.join(", ")}.` : ""}` +
+        ` Logiche in background in esecuzione.`
       );
     } catch (e) {
       setErr(String(e.message || e));
     } finally {
       setAdLoading(false);
+    }
+  }
+
+  async function downloadLastAdExtractCsv() {
+    try {
+      setErr("");
+      setAdExporting(true);
+      const { blob, filename } = await exportLastAdExtractCsv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "ad_extract_snapshot.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setAdExporting(false);
     }
   }
 
@@ -366,6 +396,30 @@ function Connettori() {
             placeholder="OU DN"
           />
           <button className="primary" onClick={doExtract}>AD Extract</button>
+          <button
+            className="primary"
+            title="Scarica ultima estrazione AD (CSV)"
+            aria-label="Scarica ultima estrazione AD in CSV"
+            onClick={downloadLastAdExtractCsv}
+            disabled={adExporting}
+            style={{ width: 36, height: 36, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v11" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M4 21h16" />
+            </svg>
+          </button>
         </div>
 
         {statusMsg && <div className="ok">{statusMsg}</div>}
@@ -404,22 +458,20 @@ function Connettori() {
                 const out = await importBusinessRolesCsv(csvFile);
 
                 const n = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
-
-                const rowsTotal = n(out.rowsTotal ?? out.csvRowsTotal);
-                const rowsKept = n(out.rowsKept);
-                const dupDn = n(out.csvDuplicateDisplayNameRows ?? out.duplicateDisplayName);
-                const missingBR = n(out.csvRowsMissingBR ?? out.missingBusinessRole);
-                const newBRs = n(out.newBusinessRoles);
-
-                // compat con eventuali nomi diversi (se li aggiungi lato backend)
-                const createdUsers = n(out.created_users ?? out.createdUsers ?? out.createdusers);
-                const assignedUsers = n(out.assigned_users ?? out.assignedUsers ?? out.assignedusers);
-
+                const parts = [
+                  ["Righe importate", n(out.rowsTotal ?? out.csvRowsTotal)],
+                  ["Nuovi utenti", n(out.addedUsers ?? out.rowsKept)],
+                  ["Aggiornati per displayName", n(out.updatedByDisplayName ?? out.updatedUsers)],
+                  ["Valori duplicati", n(out.csvDuplicateDisplayNameRows ?? out.duplicateDisplayName)],
+                  ["Valori incompleti", n(out.csvRowsMissingBR ?? out.missingBusinessRole)],
+                ]
+                  .filter(([, value]) => value > 0)
+                  .map(([label, value]) => `${label}: ${value}`);
 
                 setImportMsg(
-                  `Import OK: Totale=${n(out.rowsTotal ?? out.csvRowsTotal)}, Nuovi Utenti=${n(out.rowsKept)}, ` +
-                  `Valore duplicato=${n(out.csvDuplicateDisplayNameRows)}, ` +
-                  `Valore incompleto=${n(out.csvRowsMissingBR)}`
+                  `Snapshot CSV completato.` +
+                  `${parts.length ? ` ${parts.join(", ")}.` : ""}` +
+                  `${out.processingInBackground ? " Logiche in background in esecuzione." : ""}`
                 );
 
               } catch (e) {
@@ -454,8 +506,11 @@ function Utenti() {
   const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
   const [err, setErr] = useState("");
+  const [csvMsg, setCsvMsg] = useState("");
+  const [csvImporting, setCsvImporting] = useState(false);
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
+  const csvInputRef = useRef(null);
   const nav = useNavigate();
 
 
@@ -494,6 +549,23 @@ function Utenti() {
 
   const sortIcon = (col) => sortBy === col ? (sortOrder === "asc" ? " ▲" : " ▼") : "";
 
+  async function handleUsersCsvImport(file) {
+    if (!file) return;
+    try {
+      setErr("");
+      setCsvMsg("");
+      setCsvImporting(true);
+      await importBusinessRolesCsv(file);
+      setCsvMsg("Snapshot CSV completato.");
+      await load(0);
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setCsvImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  }
+
   return (
     <div className="main">
       <h2 style={{ marginTop: 0 }}>Utenti ({total})</h2>
@@ -503,6 +575,37 @@ function Utenti() {
           <input style={{ width: 360 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Filtro (username/displayName)" aria-label="Filter Users" />
           <input style={{ width: 140, marginLeft: 10 }} value={typeQ} onChange={e => setTypeQ(e.target.value)} placeholder="Type (es. Service)" aria-label="Filter by Type" />
           <button className="primary" onClick={() => load(0)} style={{ marginLeft: 10 }}>Cerca</button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            style={{ display: "none" }}
+            onChange={(e) => handleUsersCsvImport(e.target.files?.[0] || null)}
+          />
+          <button
+            className="primary"
+            title="Extract CSV"
+            aria-label="Extract CSV"
+            onClick={() => csvInputRef.current?.click()}
+            disabled={csvImporting}
+            style={{ marginLeft: 6, width: 36, height: 36, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v11" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M4 21h16" />
+            </svg>
+          </button>
         </div>
 
         <hr className="sep" />
@@ -541,6 +644,7 @@ function Utenti() {
           <button disabled={offset + limit >= total} onClick={goNext}>Next</button>
         </div>
 
+        {csvMsg && <div className="ok">{csvMsg}</div>}
         {err && <div className="err">{err}</div>}
       </div>
     </div>
@@ -1032,6 +1136,7 @@ function Cluster() {
 
   const [roleData, setRoleData] = useState({ roles: [], assignments: {} });
   const [assignPage, setAssignPage] = useState(0);
+  const [assignDisplayNameFilter, setAssignDisplayNameFilter] = useState("");
   const ASSIGN_PAGE_SIZE = 50;
 
   async function loadRoles() {
@@ -1232,6 +1337,29 @@ function Cluster() {
     return { columnDefs: cols, rowData: rows };
   }, [mining, roleData, roleFilter, roleMetaByRole, groupRoleMap]);
 
+  const filteredAssignments = useMemo(() => {
+    const q = assignDisplayNameFilter.trim().toLowerCase();
+    const entries = Object.entries(roleData.assignments || {});
+    if (!q) return entries;
+    return entries.filter(([u]) => {
+      const dn = usersIndex?.[u] || u;
+      return String(dn || "").toLowerCase().includes(q);
+    });
+  }, [roleData.assignments, assignDisplayNameFilter, usersIndex]);
+
+  const assignTotal = filteredAssignments.length;
+  const assignPageCount = Math.max(1, Math.ceil(assignTotal / ASSIGN_PAGE_SIZE));
+  const assignRows = filteredAssignments.slice(
+    assignPage * ASSIGN_PAGE_SIZE,
+    (assignPage + 1) * ASSIGN_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    if (assignPage >= assignPageCount) {
+      setAssignPage(Math.max(0, assignPageCount - 1));
+    }
+  }, [assignPage, assignPageCount]);
+
   return (
     <div className="main">
       <h2 style={{ marginTop: 0 }}>
@@ -1358,10 +1486,10 @@ function Cluster() {
                 ◀ Prev
               </button>
               <span style={{ color: "var(--muted)", fontSize: 12 }}>
-                Pag. {assignPage + 1} / {Math.ceil(Object.keys(roleData.assignments || {}).length / ASSIGN_PAGE_SIZE) || 1}
+                Pag. {assignPage + 1} / {assignPageCount}
               </span>
               <button
-                disabled={(assignPage + 1) * ASSIGN_PAGE_SIZE >= Object.keys(roleData.assignments || {}).length}
+                disabled={(assignPage + 1) * ASSIGN_PAGE_SIZE >= assignTotal}
                 onClick={() => setAssignPage(p => p + 1)}
                 style={{ padding: "4px 10px" }}
               >
@@ -1372,11 +1500,28 @@ function Cluster() {
 
           <div style={{ padding: "0 12px 12px 12px" }}>
             <table className="table">
-              <thead><tr><th>Display Name</th><th>Business Role</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span>Display Name</span>
+                      <input
+                        style={{ width: 160, minWidth: 120, padding: "4px 8px", fontSize: 12 }}
+                        value={assignDisplayNameFilter}
+                        onChange={(e) => {
+                          setAssignDisplayNameFilter(e.target.value);
+                          setAssignPage(0);
+                        }}
+                        placeholder="Filtro..."
+                        aria-label="Filtro display name assegnazioni"
+                      />
+                    </div>
+                  </th>
+                  <th>Business Role</th>
+                </tr>
+              </thead>
               <tbody>
-                {Object.entries(roleData.assignments || {})
-                  .slice(assignPage * ASSIGN_PAGE_SIZE, (assignPage + 1) * ASSIGN_PAGE_SIZE)
-                  .map(([u, role]) => {
+                {assignRows.map(([u, role]) => {
                     const bg = roleMetaByRole?.[role]?.color || "#111a2e";
                     const fg = textColorForBg(bg);
                     const dn = usersIndex?.[u] || u;
@@ -1476,17 +1621,21 @@ function BusinessRolesHome() {
   const [err, setErr] = useState("");
   const [newRole, setNewRole] = useState("");
   const [ok, setOk] = useState("");
-  const [csvFile, setCsvFile] = useState(null);
   const [importMsg, setImportMsg] = useState("");
+  const [csvImporting, setCsvImporting] = useState(false);
+  const csvInputRef = useRef(null);
 
 
+  async function refreshRoles() {
+    const res = await api.businessRoles();
+    setRoles(res.roles || []);
+  }
 
   useEffect(() => {
     (async () => {
       try {
         setErr("");
-        const res = await api.businessRoles();
-        setRoles(res.roles || []);
+        await refreshRoles();
       } catch (e) {
         setErr(String(e.message || e));
       }
@@ -1514,8 +1663,7 @@ function BusinessRolesHome() {
                 await api.businessRoleCreate(newRole);
                 setNewRole("");
                 setOk("Ruolo creato.");
-                const res = await api.businessRoles();
-                setRoles(res.roles || []);
+                await refreshRoles();
               } catch (e) {
                 setErr(String(e.message || e));
               }
@@ -1523,9 +1671,57 @@ function BusinessRolesHome() {
           >
             + Crea
           </button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            style={{ display: "none" }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0] || null;
+              if (!file) return;
+              try {
+                setErr("");
+                setImportMsg("");
+                setCsvImporting(true);
+                await importBusinessRolesCsv(file);
+                setImportMsg("Snapshot CSV completato.");
+                await refreshRoles();
+              } catch (e2) {
+                setErr(String(e2?.message || e2));
+              } finally {
+                setCsvImporting(false);
+                if (csvInputRef.current) csvInputRef.current.value = "";
+              }
+            }}
+          />
+          <button
+            className="primary"
+            title="Extract CSV"
+            aria-label="Extract CSV"
+            onClick={() => csvInputRef.current?.click()}
+            disabled={csvImporting}
+            style={{ width: 36, height: 36, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v11" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M4 21h16" />
+            </svg>
+          </button>
         </div>
 
         {ok && <div className="ok">{ok}</div>}
+        {importMsg && <div className="ok">{importMsg}</div>}
         {err && <div className="err">{err}</div>}
 
         <hr className="sep" />

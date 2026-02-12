@@ -68,18 +68,35 @@ button.danger {
   border-right: 1px solid var(--border);
   background: rgba(17, 26, 46, 0.55);
   backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 
 .brand {
   font-weight: 700;
   letter-spacing: 0.3px;
   margin: 4px 0 12px;
+  flex: 0 0 auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .menu {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sidebar-actions {
+  flex: 0 0 auto;
+  padding-top: 8px;
+}
+
+.sidebar-actions .danger {
+  width: 100%;
 }
 
 .menu a,

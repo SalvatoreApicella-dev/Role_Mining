@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import jwt
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -1650,6 +1651,238 @@ def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
     state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
 
 
+def replace_from_connector_pool(new_users: List[Dict[str, Any]], ou: str, source: str) -> Dict[str, int]:
+    """
+    Replace current extract snapshot with a full connector pool.
+    Used by AD import to ensure all rules run on a complete fresh dataset.
+    """
+    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
+    previous_users = state["last_extract"].get("users") or []
+    previous_groups = set(state["last_extract"].get("groups") or [])
+
+    prev_by_username = {}
+    prev_by_displayname = {}
+    for u in previous_users:
+        uname = str(u.get("username") or "").strip()
+        if uname:
+            prev_by_username[uname] = u
+        dn = (u.get("displayName") or "").strip().lower()
+        if dn:
+            prev_by_displayname[dn] = u
+
+    previous_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in previous_users:
+        uname0 = str(u.get("username") or "").strip()
+        if not uname0:
+            continue
+        for g0 in (u.get("groups") or []):
+            gname = str(g0 or "").strip()
+            if gname:
+                previous_group_members[gname].add(uname0)
+
+    clean_users: List[Dict[str, Any]] = []
+    new_users_count = 0
+    updated_users_count = 0
+
+    for u in (new_users or []):
+        username = (u.get("username") or "").strip()
+        if not username:
+            continue
+
+        groups = sorted(set(u.get("groups") or []))
+        normalized = dict(u)
+        normalized["username"] = username
+        normalized["displayName"] = (u.get("displayName") or username).strip()
+        normalized["groups"] = groups
+        normalized["department"] = (u.get("department") or "").strip() or None
+        normalized["businessRole"] = (u.get("businessRole") or "").strip() or None
+        normalized["excluded"] = False
+        clean_users.append(normalized)
+
+        dn_key = normalized["displayName"].lower()
+        prev = prev_by_username.get(username) or prev_by_displayname.get(dn_key)
+        if not prev:
+            new_users_count += 1
+            continue
+
+        changed = (
+            str(prev.get("username") or "").strip() != normalized["username"]
+            or str(prev.get("displayName") or "").strip() != normalized["displayName"]
+            or sorted(set(prev.get("groups") or [])) != groups
+            or (prev.get("department") or None) != normalized["department"]
+            or (prev.get("businessRole") or None) != normalized["businessRole"]
+            or (prev.get("accountType") or None) != (normalized.get("accountType") or None)
+            or (prev.get("lastLogin") or None) != (normalized.get("lastLogin") or None)
+        )
+        if changed:
+            updated_users_count += 1
+
+    current_groups = recompute_groups_from_users(clean_users)
+
+    current_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in clean_users:
+        uname1 = str(u.get("username") or "").strip()
+        if not uname1:
+            continue
+        for g1 in (u.get("groups") or []):
+            gname = str(g1 or "").strip()
+            if gname:
+                current_group_members[gname].add(uname1)
+
+    common_groups = previous_groups & set(current_groups)
+    updated_groups_count = sum(
+        1 for g in common_groups
+        if previous_group_members.get(g, set()) != current_group_members.get(g, set())
+    )
+
+    state["last_extract"] = {
+        "ou": ou,
+        "users": clean_users,
+        "groups": current_groups,
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+    }
+    state["mining_dirty"] = True
+
+    return {
+        "new_users": int(new_users_count),
+        "updated_users": int(updated_users_count),
+        "updated_by_displayname": int(updated_users_count),
+        "new_groups": int(len(set(current_groups) - previous_groups)),
+        "updated_groups": int(updated_groups_count),
+    }
+
+
+def merge_from_connector_by_displayname(new_users: List[Dict[str, Any]], ou: str, source: str) -> Dict[str, int]:
+    """
+    Non-destructive merge:
+    - keep existing local users
+    - update only users with same displayName
+    - add AD users not found by displayName
+    """
+    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
+    base_users = state["last_extract"]["users"]
+    previous_groups = set(state["last_extract"].get("groups") or [])
+
+    previous_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in (base_users or []):
+        uname0 = str(u.get("username") or "").strip()
+        if not uname0:
+            continue
+        for g0 in (u.get("groups") or []):
+            gname = str(g0 or "").strip()
+            if gname:
+                previous_group_members[gname].add(uname0)
+
+    by_displayname: Dict[str, Dict[str, Any]] = {}
+    for u in base_users:
+        dn = (u.get("displayName") or "").strip().lower()
+        if dn and dn not in by_displayname:
+            by_displayname[dn] = u
+
+    new_users_count = 0
+    updated_users_count = 0
+
+    for u in (new_users or []):
+        username = (u.get("username") or "").strip()
+        display_name = (u.get("displayName") or username).strip()
+        if not username or not display_name:
+            continue
+
+        dn_key = display_name.lower()
+        existing_user = by_displayname.get(dn_key)
+        normalized_groups = sorted(set(u.get("groups") or []))
+
+        if existing_user:
+            prev_username = str(existing_user.get("username") or "").strip()
+            prev_display = str(existing_user.get("displayName") or "").strip()
+            prev_department = str(existing_user.get("department") or "").strip()
+            prev_business_role = str(existing_user.get("businessRole") or "").strip()
+            prev_groups = sorted(set(existing_user.get("groups") or []))
+            prev_account_type = existing_user.get("accountType")
+            prev_last_login = existing_user.get("lastLogin")
+
+            existing_user["username"] = username
+            existing_user["displayName"] = display_name
+            existing_user["groups"] = normalized_groups
+            existing_user["department"] = (u.get("department") or "").strip() or None
+            if (u.get("businessRole") or "").strip():
+                existing_user["businessRole"] = (u.get("businessRole") or "").strip()
+            if u.get("accountType") is not None:
+                existing_user["accountType"] = u.get("accountType")
+            if u.get("lastLogin") is not None:
+                existing_user["lastLogin"] = u.get("lastLogin")
+            for k in ("email", "upn", "employeeId", "manager", "statusAd", "statusHr", "attributes"):
+                if u.get(k) is not None:
+                    existing_user[k] = u.get(k)
+            existing_user["excluded"] = False
+
+            changed = (
+                prev_username != str(existing_user.get("username") or "").strip()
+                or prev_display != str(existing_user.get("displayName") or "").strip()
+                or prev_department != str(existing_user.get("department") or "").strip()
+                or prev_business_role != str(existing_user.get("businessRole") or "").strip()
+                or prev_groups != sorted(set(existing_user.get("groups") or []))
+                or prev_account_type != existing_user.get("accountType")
+                or prev_last_login != existing_user.get("lastLogin")
+            )
+            if changed:
+                updated_users_count += 1
+            continue
+
+        new_user = {
+            "username": username,
+            "displayName": display_name,
+            "groups": normalized_groups,
+            "department": (u.get("department") or "").strip() or None,
+            "businessRole": (u.get("businessRole") or "").strip() or None,
+            "excluded": False,
+            "lastLogin": u.get("lastLogin"),
+            "accountType": u.get("accountType"),
+            "email": u.get("email"),
+            "upn": u.get("upn"),
+            "employeeId": u.get("employeeId"),
+            "manager": u.get("manager"),
+            "statusAd": u.get("statusAd"),
+            "statusHr": u.get("statusHr"),
+            "attributes": u.get("attributes"),
+        }
+        base_users.append(new_user)
+        by_displayname[dn_key] = new_user
+        new_users_count += 1
+
+    current_groups = recompute_groups_from_users(base_users)
+    state["last_extract"]["groups"] = current_groups
+    state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
+    state["last_extract"]["source"] = source
+    if ou:
+        state["last_extract"]["ou"] = ou
+    state["mining_dirty"] = True
+
+    current_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in (base_users or []):
+        uname1 = str(u.get("username") or "").strip()
+        if not uname1:
+            continue
+        for g1 in (u.get("groups") or []):
+            gname = str(g1 or "").strip()
+            if gname:
+                current_group_members[gname].add(uname1)
+
+    common_groups = previous_groups & set(current_groups)
+    updated_groups_count = sum(
+        1 for g in common_groups
+        if previous_group_members.get(g, set()) != current_group_members.get(g, set())
+    )
+
+    return {
+        "new_users": int(new_users_count),
+        "updated_users": int(updated_users_count),
+        "new_groups": int(len(set(current_groups) - previous_groups)),
+        "updated_groups": int(updated_groups_count),
+    }
+
+
 def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) -> Dict[str, int]:
     """
     Merge new users from connector (AD/LDAP) into existing state.
@@ -1986,6 +2219,61 @@ def refresh_ai_detection_background(trigger: str, actor: str) -> None:
     except Exception as exc:
         log("ERROR", f"Background AI detection refresh failed (trigger={trigger}, by={actor}): {exc}")
 
+
+def run_post_snapshot_logic_background(snapshot_ts: str, actor: str) -> None:
+    """
+    Run heavy post-import business logic after AD snapshot has been saved.
+    If a newer snapshot exists, skip to avoid stale background work.
+    """
+    try:
+        current_ts = str((state.get("last_extract") or {}).get("ts") or "")
+        if not snapshot_ts or current_ts != str(snapshot_ts):
+            log("INFO", f"Skip post-snapshot logic: stale snapshot (expected={snapshot_ts}, current={current_ts})")
+            return
+
+        users = (state.get("last_extract") or {}).get("users") or []
+        rerun_auto_business_roles_after_connector(users, preserve_existing_brs=False)
+        sync_roles_from_users(users)
+
+        rebuild_ingest_candidates()
+        apply_duplicate_displayname_resolution()
+        invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+
+        refresh_ai_detection_background("ad-import-post-snapshot", actor)
+        log("INFO", f"Post-snapshot logic completed (snapshot_ts={snapshot_ts}, by={actor})")
+    except Exception as exc:
+        log("ERROR", f"Post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
+
+
+def run_post_csv_snapshot_logic_background(snapshot_ts: str, actor: str, touched_depts: List[str]) -> None:
+    """
+    Run heavy post-import business logic after CSV snapshot has been saved.
+    If a newer snapshot exists, skip to avoid stale background work.
+    """
+    try:
+        current_ts = str((state.get("last_extract") or {}).get("ts") or "")
+        if not snapshot_ts or current_ts != str(snapshot_ts):
+            log("INFO", f"Skip CSV post-snapshot logic: stale snapshot (expected={snapshot_ts}, current={current_ts})")
+            return
+
+        users = (state.get("last_extract") or {}).get("users") or []
+        only_depts = {d for d in (touched_depts or []) if d}
+        rerun_auto_business_roles_after_connector(
+            users,
+            only_depts=only_depts if only_depts else None,
+            preserve_existing_brs=True,
+        )
+        sync_roles_from_users(users)
+
+        rebuild_ingest_candidates()
+        apply_duplicate_displayname_resolution()
+        invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+
+        refresh_ai_detection_background("csv-import-post-snapshot", actor)
+        log("INFO", f"CSV post-snapshot logic completed (snapshot_ts={snapshot_ts}, by={actor})")
+    except Exception as exc:
+        log("ERROR", f"CSV post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
+
 def active_users(users: list[dict]) -> list[dict]:
     return [u for u in (users or []) if not u.get("excluded")]
 
@@ -2057,8 +2345,11 @@ class ExtractResponse(BaseModel):
     ou: str
     total_users: int
     total_groups: int
+    snapshot_ready: bool = True
+    processing_in_background: bool = False
     new_users: int = 0
     updated_users: int = 0
+    updated_by_displayname: int = 0
     new_groups: int = 0
     updated_groups: int = 0
     users: List[Dict[str, Any]]
@@ -3005,6 +3296,13 @@ def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
     extract_ts = last_extract.get("ts")
     mining_ts = last_mining.get("ts")
     matrix = last_mining.get("matrix") or {}
+    users = active_users(last_extract.get("users") or [])
+
+    # No data loaded: do not trigger mining/polling loops.
+    if not users:
+        state["mining_processing"] = False
+        state["mining_status"] = "idle"
+        return
 
     stale = bool(extract_ts and (not mining_ts or str(extract_ts) > str(mining_ts)))
 
@@ -3181,18 +3479,11 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
             )
         )
 
-    # 2) DB di sistema: filter, replace, auto-assign
+    # 2) Build full AD pool first, then merge into local DB:
+    #    update only by same displayName; keep all other local users.
     users = filter_and_dedupe_connector_users(users, source="ad")
-    merge_stats = merge_from_connector(users, ou=ou_dn, source="ad")
+    merge_stats = merge_from_connector_by_displayname(users, ou=ou_dn, source="ad")
     
-    # For AD import, re-evaluate assignments from AD signals (department/groups/rules)
-    # instead of preserving stale BR values from previous imports.
-    rerun_auto_business_roles_after_connector(
-        state["last_extract"]["users"],
-        preserve_existing_brs=False,
-    )
-    new_brs = sync_roles_from_users(state["last_extract"]["users"])
-
     # 3) Batch updates to state to minimize disk I/O
     updates = {
         "ingest_sources": {**state.get("ingest_sources", {}), "ad": ad_candidates},
@@ -3200,22 +3491,71 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
     }
     state.update(updates)
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
-
-    rebuild_ingest_candidates()
-    apply_duplicate_displayname_resolution()
-    background_tasks.add_task(refresh_ai_detection_background, "ad-import", username)
+    snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
+    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username)
 
     return ExtractResponse(
         ou=state["last_extract"]["ou"],
         total_users=len(state["last_extract"]["users"]),
         total_groups=len(state["last_extract"]["groups"]),
+        snapshot_ready=True,
+        processing_in_background=True,
         new_users=merge_stats.get("new_users", 0),
         updated_users=merge_stats.get("updated_users", 0),
+        updated_by_displayname=merge_stats.get("updated_by_displayname", 0),
         new_groups=merge_stats.get("new_groups", 0),
         updated_groups=merge_stats.get("updated_groups", 0),
         users=state["last_extract"]["users"],
         groups=state["last_extract"]["groups"],
     )
+
+
+@app.get("/api/ad/extract/export-csv")
+def export_last_extract_csv(username: str = Depends(require_auth)):
+    users = (state.get("last_extract") or {}).get("users") or []
+    if not users:
+        raise HTTPException(status_code=400, detail="Nessuna estrazione disponibile")
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "DisplayName",
+        "Username",
+        "Department",
+        "BusinessRole",
+        "Ruoli",
+        "AccountType",
+        "LastLogin",
+        "Email",
+        "UPN",
+        "EmployeeId",
+        "Manager",
+        "StatusAD",
+        "StatusHR",
+    ])
+
+    for u in users:
+        writer.writerow([
+            u.get("displayName") or "",
+            u.get("username") or "",
+            u.get("department") or "",
+            u.get("businessRole") or "",
+            ",".join(u.get("groups") or []),
+            u.get("accountType") or "",
+            u.get("lastLogin") or "",
+            u.get("email") or "",
+            u.get("upn") or "",
+            u.get("employeeId") or "",
+            u.get("manager") or "",
+            u.get("statusAd") or "",
+            u.get("statusHr") or "",
+        ])
+
+    output.seek(0)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"ad_extract_snapshot_{ts}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(output, media_type="text/csv; charset=utf-8", headers=headers)
 
 
 @app.get("/api/users")
@@ -4745,17 +5085,12 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
             state["choice_by_displayName"].setdefault(display_name, winner["rowId"])
 
-    # Merge with existing users - match by BOTH displayName AND username
-    # When matching: REPLACE groups and department (not merge)
-    # Build dual indexes for matching
+    # Merge with existing users - match ONLY by displayName.
+    # Keep all local users; update only same displayName; add others.
     existing_by_dn = {}
-    existing_by_uname = {}
     for u in existing_users_list:
-        uname = u.get("username")
-        if uname:
-            existing_by_uname[uname] = u
         dn = (u.get("displayName") or "").strip().lower()
-        if dn:
+        if dn and dn not in existing_by_dn:
             existing_by_dn[dn] = u
 
     added_users = 0
@@ -4766,8 +5101,8 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         uname = user["username"]
         dn_key = (user.get("displayName") or "").strip().lower()
         
-        # Match by displayName first, then by username
-        existing_user = existing_by_dn.get(dn_key) or existing_by_uname.get(uname)
+        # Match ONLY by displayName
+        existing_user = existing_by_dn.get(dn_key)
         
         if existing_user:
             # REPLACE groups and other fields with new values from import
@@ -4786,23 +5121,20 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
                 if user.get(k) is not None:
                     existing_user[k] = user.get(k)
             
-            # Update username if it changed (displayName matched but username different)
+            # Update username if it changed
             if existing_user.get("username") != uname:
-                old_uname = existing_user.get("username")
                 existing_user["username"] = uname
-                if old_uname in existing_by_uname:
-                    del existing_by_uname[old_uname]
-                existing_by_uname[uname] = existing_user
             
             updated_users += 1
         else:
             # New user - add to indexes
-            existing_by_uname[uname] = user.copy()
+            new_user = user.copy()
+            existing_users_list.append(new_user)
             if dn_key:
-                existing_by_dn[dn_key] = existing_by_uname[uname]
+                existing_by_dn[dn_key] = new_user
             added_users += 1
 
-    merged_users = list(existing_by_uname.values())
+    merged_users = existing_users_list
     state["last_extract"]["users"] = merged_users
     computed_groups = set(recompute_groups_from_users(merged_users))
     computed_groups.update(csv_orphan_groups_catalog)
@@ -4819,10 +5151,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         if uname and br and br != "Unassigned":
             state["user_business_role"][uname] = br
 
-    touched_depts = { u.get("department") for u in new_users if u.get("department") }
-    rerun_auto_business_roles_after_connector(merged_users, only_depts=touched_depts)
-
-    new_brs = sync_roles_from_users(merged_users)
+    touched_depts = {u.get("department") for u in new_users if u.get("department")}
     csv_auto_resolved_duplicates = len(state.get("duplicate_autoselect") or {})
 
     state["last_ingest_stats"] = {
@@ -4848,23 +5177,33 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
-    rebuild_ingest_candidates()
-    apply_duplicate_displayname_resolution()
     state["last_rejects"] = csv_rejects
     state["mining_dirty"] = True
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
+    touched_depts_list = sorted([d for d in touched_depts if d])
     if background_tasks:
-        background_tasks.add_task(refresh_ai_detection_background, "csv-import", username)
+        background_tasks.add_task(
+            run_post_csv_snapshot_logic_background,
+            snapshot_ts,
+            username,
+            touched_depts_list,
+        )
+    else:
+        run_post_csv_snapshot_logic_background(snapshot_ts, username, touched_depts_list)
 
     return {
         "ok": True,
+        "snapshotReady": True,
+        "processingInBackground": True,
         "addedUsers": added_users,
         "updatedUsers": updated_users,
+        "updatedByDisplayName": updated_users,
         "totalUsers": len(merged_users),
         "rowsTotal": csv_rows_total,
         "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
         "autoResolvedDuplicateUsers": csv_auto_resolved_duplicates,
-        "newBusinessRoles": new_brs,
+        "newBusinessRoles": 0,
     }
 
 

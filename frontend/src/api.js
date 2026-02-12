@@ -44,6 +44,28 @@ export async function importBusinessRolesCsv(file) {
   return await res.json();
 }
 
+export async function exportLastAdExtractCsv() {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/ad/extract/export-csv`, {
+    method: "GET",
+    headers,
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const m = cd.match(/filename=\"?([^\";]+)\"?/i);
+  const filename = (m && m[1]) ? m[1] : "ad_extract_snapshot.csv";
+  return { blob, filename };
+}
+
 export async function aiLabAbCompareUpload(fileA, fileB) {
   const form = new FormData();
   form.append("file_a", fileA);
