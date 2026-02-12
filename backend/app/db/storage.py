@@ -17,6 +17,7 @@ class JsonFileStore:
         self.filepath = Path(filepath)
         self._lock = threading.RLock()
         self._state: Dict[str, Any] = {}
+        self._json_indent = 2 if os.getenv("STATE_JSON_PRETTY", "0") == "1" else None
         self._ensure_file()
         self.load()
     
@@ -43,7 +44,13 @@ class JsonFileStore:
             # Convert sets to lists for JSON serialization
             serializable_state = self._prepare_for_json(self._state)
             with open(self.filepath, 'w', encoding='utf-8') as f:
-                json.dump(serializable_state, f, indent=2, ensure_ascii=False)
+                json.dump(
+                    serializable_state,
+                    f,
+                    indent=self._json_indent,
+                    ensure_ascii=False,
+                    separators=(",", ":") if self._json_indent is None else None,
+                )
     
     def _prepare_for_json(self, obj: Any) -> Any:
         """Recursively convert non-JSON-serializable types."""

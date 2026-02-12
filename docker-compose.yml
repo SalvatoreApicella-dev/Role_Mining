@@ -2,26 +2,25 @@ services:
   backend:
     build: ./backend
     container_name: rolemining-backend
+    restart: unless-stopped
     environment:
       - MOCK_AD=0
       - JWT_SECRET=change-me-in-prod
       - JWT_EXPIRE_MINUTES=240
+      - UVICORN_WORKERS=2
+      - LDAP_FETCH_ALL_ATTRIBUTES=0
+      - LDAP_PAGE_SIZE=1000
+      - LDAP_SEARCH_TIME_LIMIT=60
       - APP_LOGIN_USER=admin #Change here for your preferred username
       - APP_LOGIN_PASS=admin123 #Change here for your preferred password
     ports:
       - "9000:8000"
-    volumes:
-      - ./backend:/app
 
   frontend:
     build: ./frontend
     container_name: rolemining-frontend
-    environment:
-      - VITE_PROXY_TARGET=http://backend:8000
+    restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "5173:80"
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules

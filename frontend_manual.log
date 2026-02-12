@@ -18,3 +18,6 @@ Error: connect ECONNREFUSED 127.0.0.1:8000
 5:55:02 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+6:19:56 PM [vite] vite.config.js changed, restarting server...
+6:19:56 PM [vite] server restarted.
+6:21:27 PM [vite] hmr update /src/app.jsx

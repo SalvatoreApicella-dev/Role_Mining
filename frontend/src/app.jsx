@@ -1,5 +1,4 @@
 import { NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
-import Plot from "react-plotly.js";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
@@ -21,6 +20,7 @@ const AiLabAbPlaygroundPage = lazy(() => import("./pages/AiLabAbPlaygroundPage")
 const AiLabFairnessPage = lazy(() => import("./pages/AiLabFairnessPage"));
 const AiLabSyntheticPage = lazy(() => import("./pages/AiLabSyntheticPage"));
 const AiLabFeedbackPage = lazy(() => import("./pages/AiLabFeedbackPage"));
+const Plot = lazy(() => import("react-plotly.js"));
 
 
 
@@ -200,23 +200,25 @@ function Analytics() {
       <hr className="sep" />
 
       <div className="panel">
-        <Plot
-          data={plotData}
-          layout={{
-            paper_bgcolor: "rgba(0,0,0,0)",
-            plot_bgcolor: "rgba(0,0,0,0)",
-            font: { color: "#e9eefc" },
-            margin: { l: 40, r: 10, t: 20, b: 50 },
-            yaxis: { range: [0, 100] }
-          }}
-          style={{ width: "100%", height: 320 }}
-          config={{ displayModeBar: false }}
-          onClick={(ev) => {
-            const label = ev?.points?.[0]?.x;
-            const route = kpiRouteByLabel[label];
-            if (route) navigate(route);
-          }}
-        />
+        <Suspense fallback={<div style={{ height: 320 }} />}>
+          <Plot
+            data={plotData}
+            layout={{
+              paper_bgcolor: "rgba(0,0,0,0)",
+              plot_bgcolor: "rgba(0,0,0,0)",
+              font: { color: "#e9eefc" },
+              margin: { l: 40, r: 10, t: 20, b: 50 },
+              yaxis: { range: [0, 100] }
+            }}
+            style={{ width: "100%", height: 320 }}
+            config={{ displayModeBar: false }}
+            onClick={(ev) => {
+              const label = ev?.points?.[0]?.x;
+              const route = kpiRouteByLabel[label];
+              if (route) navigate(route);
+            }}
+          />
+        </Suspense>
 
         {err && <div className="err">{err}</div>}
       </div>

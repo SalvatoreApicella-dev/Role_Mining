@@ -28,6 +28,24 @@ APP_LOGIN_USER = os.getenv("APP_LOGIN_USER", "admin")
 APP_LOGIN_PASS = os.getenv("APP_LOGIN_PASS", "admin123")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "240"))
 MOCK_AD = os.getenv("MOCK_AD", "0") == "1"
+LDAP_FETCH_ALL_ATTRIBUTES = os.getenv("LDAP_FETCH_ALL_ATTRIBUTES", "0") == "1"
+LDAP_PAGE_SIZE = max(100, int(os.getenv("LDAP_PAGE_SIZE", "1000")))
+LDAP_SEARCH_TIME_LIMIT = max(10, int(os.getenv("LDAP_SEARCH_TIME_LIMIT", "60")))
+LDAP_EXTRA_ATTRIBUTES = [
+    a.strip() for a in os.getenv("LDAP_EXTRA_ATTRIBUTES", "").split(",") if a.strip()
+]
+LDAP_BASE_ATTRIBUTES = [
+    "sAMAccountName",
+    "displayName",
+    "memberOf",
+    "department",
+    "lastLogonTimestamp",
+    "lastLogon",
+    "employeeType",
+    "distinguishedName",
+    "mail",
+    "userPrincipalName",
+]
 
 
 
@@ -72,6 +90,14 @@ class ResponseCache:
             self._cache.pop(key, None)
         else:
             self._cache.clear()
+
+    def invalidate_prefix(self, prefix: str) -> None:
+        """Invalidate all keys by prefix."""
+        if not prefix:
+            return
+        keys = [k for k in self._cache.keys() if k.startswith(prefix)]
+        for key in keys:
+            self._cache.pop(key, None)
     
     def stats(self) -> Dict[str, Any]:
         """Return cache statistics."""
@@ -94,6 +120,18 @@ CACHE_TTL_USERS = 30.0       # User list
 CACHE_TTL_ROLES = 30.0       # Business roles
 
 # Cache dell’ultima esecuzione (serve per drilldown)
+
+def invalidate_hot_caches(*, users: bool = False, roles: bool = False, kpi: bool = False, mining: bool = False) -> None:
+    if users:
+        RESPONSE_CACHE.invalidate_prefix("users_")
+        RESPONSE_CACHE.invalidate("ad_groups")
+    if roles:
+        RESPONSE_CACHE.invalidate("businessroles")
+        RESPONSE_CACHE.invalidate_prefix("role_meta_")
+    if kpi:
+        RESPONSE_CACHE.invalidate("kpi")
+    if mining:
+        RESPONSE_CACHE.invalidate_prefix("rolemining_last_")
 
 BROAD_MARKERS = ['all','tutti','tutte','full','global','everyone','any','anyone','everybody']
 
@@ -2058,6 +2096,24 @@ def _mk_ldap_server(cfg: Dict[str, Any]):
     }
 
 
+def _ldap_search_attrs() -> List[str]:
+    if LDAP_FETCH_ALL_ATTRIBUTES:
+        return ["*"]
+    out = list(dict.fromkeys(LDAP_BASE_ATTRIBUTES + LDAP_EXTRA_ATTRIBUTES))
+    return out or ["*"]
+
+
+def _extract_group_cn(raw_dn: Any) -> str:
+    dn_str = str(raw_dn or "").strip()
+    if not dn_str:
+        return ""
+    for part in dn_str.split(","):
+        p = part.strip()
+        if p.upper().startswith("CN="):
+            return p[3:]
+    return dn_str
+
+
 
 
 
@@ -2100,39 +2156,61 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
 
         # objectClass=user può includere account tecnici: in produzione aggiungere filtri più stretti
         search_filter = "(&(objectClass=user)(sAMAccountName=*))"
-        # Fetch ALL attributes to support dynamic rules
-        attrs = ["*"]
-        
-        log("INFO", f"Searching LDAP base='{ou_dn}' filter='{search_filter}'")
+        attrs = _ldap_search_attrs()
+        log(
+            "INFO",
+            f"Searching LDAP base='{ou_dn}' filter='{search_filter}' attrs={len(attrs)} page_size={LDAP_PAGE_SIZE}",
+        )
 
-        if not conn.search(search_base=ou_dn, search_filter=search_filter, attributes=attrs):
-             result = conn.result or {}
-             log("ERROR", f"LDAP search returned False. Result: {result}")
-             result_desc = str(result.get("description") or "").lower()
-             diagnostic = {
-                 "message": f"LDAP search failed on base '{ou_dn}'",
-                 "result": result,
-                 "hints": [
-                     "Verifica OU DN: deve esistere nel dominio LDAP (es. OU=Users,DC=example,DC=internal).",
-                     f"Controlla coerenza con base_dn configurato: '{cfg.get('base_dn') or ''}'.",
-                 ],
-             }
-             if "no such object" in result_desc or "nosuchobject" in result_desc:
-                 raise HTTPException(status_code=400, detail=diagnostic)
-             if "invalid dn syntax" in result_desc or "invaliddnsyntax" in result_desc:
-                 raise HTTPException(status_code=400, detail=diagnostic)
-             raise HTTPException(status_code=500, detail=diagnostic)
-        
-        log("INFO", f"LDAP search found {len(conn.entries)} entries. Parsing...")
-        
         users: List[Dict[str, Any]] = []
-        
+
         # Collect all available field names for UI
         available_fields = set()
+        parsed_entries = 0
 
-        for entry in conn.entries:
+        if LDAP_PAGE_SIZE > 0:
+            entries_iter = conn.extend.standard.paged_search(
+                search_base=ou_dn,
+                search_filter=search_filter,
+                attributes=attrs,
+                paged_size=LDAP_PAGE_SIZE,
+                generator=True,
+                time_limit=LDAP_SEARCH_TIME_LIMIT,
+            )
+        else:
+            if not conn.search(
+                search_base=ou_dn,
+                search_filter=search_filter,
+                attributes=attrs,
+                time_limit=LDAP_SEARCH_TIME_LIMIT,
+            ):
+                result = conn.result or {}
+                log("ERROR", f"LDAP search returned False. Result: {result}")
+                result_desc = str(result.get("description") or "").lower()
+                diagnostic = {
+                    "message": f"LDAP search failed on base '{ou_dn}'",
+                    "result": result,
+                    "hints": [
+                        "Verifica OU DN: deve esistere nel dominio LDAP (es. OU=Users,DC=example,DC=internal).",
+                        f"Controlla coerenza con base_dn configurato: '{cfg.get('base_dn') or ''}'.",
+                    ],
+                }
+                if "no such object" in result_desc or "nosuchobject" in result_desc:
+                    raise HTTPException(status_code=400, detail=diagnostic)
+                if "invalid dn syntax" in result_desc or "invaliddnsyntax" in result_desc:
+                    raise HTTPException(status_code=400, detail=diagnostic)
+                raise HTTPException(status_code=500, detail=diagnostic)
+            entries_iter = (
+                {"type": "searchResEntry", "attributes": e.entry_attributes_as_dict}
+                for e in conn.entries
+            )
+
+        for entry in entries_iter:
+            if entry.get("type") != "searchResEntry":
+                continue
+            parsed_entries += 1
             try:
-                d = entry.entry_attributes_as_dict
+                d = entry.get("attributes") or {}
                 
                 # Update available fields
                 for k in d.keys():
@@ -2148,18 +2226,9 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
                 member_of = d.get("memberOf") or []
                 groups = []
                 for dn in member_of:
-                    # Parse CN= from DN roughly
-                    dn_str = str(dn)
-                    # CN=Group Name,OU=...
-                    # simple parse: find first CN= part
-                    parts = dn_str.split(",")
-                    cn = dn_str
-                    for p in parts:
-                        p = p.strip()
-                        if p.upper().startswith("CN="):
-                            cn = p[3:]
-                            break
-                    groups.append(cn)
+                    cn = _extract_group_cn(dn)
+                    if cn:
+                        groups.append(cn)
                 
                 dept = d.get("department") or []
                 department = str(dept[0]).strip() if dept else None
@@ -2211,7 +2280,7 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
         log("INFO", f"Updated available AD fields: {len(available_fields)} found.")
 
                 
-        log("INFO", f"LDAP extraction complete. Parsed {len(users)} users.")
+        log("INFO", f"LDAP extraction complete. Parsed entries={parsed_entries}, users={len(users)}.")
         return users
 
     except HTTPException:
@@ -3003,6 +3072,7 @@ def toggle_user_group(body: ToggleUserGroupRequest, username: str = Depends(requ
 
     # IMPORTANTISSIMO: NON aggiornare state["last_extract"]["groups"] qui
     state["mining_dirty"] = True
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     return {"ok": True, "username": body.username, "group": g, "enabled": body.enabled}
 
 
@@ -3075,6 +3145,7 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
         "mining_dirty": True
     }
     state.update(updates)
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
 
     rebuild_ingest_candidates()
     apply_duplicate_displayname_resolution()
@@ -3091,6 +3162,11 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
 
 @app.get("/api/users")
 def list_users(q: str = "", type_q: str = "", limit: int = 100, offset: int = 0, sort_by: str = "", order: str = "asc", username: str = Depends(require_auth)):
+    cache_key = f"users_{q}|{type_q}|{limit}|{offset}|{sort_by}|{order}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+
     users = active_users(state["last_extract"]["users"] or [])
     
     # Text Filter
@@ -3125,7 +3201,9 @@ def list_users(q: str = "", type_q: str = "", limit: int = 100, offset: int = 0,
     
     total = len(users)
     sliced = users[offset : offset + limit]
-    return {"total": total, "items": sliced, "limit": limit, "offset": offset}
+    result = {"total": total, "items": sliced, "limit": limit, "offset": offset}
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_USERS)
+    return result
 
 @app.get("/api/users/{uname}")
 def get_user(uname: str, username: str = Depends(require_auth)):
@@ -3204,6 +3282,7 @@ def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(req
         },
     )
 
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     return {"ok": True, "user": u}
 
 
@@ -3829,9 +3908,16 @@ class RoleGroupRequest(BaseModel):
 
 @app.get("/api/ad/groups")
 def ad_groups(username: str = Depends(require_auth)):
+    cache_key = "ad_groups"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+
     users = state["last_extract"].get("users") or []
     groups = recompute_groups_from_users(users)
-    return {"groups": groups}
+    result = {"groups": groups}
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_USERS)
+    return result
 
 
 @app.get("/api/businessroles/{role}/meta")
@@ -3855,6 +3941,7 @@ def businessrole_set_color(role: str, body: RoleColorRequest, username: str = De
     state["role_meta"][role]["color"] = body.color
     state.setdefault("business_roles", set()).add(role)
     log("INFO", f"Role color set: {role} -> {body.color} by {username}")
+    invalidate_hot_caches(roles=True)
     return {"ok": True}
 
 @app.post("/api/businessroles/{role}/groups/add")
@@ -3866,6 +3953,7 @@ def businessrole_add_group(role: str, body: RoleGroupRequest, username: str = De
     state["role_meta"][role]["groups"] = sorted(gs)
     state.setdefault("business_roles", set()).add(role)
     log("INFO", f"Role group add: {role} + {body.group} by {username}")
+    invalidate_hot_caches(roles=True, kpi=True, mining=True)
     return {"ok": True}
 
 # ----------------------------
@@ -3957,6 +4045,7 @@ def businessrole_suggestion_select(role: str, body: SuggestionPickRequest, usern
 
     state["mining_dirty"] = True
     log("INFO", f"Suggestion selected: {role} + {g} by {username}")
+    invalidate_hot_caches(roles=True, kpi=True, mining=True)
     return {"ok": True, "role": role, "group": g}
 
 
@@ -3967,6 +4056,7 @@ def businessrole_remove_group(role: str, body: RoleGroupRequest, username: str =
     gs = [g for g in state["role_meta"][role].get("groups", []) if g != body.group]
     state["role_meta"][role]["groups"] = gs
     log("INFO", f"Role group remove: {role} - {body.group} by {username}")
+    invalidate_hot_caches(roles=True, kpi=True, mining=True)
     return {"ok": True}
 
 
@@ -3983,6 +4073,7 @@ def businessrole_create(body: RoleCreateRequest, username: str = Depends(require
     state["business_roles"].add(role)
 
     log("INFO", f"Business role created: {role} by {username}")
+    invalidate_hot_caches(roles=True)
     return {"ok": True, "role": role}
 
 class ChooseCsvRowRequest(BaseModel):
@@ -4032,6 +4123,7 @@ def choose_csv_duplicate_row(body: ChooseCsvRowRequest, username: str = Depends(
     )
 
     log("INFO", f"CSV duplicate resolved: '{dn_raw}' -> rowId={row_id} by {username}")
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     return {"ok": True, "username": uobj["username"], "chosenRowId": row_id}
 
 
@@ -4085,6 +4177,7 @@ def choose_duplicate(body: ChooseDuplicateRequest, username: str = Depends(requi
 
     _record_duplicate_feedback(body.displayName, body.candidateId, actor=username)
     log("INFO", f"Duplicate resolved: {body.displayName} -> {body.candidateId} by {username}")
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     return {"ok": True}
 
 
@@ -4196,6 +4289,7 @@ def businessrole_add(role: str, body: RoleAssignRequest, username: str = Depends
         )
 
     log("INFO", f"Business role set: {body.username} -> {role} by {username}")
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     return {"ok": True, "username": body.username, "role": role}
 
 def _slug_username(display_name: str) -> str:
@@ -4700,6 +4794,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
     apply_duplicate_displayname_resolution()
     state["last_rejects"] = csv_rejects
     state["mining_dirty"] = True
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     if background_tasks:
         background_tasks.add_task(refresh_ai_detection_background, "csv-import", username)
 
