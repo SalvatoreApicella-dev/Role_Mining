@@ -1,24 +1,20 @@
-INFO:     Started server process [82826]
+INFO:     Started server process [83818]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:60313 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60314 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60327 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:60329 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:60332 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:60333 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:60338 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:60339 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60342 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60345 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60351 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60355 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60352 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60361 - "GET /api/data-quality/model/presets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60358 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60365 - "GET /api/data-quality/model/presets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60373 - "POST /api/data-quality/model/presets/banking/apply HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60381 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60382 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60385 - "GET /api/data-quality/model/presets HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60534 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60535 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60544 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60545 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60546 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60547 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60552 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60558 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60564 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60570 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60574 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60571 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60580 - "GET /api/data-quality/model/presets HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60577 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60583 - "GET /api/data-quality/model/presets HTTP/1.1" 200 OK

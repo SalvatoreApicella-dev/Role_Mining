@@ -1,6 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 
+const INDICATOR_DESCRIPTIONS = {
+    role_entropy: "Misura quanto sono eterogenei i gruppi assegnati agli utenti dello stesso ruolo. Un valore alto indica che il ruolo non ha un profilo di accessi stabile e che la segmentazione del modello e poco coerente.",
+    template_coverage: "Misura la quota di gruppi attesi dal template di ruolo che risultano mancanti sugli utenti assegnati a quel ruolo. Un valore alto indica ruoli incompleti o assegnazioni parziali.",
+    noise_ratio: "Misura la percentuale di gruppi assegnati agli utenti che non appartengono al template del loro ruolo. Un valore alto indica permessi fuori standard e maggiore rischio operativo.",
+    ambiguity: "Misura quanti utenti hanno una confidenza bassa nella classificazione del ruolo. Un valore alto indica che il modello fatica a distinguere chiaramente il ruolo corretto per molti utenti.",
+    temporal_drift: "Misura quanto gli accessi recenti si discostano dai pattern storici del ruolo. Un valore alto indica deriva del comportamento e necessita di aggiornare policy o template.",
+    matrix_density: "Misura il rischio dovuto a una matrice permessi troppo sparsa o troppo densa. Entrambi gli estremi riducono la qualita del modello e la sua capacita di generalizzare.",
+    orphan_weighted: "Misura i gruppi orfani (senza utenti) con peso maggiore per gruppi critici. Un valore alto segnala configurazioni inutilizzate o incoerenti, con impatto su governance e manutenzione.",
+    overprivileged: "Misura la concentrazione di utenti con numero di gruppi molto alto rispetto alla baseline. Un valore alto aumenta la superficie di rischio e riduce il principio del least privilege.",
+    stale_access: "Misura la quota di account con ultimo accesso molto vecchio ma ancora dotati di permessi. Un valore alto indica possibile accumulo di accessi non necessari o obsoleti.",
+    policy_violation: "Misura la frequenza di combinazioni di permessi in conflitto con regole di policy (es. pattern SoD). Un valore alto indica rischio di non conformita e separazione dei compiti insufficiente.",
+    manual_override: "Misura quanto il processo dipende da correzioni manuali rispetto alle decisioni automatiche. Un valore alto indica che il modello non e ancora sufficientemente affidabile in autonomia.",
+    generalization: "Misura il gap di generalizzazione del modello su utenti reali. Un valore alto indica che la confidenza media e bassa e che il modello potrebbe degradare su nuovi dati.",
+};
+
 const StatCard = ({ label, value, color }) => (
     <div className="card" style={{ borderLeft: `3px solid ${color}`, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <div className="k" style={{ textTransform: "uppercase", letterSpacing: 1, fontSize: 10 }}>{label}</div>
@@ -16,6 +31,9 @@ export default function ModelQualityPage() {
     const [presetInfo, setPresetInfo] = useState(null);
     const [selectedPreset, setSelectedPreset] = useState("manufacturing");
     const [applyingPreset, setApplyingPreset] = useState(false);
+    const [groupsOpen, setGroupsOpen] = useState(true);
+    const [openUserSection, setOpenUserSection] = useState("stale");
+    const [indicatorPopup, setIndicatorPopup] = useState(null);
 
     const load = async () => {
         try {
@@ -76,6 +94,10 @@ export default function ModelQualityPage() {
     const indicatorsCount = (data?.qualityIndicators || []).length;
     const totalUserIssues = staleCount + zeroCount + overCount;
 
+    function toggleUserSection(key) {
+        setOpenUserSection((prev) => (prev === key ? null : key));
+    }
+
     return (
         <div className="main">
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 24 }}>
@@ -121,7 +143,7 @@ export default function ModelQualityPage() {
                             transition: "all 0.2s"
                         }}
                     >
-                        Issue Gruppi
+                        Gruppi Impattati
                     </button>
                     <button
                         onClick={() => setActiveTab("users")}
@@ -133,7 +155,7 @@ export default function ModelQualityPage() {
                             transition: "all 0.2s"
                         }}
                     >
-                        Issue Utenti
+                        Utenti Impattati
                     </button>
                     <button
                         onClick={() => setActiveTab("indicators")}
@@ -151,19 +173,29 @@ export default function ModelQualityPage() {
 
                 {activeTab === "groups" && (
                     <div>
-                        <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Gruppi Orfani (0 Membri)</h3>
-                        {orphanCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun gruppo orfano trovato.</div> : (
-                            <table className="table">
-                                <thead><tr><th>Nome Gruppo</th><th style={{ width: 120, textAlign: "center" }}>Utenti</th></tr></thead>
-                                <tbody>
-                                    {(data?.groupsIssues || []).map((g, i) => (
-                                        <tr key={i}>
-                                            <td style={{ fontWeight: 500 }}>{g.groupName}</td>
-                                            <td style={{ textAlign: "center", fontFamily: "monospace" }}>{g.userCount}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <button
+                            onClick={() => setGroupsOpen((x) => !x)}
+                            style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}
+                        >
+                            {groupsOpen ? "Nascondi lista gruppi" : "Mostra lista gruppi"}
+                        </button>
+                        {groupsOpen && (
+                            <>
+                                <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Gruppi Orfani (0 Membri)</h3>
+                                {orphanCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun gruppo orfano trovato.</div> : (
+                                    <table className="table">
+                                        <thead><tr><th>Nome Gruppo</th><th style={{ width: 120, textAlign: "center" }}>Utenti</th></tr></thead>
+                                        <tbody>
+                                            {(data?.groupsIssues || []).map((g, i) => (
+                                                <tr key={i}>
+                                                    <td style={{ fontWeight: 500 }}>{g.groupName}</td>
+                                                    <td style={{ textAlign: "center", fontFamily: "monospace" }}>{g.userCount}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </>
                         )}
                     </div>
                 )}
@@ -171,92 +203,127 @@ export default function ModelQualityPage() {
                 {activeTab === "users" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 48 }}>
                         <section>
-                            <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Account Stale (&gt; 1 anno inattivi)</h3>
-                            {staleCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun account stale trovato.</div> : (
-                                <table className="table">
-                                    <thead><tr><th>Nome Visualizzato</th><th>Username</th><th>Ultimo Accesso</th></tr></thead>
-                                    <tbody>
-                                        {(data?.staleAccounts || []).map((u, i) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500 }}>{u.displayName}</td>
-                                                <td style={{ color: "var(--accent)", fontFamily: "monospace", fontSize: 13 }}>{u.username}</td>
-                                                <td style={{ color: "var(--danger)", fontWeight: 600 }}>{u.lastLogon}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <button onClick={() => toggleUserSection("stale")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
+                                {openUserSection === "stale" ? "Nascondi Account Stale" : "Mostra Account Stale"}
+                            </button>
+                            {openUserSection === "stale" && (
+                                <>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Account Stale (&gt; 1 anno inattivi)</h3>
+                                    {staleCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun account stale trovato.</div> : (
+                                        <table className="table">
+                                            <thead><tr><th>Nome Visualizzato</th><th>Username</th><th>Ultimo Accesso</th></tr></thead>
+                                            <tbody>
+                                                {(data?.staleAccounts || []).map((u, i) => (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500 }}>{u.displayName}</td>
+                                                        <td style={{ color: "var(--accent)", fontFamily: "monospace", fontSize: 13 }}>{u.username}</td>
+                                                        <td style={{ color: "var(--danger)", fontWeight: 600 }}>{u.lastLogon}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </>
                             )}
                         </section>
 
                         <section>
-                            <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti senza Gruppi</h3>
-                            {zeroCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente orfano trovato.</div> : (
-                                <table className="table">
-                                    <thead><tr><th>Nome Visualizzato</th><th>Username</th></tr></thead>
-                                    <tbody>
-                                        {(data?.zeroGroupsUsers || []).map((u, i) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500 }}>{u.displayName}</td>
-                                                <td style={{ color: "var(--accent)", fontFamily: "monospace", fontSize: 13 }}>{u.username}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <button onClick={() => toggleUserSection("zero")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
+                                {openUserSection === "zero" ? "Nascondi Utenti senza Gruppi" : "Mostra Utenti senza Gruppi"}
+                            </button>
+                            {openUserSection === "zero" && (
+                                <>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti senza Gruppi</h3>
+                                    {zeroCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente orfano trovato.</div> : (
+                                        <table className="table">
+                                            <thead><tr><th>Nome Visualizzato</th><th>Username</th></tr></thead>
+                                            <tbody>
+                                                {(data?.zeroGroupsUsers || []).map((u, i) => (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500 }}>{u.displayName}</td>
+                                                        <td style={{ color: "var(--accent)", fontFamily: "monospace", fontSize: 13 }}>{u.username}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </>
                             )}
                         </section>
 
                         <section>
-                            <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti Overprivileged (Top 10%)</h3>
-                            {overCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente overprivileged trovato.</div> : (
-                                <table className="table">
-                                    <thead><tr><th>Username</th><th>Conteggio Gruppi</th></tr></thead>
-                                    <tbody>
-                                        {(data?.overprivilegedUsers || []).map((u, i) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500, fontFamily: "monospace" }}>{u.username}</td>
-                                                <td style={{ color: "var(--danger)", fontWeight: 600 }}>{u.groupCount}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                            <div style={{ marginTop: 16, fontSize: 13, color: "var(--muted)", fontStyle: "italic" }}>
-                                * Per i dettagli completi, consulta la pagina di <a href="/kpi/overprivileged" style={{ color: "var(--accent)", textDecoration: "underline" }}>Analisi Overprivileged</a>.
-                            </div>
-                        </section>
-
-                        <section>
-                            <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Policy Violations</h3>
-                            {policyCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessuna violazione rilevata.</div> : (
-                                <table className="table">
-                                    <thead><tr><th>Username</th><th>Conflitti</th></tr></thead>
-                                    <tbody>
-                                        {(data?.policyViolations || []).map((u, i) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500, fontFamily: "monospace" }}>{u.username}</td>
-                                                <td style={{ color: "var(--danger)" }}>{(u.conflicts || []).join(", ")}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <button onClick={() => toggleUserSection("over")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
+                                {openUserSection === "over" ? "Nascondi Overprivileged" : "Mostra Overprivileged"}
+                            </button>
+                            {openUserSection === "over" && (
+                                <>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti Overprivileged (Top 10%)</h3>
+                                    {overCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente overprivileged trovato.</div> : (
+                                        <table className="table">
+                                            <thead><tr><th>Username</th><th>Conteggio Gruppi</th></tr></thead>
+                                            <tbody>
+                                                {(data?.overprivilegedUsers || []).map((u, i) => (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500, fontFamily: "monospace" }}>{u.username}</td>
+                                                        <td style={{ color: "var(--danger)", fontWeight: 600 }}>{u.groupCount}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                    <div style={{ marginTop: 16, fontSize: 13, color: "var(--muted)", fontStyle: "italic" }}>
+                                        * Per i dettagli completi, consulta la pagina di <a href="/kpi/overprivileged" style={{ color: "var(--accent)", textDecoration: "underline" }}>Analisi Overprivileged</a>.
+                                    </div>
+                                </>
                             )}
                         </section>
 
                         <section>
-                            <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti Ambigui (Confidenza bassa)</h3>
-                            {ambiguousCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente ambiguo.</div> : (
-                                <table className="table">
-                                    <thead><tr><th>Display Name</th><th>Username</th><th>Confidence</th></tr></thead>
-                                    <tbody>
-                                        {(data?.ambiguousUsers || []).map((u, i) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500 }}>{u.displayName}</td>
-                                                <td style={{ color: "var(--accent)", fontFamily: "monospace", fontSize: 13 }}>{u.username}</td>
-                                                <td style={{ color: "var(--danger)", fontWeight: 600 }}>{u.confidence}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <button onClick={() => toggleUserSection("policy")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
+                                {openUserSection === "policy" ? "Nascondi Policy Violations" : "Mostra Policy Violations"}
+                            </button>
+                            {openUserSection === "policy" && (
+                                <>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Policy Violations</h3>
+                                    {policyCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessuna violazione rilevata.</div> : (
+                                        <table className="table">
+                                            <thead><tr><th>Username</th><th>Conflitti</th></tr></thead>
+                                            <tbody>
+                                                {(data?.policyViolations || []).map((u, i) => (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500, fontFamily: "monospace" }}>{u.username}</td>
+                                                        <td style={{ color: "var(--danger)" }}>{(u.conflicts || []).join(", ")}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </>
+                            )}
+                        </section>
+
+                        <section>
+                            <button onClick={() => toggleUserSection("ambiguous")} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 12px", cursor: "pointer", marginBottom: 12 }}>
+                                {openUserSection === "ambiguous" ? "Nascondi Utenti Ambigui" : "Mostra Utenti Ambigui"}
+                            </button>
+                            {openUserSection === "ambiguous" && (
+                                <>
+                                    <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 16 }}>Utenti Ambigui (Confidenza bassa)</h3>
+                                    {ambiguousCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun utente ambiguo.</div> : (
+                                        <table className="table">
+                                            <thead><tr><th>Display Name</th><th>Username</th><th>Confidence</th></tr></thead>
+                                            <tbody>
+                                                {(data?.ambiguousUsers || []).map((u, i) => (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500 }}>{u.displayName}</td>
+                                                        <td style={{ color: "var(--accent)", fontFamily: "monospace", fontSize: 13 }}>{u.username}</td>
+                                                        <td style={{ color: "var(--danger)", fontWeight: 600 }}>{u.confidence}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </>
                             )}
                         </section>
                     </div>
@@ -270,7 +337,7 @@ export default function ModelQualityPage() {
                                 <thead><tr><th>Indicatore</th><th>Valore</th><th>Peso</th><th>Contributo Penalty</th></tr></thead>
                                 <tbody>
                                     {(data?.qualityIndicators || []).map((x, i) => (
-                                        <tr key={i}>
+                                        <tr key={i} onClick={() => setIndicatorPopup(x)} style={{ cursor: "pointer" }}>
                                             <td style={{ fontWeight: 500 }}>{x.label}</td>
                                             <td>{x.value}</td>
                                             <td>{x.weight}</td>
@@ -286,6 +353,43 @@ export default function ModelQualityPage() {
                     </div>
                 )}
             </div>
+
+            {indicatorPopup && (
+                <div
+                    onClick={() => setIndicatorPopup(null)}
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.45)",
+                        display: "grid",
+                        placeItems: "center",
+                        zIndex: 1000,
+                    }}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            width: "min(560px, 92vw)",
+                            background: "#111a2e",
+                            border: "1px solid var(--border)",
+                            borderRadius: 12,
+                            padding: 16,
+                            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+                        }}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                            <h4 style={{ margin: 0, color: "var(--text)" }}>{indicatorPopup.label}</h4>
+                            <button className="link" onClick={() => setIndicatorPopup(null)}>Chiudi</button>
+                        </div>
+                        <div style={{ color: "var(--muted)", lineHeight: 1.45, fontSize: 14 }}>
+                            {INDICATOR_DESCRIPTIONS[indicatorPopup.id] || "Indicatore di qualità del modello utilizzato per stimare il contributo al punteggio complessivo."}
+                        </div>
+                        <div style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>
+                            Valore: <b style={{ color: "var(--text)" }}>{indicatorPopup.value}</b> | Peso: <b style={{ color: "var(--text)" }}>{indicatorPopup.weight}</b> | Contributo penalty: <b style={{ color: "var(--text)" }}>{indicatorPopup.contribution}</b>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

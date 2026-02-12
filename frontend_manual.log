@@ -3,24 +3,21 @@
 > vite --host 127.0.0.1 --port 5173 --strictPort
 
 
-  VITE v5.4.21  ready in 172 ms
+  VITE v5.4.21  ready in 174 ms
 
   ➜  Local:   http://127.0.0.1:5173/
-9:22:01 AM [vite] http proxy error: /api/me
+9:29:37 AM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:22:01 AM [vite] http proxy error: /api/businessroles
+9:29:37 AM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:22:01 AM [vite] http proxy error: /api/me
+9:29:37 AM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:22:01 AM [vite] http proxy error: /api/businessroles
+9:29:37 AM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:22:01 AM [vite] http proxy error: /api/businessroles
-Error: connect ECONNREFUSED 127.0.0.1:8000
-    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:22:02 AM [vite] http proxy error: /api/auth/login
+9:29:37 AM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
