@@ -1650,7 +1650,7 @@ def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
     state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
 
 
-def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) -> None:
+def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) -> Dict[str, int]:
     """
     Merge new users from connector (AD/LDAP) into existing state.
     Matches by BOTH displayName AND username - if either matches, updates existing user.
@@ -1671,9 +1671,12 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
         if dn:
             by_displayname[dn] = u
     
+    previous_groups = set(state["last_extract"].get("groups") or [])
+
     clean_new_users: List[Dict[str, Any]] = []
     updated_count = 0
     added_count = 0
+    updated_groups_count = 0
     
     # Pre-clean new users 
     for u in (new_users or []):
@@ -1703,10 +1706,13 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
         
         if existing_user:
             # REPLACE existing user with new data from import
+            prev_groups_for_user = sorted(set(existing_user.get("groups") or []))
             existing_user["displayName"] = nu["displayName"]
             existing_user["department"] = nu["department"]
             # REPLACE groups (not merge)
             existing_user["groups"] = nu.get("groups") or []
+            if prev_groups_for_user != sorted(set(existing_user.get("groups") or [])):
+                updated_groups_count += 1
             if nu.get("businessRole"):
                 existing_user["businessRole"] = nu["businessRole"]
             # Update username if it changed (displayName matched but username different)
@@ -1733,9 +1739,16 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
         state["last_extract"]["ou"] = ou
 
     # Recompute global groups list
-    state["last_extract"]["groups"] = recompute_groups_from_users(base_users)
+    current_groups = recompute_groups_from_users(base_users)
+    state["last_extract"]["groups"] = current_groups
     state["mining_dirty"] = True
     log("INFO", f"Merge complete. Updated: {updated_count}, Added: {added_count}, Total: {len(base_users)}")
+    return {
+        "new_users": int(added_count),
+        "updated_users": int(updated_count),
+        "new_groups": int(len(set(current_groups) - previous_groups)),
+        "updated_groups": int(updated_groups_count),
+    }
 
 def rerun_auto_business_roles_after_connector(
     users: List[Dict[str, Any]],
@@ -2007,6 +2020,10 @@ class ExtractResponse(BaseModel):
     ou: str
     total_users: int
     total_groups: int
+    new_users: int = 0
+    updated_users: int = 0
+    new_groups: int = 0
+    updated_groups: int = 0
     users: List[Dict[str, Any]]
     groups: List[str]
 
@@ -3129,7 +3146,7 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
 
     # 2) DB di sistema: filter, replace, auto-assign
     users = filter_and_dedupe_connector_users(users, source="ad")
-    merge_from_connector(users, ou=ou_dn, source="ad")
+    merge_stats = merge_from_connector(users, ou=ou_dn, source="ad")
     
     # For AD import, re-evaluate assignments from AD signals (department/groups/rules)
     # instead of preserving stale BR values from previous imports.
@@ -3155,6 +3172,10 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
         ou=state["last_extract"]["ou"],
         total_users=len(state["last_extract"]["users"]),
         total_groups=len(state["last_extract"]["groups"]),
+        new_users=merge_stats.get("new_users", 0),
+        updated_users=merge_stats.get("updated_users", 0),
+        new_groups=merge_stats.get("new_groups", 0),
+        updated_groups=merge_stats.get("updated_groups", 0),
         users=state["last_extract"]["users"],
         groups=state["last_extract"]["groups"],
     )

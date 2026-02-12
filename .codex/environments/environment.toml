@@ -9,3 +9,8 @@ script = ""
 name = "Run"
 icon = "run"
 command = "/Users/salvo/Development/Role_Mining/run_action.sh"
+
+[[actions]]
+name = "Run lan"
+icon = "tool"
+command = "/Users/salvo/Development/Role_Mining/run_lan.sh"

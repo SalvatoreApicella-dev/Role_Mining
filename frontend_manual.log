@@ -1,39 +1,39 @@
 
-> role-mining-ui@1.0.0 dev
-> vite --host 0.0.0.0 --port 5173 --strictPort
-
-
-  VITE v5.4.21  ready in 186 ms
+  VITE v5.4.21  ready in 184 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.46:5173/
-6:23:37 PM [vite] http proxy error: /api/me
+6:28:16 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/businessroles
+6:28:16 PM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/me
+6:28:16 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/businessroles
+6:28:16 PM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/me
+6:28:16 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/businessroles
+6:28:16 PM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/businessroles
+6:28:16 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/me
+6:28:16 PM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/businessroles
+6:28:16 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-6:23:37 PM [vite] http proxy error: /api/businessroles
+6:28:16 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+6:31:54 PM [vite] hmr update /src/app.jsx
+6:32:01 PM [vite] hmr update /src/styles.css
+6:35:10 PM [vite] hmr update /src/app.jsx
+ev

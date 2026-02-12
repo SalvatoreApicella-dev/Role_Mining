@@ -1,32 +1,56 @@
-INFO:     Started server process [45430]
+INFO:     Started server process [46660]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:62601 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62602 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62616 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62618 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62621 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62607 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62617 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62627 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62630 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62633 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62634 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62635 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62639 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62642 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62640 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62644 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62648 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62650 - "GET /api/kpi HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): [{'username': 'Guest', 'displayName': 'Guest', 'groups': ['Guests'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'Administrator', 'displayName': 'Administrator', 'groups': ['Administrators', 'Domain Admins', 'Enterprise Admins', 'Group Policy Creator Owners', 'Schema Admins'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'SERVERHOME-B450$', 'displayName': 'SERVERHOME-B450$', 'groups': [], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}]
-INFO:     127.0.0.1:62653 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-DEBUG: First user object: {'displayName': 'adm_luca.rossi', 'groups': ['INF_MAIL_READ', 'INF_STORAGE_VIEW', 'INF_VPN_ALL', 'INF_VPN_READ', 'SYS_AWS_ALL', 'SYS_AWS_READ', 'SYS_CONFLUENCE_READ', 'SYS_CONFLUENCE_VIEW', 'SYS_GITLAB_WRITE', 'SYS_JENKINS_WRITE', 'SYS_JIRA_WRITE', 'SYS_K8S_READ'], 'department': 'Engineering Backend', 'businessRole': 'Backend Engineer', 'excluded': False, 'lastLogin': '2025-09-06T10:00:55+00:00', 'accountType': 'Internal', 'preferredUsername': None, 'email': None, 'upn': None, 'employeeId': None, 'manager': None, 'statusAd': None, 'statusHr': None, 'username': 'adm_luca.rossi'}
-DEBUG: Missing Dept Preview (Raw): [{'username': 'Guest', 'displayName': 'Guest', 'groups': ['Guests'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'Administrator', 'displayName': 'Administrator', 'groups': ['Administrators', 'Domain Admins', 'Enterprise Admins', 'Group Policy Creator Owners', 'Schema Admins'], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}, {'username': 'SERVERHOME-B450$', 'displayName': 'SERVERHOME-B450$', 'groups': [], 'department': None, 'businessRole': 'Unassigned', 'excluded': False}]
-INFO:     127.0.0.1:62656 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62657 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62659 - "GET /api/data-quality/rules/suggestions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62661 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62663 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:62730 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62737 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62739 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62741 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62751 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62752 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62753 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62756 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62761 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62762 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62765 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62774 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62775 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62778 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62779 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62782 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62785 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62788 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62796 - "GET /api/ai-lab/drift HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62798 - "GET /api/ai-lab/drift HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62804 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62806 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62809 - "POST /api/ad/extract HTTP/1.1" 200 OK
+[AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
+[AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
+INFO:     127.0.0.1:62813 - "POST /api/ad/extract HTTP/1.1" 200 OK
+[AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
+[AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
+INFO:     127.0.0.1:62849 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62848 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62853 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62854 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62850 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62852 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62870 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62871 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62872 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62875 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62876 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62878 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62880 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62886 - "POST /api/ad/extract HTTP/1.1" 200 OK
+[AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
+[AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
+INFO:     127.0.0.1:62914 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62915 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62916 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62917 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62918 - "GET /api/businessroles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62925 - "POST /api/ad/extract HTTP/1.1" 200 OK
+[AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%
+[AI Detection] users_with_anomaly=997, total_users=4969, pct=20.06%

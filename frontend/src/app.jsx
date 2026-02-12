@@ -231,9 +231,11 @@ function Connettori() {
   const [ou, setOu] = useState("OU=Users,DC=example,DC=local");
   const [statusMsg, setStatusMsg] = useState("");
   const [err, setErr] = useState("");
+  const [adLoading, setAdLoading] = useState(false);
 
   const [csvFile, setCsvFile] = useState(null);
   const [importMsg, setImportMsg] = useState("");
+  const [csvLoading, setCsvLoading] = useState(false);
 
 
 
@@ -253,22 +255,34 @@ function Connettori() {
   useEffect(() => { load(); }, []);
 
   async function saveCfg() {
+    setAdLoading(true);
     try {
       setErr(""); setStatusMsg("");
       await api.setConnector(cfg);
       setStatusMsg("Configurazione salvata.");
     } catch (e) {
       setErr(String(e.message || e));
+    } finally {
+      setAdLoading(false);
     }
   }
 
   async function doExtract() {
+    setAdLoading(true);
     try {
       setErr(""); setStatusMsg("");
       const res = await api.extract(ou);
-      setStatusMsg(`Extract OK: ${res.total_users} utenti, ${res.total_groups} gruppi.`);
+      const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+      setStatusMsg(
+        `Nuovi utenti: ${n(res.new_users)}, ` +
+        `Nuovi gruppi: ${n(res.new_groups)}, ` +
+        `Utenti aggiornati: ${n(res.updated_users)}, ` +
+        `Gruppi aggiornati: ${n(res.updated_groups)}`
+      );
     } catch (e) {
       setErr(String(e.message || e));
+    } finally {
+      setAdLoading(false);
     }
   }
 
@@ -356,6 +370,9 @@ function Connettori() {
 
         {statusMsg && <div className="ok">{statusMsg}</div>}
         {err && <div className="err">{err}</div>}
+        <div className="connector-loadingbar" aria-hidden="true">
+          <div className={`connector-loadingbar__fill${adLoading ? " is-active" : ""}`} />
+        </div>
       </div>
 
       <div style={{ height: 12 }} />
@@ -380,6 +397,7 @@ function Connettori() {
             disabled={!csvFile}
             onClick={async () => {
               if (!csvFile) return;
+              setCsvLoading(true);
               try {
                 setImportMsg("");
 
@@ -406,6 +424,8 @@ function Connettori() {
 
               } catch (e) {
                 setImportMsg(`Import KO: ${e?.message ?? String(e)}`);
+              } finally {
+                setCsvLoading(false);
               }
             }}
 
@@ -415,6 +435,9 @@ function Connettori() {
         </div>
 
         {importMsg && <div style={{ marginTop: 10 }}>{importMsg}</div>}
+        <div className="connector-loadingbar" aria-hidden="true">
+          <div className={`connector-loadingbar__fill${csvLoading ? " is-active" : ""}`} />
+        </div>
       </div>
     </div>
   );
