@@ -395,14 +395,14 @@ function Connettori() {
             onChange={e => setOu(e.target.value)}
             placeholder="OU DN"
           />
-          <button className="primary" onClick={doExtract}>AD Extract</button>
+          <button className="primary" onClick={doExtract}>AD Import</button>
           <button
             className="primary"
             title="Scarica ultima estrazione AD (CSV)"
             aria-label="Scarica ultima estrazione AD in CSV"
             onClick={downloadLastAdExtractCsv}
             disabled={adExporting}
-            style={{ width: 36, height: 36, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            style={{ padding: "10px 12px", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 44 }}
           >
             <svg
               viewBox="0 0 24 24"
@@ -425,7 +425,7 @@ function Connettori() {
         {statusMsg && <div className="ok">{statusMsg}</div>}
         {err && <div className="err">{err}</div>}
         <div className="connector-loadingbar" aria-hidden="true">
-          <div className={`connector-loadingbar__fill${adLoading ? " is-active" : ""}`} />
+          <div className={`connector-loadingbar__fill${(adLoading || adExporting) ? " is-active" : ""}`} />
         </div>
       </div>
 
@@ -433,7 +433,7 @@ function Connettori() {
 
       {/* CARD 2: CSV Import */}
       <div className="panel">
-        <h3 style={{ marginTop: 0 }}>Connettore Generico (CSV)</h3>
+        <h3 style={{ marginTop: 0 }}>Connettore CSV</h3>
 
         <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
           Atteso: DisplayName;Dipartimento;Ruoli (con Ruoli separati da virgola)
@@ -482,7 +482,7 @@ function Connettori() {
             }}
 
           >
-            Importa CSV
+            CSV Import
           </button>
         </div>
 
