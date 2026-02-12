@@ -126,6 +126,9 @@ export const api = {
   dataQualityRuleSuggestions: () => request("/api/data-quality/rules/suggestions"),
   applyDataQualityRuleSuggestion: (ruleId) =>
     request(`/api/data-quality/rules/suggestions/${encodeURIComponent(ruleId)}/apply`, { method: "POST" }),
+  modelQualityPresets: () => request("/api/data-quality/model/presets"),
+  applyModelQualityPreset: (preset) =>
+    request(`/api/data-quality/model/presets/${encodeURIComponent(preset)}/apply`, { method: "POST" }),
 
   kpi: () => request("/api/kpi"),
   aiDetectionRun: () => request("/api/ai-detection/run", { method: "POST" }),

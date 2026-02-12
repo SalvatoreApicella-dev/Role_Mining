@@ -549,8 +549,67 @@ from app.db.storage import get_store, init_default_state
 state = get_store()
 init_default_state()
 REQUIRED_DUPLICATE_ORDER = ["last_login", "groups_count", "dept_group_correlation", "has_department"]
+MODEL_QUALITY_PRESETS: Dict[str, Dict[str, float]] = {
+    "banking": {
+        "role_entropy": 0.06,
+        "template_coverage": 0.08,
+        "noise_ratio": 0.09,
+        "ambiguity": 0.07,
+        "temporal_drift": 0.06,
+        "matrix_density": 0.05,
+        "orphan_weighted": 0.10,
+        "overprivileged": 0.13,
+        "stale_access": 0.12,
+        "policy_violation": 0.14,
+        "manual_override": 0.04,
+        "generalization": 0.06,
+    },
+    "manufacturing": {
+        "role_entropy": 0.08,
+        "template_coverage": 0.11,
+        "noise_ratio": 0.10,
+        "ambiguity": 0.07,
+        "temporal_drift": 0.09,
+        "matrix_density": 0.06,
+        "orphan_weighted": 0.09,
+        "overprivileged": 0.10,
+        "stale_access": 0.09,
+        "policy_violation": 0.08,
+        "manual_override": 0.06,
+        "generalization": 0.07,
+    },
+    "retail": {
+        "role_entropy": 0.08,
+        "template_coverage": 0.10,
+        "noise_ratio": 0.10,
+        "ambiguity": 0.08,
+        "temporal_drift": 0.09,
+        "matrix_density": 0.07,
+        "orphan_weighted": 0.08,
+        "overprivileged": 0.10,
+        "stale_access": 0.10,
+        "policy_violation": 0.08,
+        "manual_override": 0.05,
+        "generalization": 0.07,
+    },
+}
 state.setdefault("dq_rules", {})
 state["dq_rules"]["duplicate_resolution_order"] = REQUIRED_DUPLICATE_ORDER.copy()
+state.setdefault("dq_model_preset", "manufacturing")
+state.setdefault("dq_model_weights", MODEL_QUALITY_PRESETS.get(state.get("dq_model_preset"), MODEL_QUALITY_PRESETS["manufacturing"]))
+
+
+def get_active_model_weights() -> Dict[str, float]:
+    preset = (state.get("dq_model_preset") or "manufacturing").strip().lower()
+    base = MODEL_QUALITY_PRESETS.get(preset) or MODEL_QUALITY_PRESETS["manufacturing"]
+    custom = state.get("dq_model_weights") or {}
+    out = dict(base)
+    for k, v in custom.items():
+        try:
+            out[str(k)] = float(v)
+        except Exception:
+            continue
+    return out
 
 
 def apply_business_roles(users: List[Dict[str, Any]]) -> None:
@@ -2081,7 +2140,10 @@ def compute_kpis(
         # Fallback to matrix keys if last_extract is empty
         all_groups = set()
         for row in matrix.values():
-            all_groups.update(row.keys())
+            if isinstance(row, list):
+                all_groups.update(row)
+            else:
+                all_groups.update((row or {}).keys())
         groups_list = list(all_groups)
     
     mq = compute_model_quality(users, matrix, groups_list)
@@ -2119,6 +2181,7 @@ def compute_kpis(
 def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[str, int]], groups: List[str]) -> Dict[str, Any]:
     import numpy as np
     from datetime import datetime, timezone
+    import math
 
     total_users = len(users)
     total_groups = len(groups)
@@ -2130,24 +2193,48 @@ def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[st
             "overprivilegedUsers": 0,
             "zeroGroupUsers": 0,
             "staleUsers": 0,
-            "orphansList": []
+            "orphansList": [],
+            "indicators": [],
+            "policyViolations": [],
+            "ambiguousUsers": [],
+            "manualOverrideEvents": 0,
+            "density": 0.0,
+            "avgGeneralizationConfidence": 0.0,
         }
 
-    # 1. Orphan groups (0 members in matrix)
-    # Calcolo rapido: iteriamo la matrix. 
-    # group_counts: {gName: count}
+    def _active_groups(row: Any) -> set[str]:
+        if row is None:
+            return set()
+        if isinstance(row, list):
+            return {str(g) for g in row if str(g)}
+        return {str(g) for g, val in (row or {}).items() if int(val) == 1}
+
+    user_by_username = {str(u.get("username")): u for u in (users or []) if u.get("username")}
+    user_groups_map: Dict[str, set[str]] = {}
+    for uname in user_by_username.keys():
+        user_groups_map[uname] = _active_groups(matrix.get(uname))
+    for uname, row in (matrix or {}).items():
+        if uname not in user_groups_map:
+            user_groups_map[uname] = _active_groups(row)
+
+    # 1) Orphan groups (weighted)
     group_counts = {g: 0 for g in groups}
-    for row in matrix.values():
-        for g, val in row.items():
-            if int(val) == 1 and g in group_counts:
+    for active in user_groups_map.values():
+        for g in active:
+            if g in group_counts:
                 group_counts[g] += 1
-    
     orphans_list = [g for g, count in group_counts.items() if count == 0]
     n_orphans = len(orphans_list)
-    orphan_pct = (n_orphans / total_groups) * 100.0 if total_groups > 0 else 0
+    critical_markers = ("admin", "all", "write", "prod", "root")
+    weighted_orphans = 0.0
+    for g in orphans_list:
+        gl = str(g).lower()
+        w = 2.0 if any(m in gl for m in critical_markers) else 1.0
+        weighted_orphans += w
+    orphan_weighted_pct = (weighted_orphans / max(1.0, total_groups * 2.0)) * 100.0
 
-    # 2. Overprivileged Users
-    row_counts = np.array([int(sum((row or {}).values())) for row in matrix.values()])
+    # 2) Overprivileged concentration
+    row_counts = np.array([len(gs) for gs in user_groups_map.values()], dtype=np.int32)
     if row_counts.size > 0:
         k_top = max(1, int(np.ceil(0.1 * row_counts.size)))
         thr = int(np.partition(row_counts, -k_top)[-k_top])
@@ -2156,37 +2243,180 @@ def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[st
     else:
         n_over, over_pct = 0, 0
 
-    # 3. Users with Zero Groups
-    # Checks users list to catch those not even in the matrix
-    n_zero = 0
-    for u in users:
-        uname = u.get("username")
-        if uname not in matrix or int(sum(matrix[uname].values())) == 0:
-            n_zero += 1
+    # 3) Users with Zero Groups
+    n_zero = sum(1 for _, gs in user_groups_map.items() if len(gs) == 0)
     zero_pct = (n_zero / total_users) * 100.0 if total_users > 0 else 0
 
-    # 4. Stale Accounts (> 1 year)
+    # 4) Stale access quality (> 1 year)
     stale_count = 0
     now = datetime.now(timezone.utc)
-    for u in users:
+    stale_list = []
+    for u in (users or []):
         ll = u.get("lastLogin")
         if ll:
             try:
-                # Format iso: 2025-01-01T... take first part for safety or parse with fromisoformat
-                # Assuming "2023-10-27 10:00:00+00:00" or similar from logic
-                # Fallback clean string
                 clean_ll = str(ll).replace("Z", "+00:00")
-                dt = datetime.fromisoformat(clean_ll.split(" ")[0]) # rough parse date only
-                if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+                dt = datetime.fromisoformat(clean_ll)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
                 if (now - dt).days > 365:
                     stale_count += 1
-            except: 
+                    stale_list.append({"username": u.get("username"), "displayName": u.get("displayName"), "lastLogon": ll})
+            except Exception:
                 pass
     stale_pct = (stale_count / total_users) * 100.0 if total_users > 0 else 0
 
-    # Formula: 100 - penalty
-    # Weights: Orphan 20%, Over 30%, Zero 20%, Stale 30%
-    penalty = (orphan_pct * 0.20 + over_pct * 0.30 + zero_pct * 0.20 + stale_pct * 0.30)
+    # 5) Role entropy per ruolo (eterogeneita interna)
+    role_meta = state.get("role_meta") or {}
+    user_br = state.get("user_business_role") or {}
+    members_by_role = defaultdict(list)
+    for u in (users or []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        br = (u.get("businessRole") or user_br.get(uname) or "Unassigned").strip()
+        members_by_role[br].append(uname)
+
+    role_entropy_vals = []
+    for _, members in members_by_role.items():
+        n = len(members)
+        if n <= 1:
+            continue
+        ent_vals = []
+        for g in groups:
+            present = sum(1 for uname in members if g in (user_groups_map.get(uname) or set()))
+            p = present / max(1, n)
+            if p <= 0.0 or p >= 1.0:
+                continue
+            h = -(p * math.log2(p) + (1 - p) * math.log2(1 - p))  # 0..1
+            ent_vals.append(h)
+        if ent_vals:
+            role_entropy_vals.append(float(np.mean(ent_vals)))
+    role_entropy_pct = float(np.mean(role_entropy_vals) * 100.0) if role_entropy_vals else 0.0
+
+    # 6) Template coverage & 7) Noise ratio
+    miss_template_ratios = []
+    noise_ratios = []
+    for u in (users or []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        gs = user_groups_map.get(uname) or set()
+        br = (u.get("businessRole") or user_br.get(uname) or "Unassigned").strip()
+        tmpl = set((role_meta.get(br, {}) or {}).get("groups") or [])
+        if tmpl:
+            cov = len(gs & tmpl) / max(1, len(tmpl))
+            miss_template_ratios.append(1.0 - cov)
+        if gs:
+            noise = len([g for g in gs if g not in tmpl]) / max(1, len(gs))
+            noise_ratios.append(noise)
+    template_coverage_penalty_pct = float(np.mean(miss_template_ratios) * 100.0) if miss_template_ratios else 0.0
+    noise_ratio_pct = float(np.mean(noise_ratios) * 100.0) if noise_ratios else 0.0
+
+    # 8) Ambiguita assegnazione ruolo (bassa confidence BRDB)
+    ambiguous_users = []
+    for u in (users or [])[:20000]:
+        uname = u.get("username")
+        if not uname:
+            continue
+        gs = list(user_groups_map.get(uname) or [])
+        if not gs:
+            continue
+        s = brdb_infer_groupset(gs)
+        conf = float(s.get("confidence") or 0.0)
+        if conf < 0.55:
+            ambiguous_users.append({"username": uname, "displayName": u.get("displayName"), "confidence": round(conf, 3)})
+    ambiguity_pct = (len(ambiguous_users) / max(1, total_users)) * 100.0
+
+    # 9) Drift temporale (utenti recenti ma bassa compatibilita template)
+    drift_users = 0
+    recent_users = 0
+    for u in (users or []):
+        uname = u.get("username")
+        ll = u.get("lastLogin")
+        if not uname or not ll:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(ll).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if (now - dt).days <= 90:
+            recent_users += 1
+            gs = user_groups_map.get(uname) or set()
+            br = (u.get("businessRole") or user_br.get(uname) or "Unassigned").strip()
+            tmpl = set((role_meta.get(br, {}) or {}).get("groups") or [])
+            if gs and tmpl:
+                fit = len(gs & tmpl) / max(1, len(gs | tmpl))
+                if fit < 0.35:
+                    drift_users += 1
+    drift_pct = (drift_users / max(1, recent_users)) * 100.0 if recent_users else 0.0
+
+    # 10) Matrix sparsity/overdensity
+    total_assignments = int(sum(len(gs) for gs in user_groups_map.values()))
+    density = total_assignments / max(1, total_users * total_groups)
+    if density < 0.02:
+        density_penalty_pct = min(100.0, ((0.02 - density) / 0.02) * 100.0)
+    elif density > 0.35:
+        density_penalty_pct = min(100.0, ((density - 0.35) / 0.35) * 100.0)
+    else:
+        density_penalty_pct = 0.0
+
+    # 11) Policy violation rate (SoD-like)
+    policy_violations = []
+    for uname, gs in user_groups_map.items():
+        by_prefix = defaultdict(set)
+        for g in gs:
+            parts = str(g).split("_")
+            if len(parts) >= 3:
+                pref = "_".join(parts[:2])
+                by_prefix[pref].add(parts[-1].upper())
+        bad = []
+        for pref, suff in by_prefix.items():
+            if "ALL" in suff and ("WRITE" in suff or "ADMIN" in suff):
+                bad.append(pref)
+        if bad:
+            policy_violations.append({"username": uname, "conflicts": sorted(bad)})
+    policy_violation_pct = (len(policy_violations) / max(1, total_users)) * 100.0
+
+    # 12) Manual override dependency
+    feedback_events = list(state.get("dq_feedback_events") or [])
+    auto_resolved = int((state.get("last_ingest_stats") or {}).get("autoResolvedDuplicateUsers") or 0)
+    manual_override_pct = min(100.0, (len(feedback_events) / max(1, auto_resolved)) * 100.0) if auto_resolved else 0.0
+
+    # 13) Generalization score (BRDB confidence medio)
+    confs = []
+    for uname, gs in user_groups_map.items():
+        if not gs:
+            continue
+        s = brdb_infer_groupset(list(gs))
+        confs.append(float(s.get("confidence") or 0.0))
+    avg_conf = float(np.mean(confs)) if confs else 0.0
+    generalization_penalty_pct = (1.0 - avg_conf) * 100.0
+    weights = get_active_model_weights()
+    preset = (state.get("dq_model_preset") or "manufacturing").strip().lower()
+
+    indicators = [
+        {"id": "role_entropy", "label": "Role Entropy", "value": round(role_entropy_pct, 2), "penalty": round(role_entropy_pct, 2), "weight": float(weights.get("role_entropy", 0.08))},
+        {"id": "template_coverage", "label": "Template Coverage Gap", "value": round(template_coverage_penalty_pct, 2), "penalty": round(template_coverage_penalty_pct, 2), "weight": float(weights.get("template_coverage", 0.10))},
+        {"id": "noise_ratio", "label": "Noise Ratio", "value": round(noise_ratio_pct, 2), "penalty": round(noise_ratio_pct, 2), "weight": float(weights.get("noise_ratio", 0.10))},
+        {"id": "ambiguity", "label": "Assignment Ambiguity", "value": round(ambiguity_pct, 2), "penalty": round(ambiguity_pct, 2), "weight": float(weights.get("ambiguity", 0.08))},
+        {"id": "temporal_drift", "label": "Temporal Drift", "value": round(drift_pct, 2), "penalty": round(drift_pct, 2), "weight": float(weights.get("temporal_drift", 0.07))},
+        {"id": "matrix_density", "label": "Matrix Density Risk", "value": round(density_penalty_pct, 2), "penalty": round(density_penalty_pct, 2), "weight": float(weights.get("matrix_density", 0.07))},
+        {"id": "orphan_weighted", "label": "Weighted Orphans", "value": round(orphan_weighted_pct, 2), "penalty": round(orphan_weighted_pct, 2), "weight": float(weights.get("orphan_weighted", 0.09))},
+        {"id": "overprivileged", "label": "Overprivileged Concentration", "value": round(over_pct, 2), "penalty": round(over_pct, 2), "weight": float(weights.get("overprivileged", 0.10))},
+        {"id": "stale_access", "label": "Stale Access Quality", "value": round(stale_pct, 2), "penalty": round(stale_pct, 2), "weight": float(weights.get("stale_access", 0.10))},
+        {"id": "policy_violation", "label": "Policy Violation Rate", "value": round(policy_violation_pct, 2), "penalty": round(policy_violation_pct, 2), "weight": float(weights.get("policy_violation", 0.08))},
+        {"id": "manual_override", "label": "Manual Override Dependency", "value": round(manual_override_pct, 2), "penalty": round(manual_override_pct, 2), "weight": float(weights.get("manual_override", 0.07))},
+        {"id": "generalization", "label": "Generalization Gap", "value": round(generalization_penalty_pct, 2), "penalty": round(generalization_penalty_pct, 2), "weight": float(weights.get("generalization", 0.07))},
+    ]
+
+    penalty = 0.0
+    for i in indicators:
+        contrib = float(i["weight"]) * float(i["penalty"])
+        i["contribution"] = round(contrib, 2)
+        penalty += contrib
     quality = max(0.0, 100.0 - penalty)
 
     return {
@@ -2196,9 +2426,16 @@ def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[st
         "zeroGroupUsers": n_zero,
         "staleUsers": stale_count,
         "orphansList": orphans_list,
-        "staleList": [], # To be populated by drilldown if needed
-        "zeroList": [],
-        "overprivilegedList": []
+        "staleList": stale_list,
+        "zeroList": [{"username": uname, "displayName": (user_by_username.get(uname) or {}).get("displayName"), "groupCount": 0} for uname, gs in user_groups_map.items() if len(gs) == 0],
+        "overprivilegedList": [{"username": uname, "groupCount": len(gs)} for uname, gs in user_groups_map.items() if len(gs) >= (thr if row_counts.size > 0 else 999999)],
+        "policyViolations": policy_violations,
+        "ambiguousUsers": ambiguous_users,
+        "manualOverrideEvents": len(feedback_events),
+        "indicators": indicators,
+        "density": round(density, 4),
+        "avgGeneralizationConfidence": round(avg_conf, 3),
+        "modelPreset": preset,
     }
 
 
@@ -2950,48 +3187,27 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         groups_list = (state.get("last_extract") or {}).get("groups") or []
         if not groups_list and matrix:
             first = next(iter(matrix.values()))
-            groups_list = list(first.keys())
+            groups_list = list(first if isinstance(first, list) else first.keys())
 
         mq = compute_model_quality(users, matrix, groups_list)
-        
-        # Build Drilldown Lists
-        # 1. Stale
-        from datetime import datetime, timezone
-        stale_users = []
-        now = datetime.now(timezone.utc)
-        for u in users:
-            ll = u.get("lastLogin")
-            if ll:
-                try:
-                    clean_ll = str(ll).replace("Z", "+00:00")
-                    dt = datetime.fromisoformat(clean_ll.split(" ")[0])
-                    if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
-                    if (now - dt).days > 365:
-                        stale_users.append({"username": u.get("username"), "displayName": u.get("displayName"), "lastLogon": ll})
-                except: pass
 
-        # 2. Zero Groups
-        zero_users = []
-        for u in users:
-            uname = u.get("username")
-            if uname in matrix:
-                if sum(matrix[uname].values()) == 0:
-                    zero_users.append({"username": uname, "displayName": u.get("displayName"), "groupCount": 0})
-        
-        # 3. Overprivileged details (reuse existing logic)
-        over_payload = build_overprivileged_items(matrix, top_pct=10.0)
-        over_users = over_payload.get("items", [])
-
-        # 4. Orphans
         orphans = [{"groupName": g, "userCount": 0} for g in mq.get("orphansList", [])]
 
         return {
             "metric": metric,
             "modelQuality": mq.get("modelQuality", 0),
             "groupsIssues": orphans,
-            "staleAccounts": stale_users,
-            "zeroGroupsUsers": zero_users,
-            "overprivilegedUsers": over_users
+            "staleAccounts": mq.get("staleList", []),
+            "zeroGroupsUsers": mq.get("zeroList", []),
+            "overprivilegedUsers": mq.get("overprivilegedList", []),
+            "policyViolations": mq.get("policyViolations", []),
+            "ambiguousUsers": mq.get("ambiguousUsers", []),
+            "qualityIndicators": mq.get("indicators", []),
+            "density": mq.get("density", 0),
+            "avgGeneralizationConfidence": mq.get("avgGeneralizationConfidence", 0),
+            "manualOverrideEvents": mq.get("manualOverrideEvents", 0),
+            "modelPreset": mq.get("modelPreset", state.get("dq_model_preset") or "manufacturing"),
+            "availableModelPresets": sorted(MODEL_QUALITY_PRESETS.keys()),
         }
     
     raise HTTPException(status_code=404, detail="Unknown metric")
@@ -3362,6 +3578,28 @@ def apply_data_quality_rule(rule_id: str, username: str = Depends(require_auth))
 
     log("INFO", f"DQ rule applied: {rid} by {username}")
     return {"ok": True, "ruleId": rid, "dqRules": rules}
+
+
+@app.get("/api/data-quality/model/presets")
+def data_quality_model_presets(username: str = Depends(require_auth)):
+    active = (state.get("dq_model_preset") or "manufacturing").strip().lower()
+    return {
+        "activePreset": active,
+        "availablePresets": sorted(MODEL_QUALITY_PRESETS.keys()),
+        "weights": get_active_model_weights(),
+    }
+
+
+@app.post("/api/data-quality/model/presets/{preset}/apply")
+def apply_data_quality_model_preset(preset: str, username: str = Depends(require_auth)):
+    p = (preset or "").strip().lower()
+    if p not in MODEL_QUALITY_PRESETS:
+        raise HTTPException(status_code=404, detail="Unknown model preset")
+    state["dq_model_preset"] = p
+    state["dq_model_weights"] = dict(MODEL_QUALITY_PRESETS[p])
+    RESPONSE_CACHE.invalidate("kpi")
+    log("INFO", f"Model quality preset applied: {p} by {username}")
+    return {"ok": True, "activePreset": p, "weights": state["dq_model_weights"]}
 
 
 
