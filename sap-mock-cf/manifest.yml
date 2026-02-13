@@ -1,0 +1,8 @@
+---
+applications:
+  - name: sap-users-mock-cf
+    memory: 128M
+    instances: 1
+    buildpacks:
+      - nodejs_buildpack
+    command: npm start

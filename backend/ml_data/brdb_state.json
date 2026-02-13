@@ -950,7 +950,10 @@
       "INF_CI_WRITE": 6.0,
       "INF_FILESHARE_WRITE": 29.0,
       "INF_VPN_ALL": 8.0,
-      "INF_FILESHARE_READ": 38.0
+      "INF_FILESHARE_READ": 38.0,
+      "SAP_CO_DISPLAY": 1.0,
+      "SAP_FI_DISPLAY": 1.0,
+      "SAP_PORTAL_USER": 1.0
     },
     "AP Specialist": {
       "INF_ERP_VIEW": 41.0,
@@ -1218,7 +1221,10 @@
       "INF_STORAGE_READ": 17.0,
       "INF_VPN_READ": 17.0,
       "SYS_CONFLUENCE_READ": 17.0,
-      "SYS_JIRA_READ": 17.0
+      "SYS_JIRA_READ": 17.0,
+      "SAP_HCM_DISPLAY": 1.0,
+      "SAP_HCM_WRITE": 1.0,
+      "SAP_PORTAL_USER": 1.0
     },
     "Back-end Engineer": {
       "INF_MAIL_READ": 3.0,
@@ -1295,6 +1301,46 @@
       "CMS_Editor": 3.0,
       "Analytics_Read": 5.0,
       "Confluence": 4.0
+    },
+    "Accountant": {
+      "SAP_FI_DISPLAY": 1.0,
+      "SAP_FI_POST": 1.0,
+      "SAP_PORTAL_USER": 1.0
+    },
+    "Buyer": {
+      "SAP_MM_BUYER": 1.0,
+      "SAP_MM_DISPLAY": 1.0,
+      "SAP_PORTAL_USER": 1.0
+    },
+    "Warehouse Operator": {
+      "SAP_MM_DISPLAY": 1.0,
+      "SAP_MM_WM_WRITE": 1.0,
+      "SAP_PORTAL_USER": 1.0
+    },
+    "Sales Rep": {
+      "SAP_PORTAL_USER": 1.0,
+      "SAP_SD_DISPLAY": 1.0,
+      "SAP_SD_ORDER": 1.0
+    },
+    "IT Operator": {
+      "SAP_BASIS_MONITOR": 1.0,
+      "SAP_BASIS_SUPPORT": 1.0,
+      "SAP_PORTAL_USER": 1.0
+    },
+    "Production Planner": {
+      "SAP_PORTAL_USER": 1.0,
+      "SAP_PP_DISPLAY": 1.0,
+      "SAP_PP_PLAN": 1.0
+    },
+    "Quality Analyst": {
+      "SAP_PORTAL_USER": 1.0,
+      "SAP_QM_DISPLAY": 1.0,
+      "SAP_QM_WRITE": 1.0
+    },
+    "Logistics Specialist": {
+      "SAP_LE_DISPLAY": 1.0,
+      "SAP_LE_SHIP": 1.0,
+      "SAP_PORTAL_USER": 1.0
     }
   },
   "group_role_primary": {
@@ -1481,11 +1527,16 @@
     "INF_ERP_VIEW": "AR Specialist",
     "INF_ERP_ALL": "Controller",
     "INF_ERP_ADMIN": "Procurement Specialist",
+    "SAP_CO_DISPLAY": "Controller",
+    "SAP_FI_DISPLAY": "Controller",
+    "SAP_PORTAL_USER": "Controller",
     "SYS_WORKDAY_READ": "Payroll Specialist",
     "SYS_WORKDAY_ADMIN": "Talent Partner",
     "SYS_WORKDAY_ALL": "Payroll Specialist",
     "SYS_WORKDAY_WRITE": "Payroll Specialist",
     "SYS_WORKDAY_VIEW": "Business Apps Analyst",
+    "SAP_HCM_DISPLAY": "HR Specialist",
+    "SAP_HCM_WRITE": "HR Specialist",
     "eSign_Admin": "LEGAL",
     "eSign_User": "LEGAL",
     "ContractMgmt_Admin": "LEGAL",
@@ -1515,7 +1566,21 @@
     "SAP_FI": "FINANCE",
     "Approver": "FINANCE",
     "CMS_Editor": "MARKETING",
-    "Analytics_Read": "MARKETING"
+    "Analytics_Read": "MARKETING",
+    "SAP_FI_POST": "Accountant",
+    "SAP_MM_BUYER": "Buyer",
+    "SAP_MM_DISPLAY": "Buyer",
+    "SAP_MM_WM_WRITE": "Warehouse Operator",
+    "SAP_SD_DISPLAY": "Sales Rep",
+    "SAP_SD_ORDER": "Sales Rep",
+    "SAP_BASIS_MONITOR": "IT Operator",
+    "SAP_BASIS_SUPPORT": "IT Operator",
+    "SAP_PP_DISPLAY": "Production Planner",
+    "SAP_PP_PLAN": "Production Planner",
+    "SAP_QM_DISPLAY": "Quality Analyst",
+    "SAP_QM_WRITE": "Quality Analyst",
+    "SAP_LE_DISPLAY": "Logistics Specialist",
+    "SAP_LE_SHIP": "Logistics Specialist"
   },
-  "total_assignments": 4914
+  "total_assignments": 4924
 }

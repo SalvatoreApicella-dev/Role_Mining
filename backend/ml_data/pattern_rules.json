@@ -28,5 +28,11 @@
     "field": "displayName",
     "regex": "^adm.*",
     "created_at": "2026-02-12T23:05:17.712577"
+  },
+  {
+    "account_type": "SAP",
+    "field": "username",
+    "regex": "^sf.*",
+    "created_at": "2026-02-13T23:52:48.365479"
   }
 ]

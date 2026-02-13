@@ -1,0 +1,15 @@
+{
+  "name": "sap-users-mock-cf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mock SAP users API for Role Mining end-to-end import tests on SAP BTP Cloud Foundry.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
