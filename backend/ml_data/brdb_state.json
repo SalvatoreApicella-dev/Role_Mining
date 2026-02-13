@@ -1248,6 +1248,53 @@
       "INF_STORAGE_READ": 1.0,
       "SYS_CONFLUENCE_READ": 1.0,
       "SYS_JIRA_READ": 1.0
+    },
+    "LEGAL": {
+      "eSign_Admin": 2.0,
+      "eSign_User": 4.0,
+      "ContractMgmt_Admin": 2.0,
+      "ContractMgmt_User": 3.0
+    },
+    "HR": {
+      "Azure": 3.0,
+      "Confluence": 3.0,
+      "Payroll_Admin": 3.0,
+      "HRIS": 4.0,
+      "TimeTracking_User": 3.0,
+      "Payroll": 2.0
+    },
+    "SALES": {
+      "CRM": 7.0,
+      "VPN": 4.0,
+      "DiscountApproval": 3.0,
+      "Salesforce_User": 2.0,
+      "VPN_ALL": 4.0
+    },
+    "IT": {
+      "Azure_ALL": 4.0,
+      "GitLab_Admin": 3.0,
+      "Azure": 6.0,
+      "AzureAD_Admin": 3.0,
+      "Confluence": 3.0,
+      "Admin": 2.0,
+      "GitLab": 4.0,
+      "Jira_User": 2.0
+    },
+    "OPS": {
+      "Warehouse_User": 5.0,
+      "WMS_User": 5.0,
+      "ShiftRoster_User": 4.0
+    },
+    "FINANCE": {
+      "Accounting_Read": 6.0,
+      "ExpenseMgmt_User": 5.0,
+      "SAP_FI": 5.0,
+      "Approver": 4.0
+    },
+    "MARKETING": {
+      "CMS_Editor": 3.0,
+      "Analytics_Read": 5.0,
+      "Confluence": 4.0
     }
   },
   "group_role_primary": {
@@ -1438,7 +1485,37 @@
     "SYS_WORKDAY_ADMIN": "Talent Partner",
     "SYS_WORKDAY_ALL": "Payroll Specialist",
     "SYS_WORKDAY_WRITE": "Payroll Specialist",
-    "SYS_WORKDAY_VIEW": "Business Apps Analyst"
+    "SYS_WORKDAY_VIEW": "Business Apps Analyst",
+    "eSign_Admin": "LEGAL",
+    "eSign_User": "LEGAL",
+    "ContractMgmt_Admin": "LEGAL",
+    "ContractMgmt_User": "LEGAL",
+    "Azure": "IT",
+    "Confluence": "MARKETING",
+    "Payroll_Admin": "HR",
+    "HRIS": "HR",
+    "TimeTracking_User": "HR",
+    "Payroll": "HR",
+    "CRM": "SALES",
+    "VPN": "SALES",
+    "DiscountApproval": "SALES",
+    "Salesforce_User": "SALES",
+    "VPN_ALL": "SALES",
+    "Azure_ALL": "IT",
+    "GitLab_Admin": "IT",
+    "AzureAD_Admin": "IT",
+    "Admin": "IT",
+    "GitLab": "IT",
+    "Jira_User": "IT",
+    "Warehouse_User": "OPS",
+    "WMS_User": "OPS",
+    "ShiftRoster_User": "OPS",
+    "Accounting_Read": "FINANCE",
+    "ExpenseMgmt_User": "FINANCE",
+    "SAP_FI": "FINANCE",
+    "Approver": "FINANCE",
+    "CMS_Editor": "MARKETING",
+    "Analytics_Read": "MARKETING"
   },
-  "total_assignments": 4863
+  "total_assignments": 4914
 }

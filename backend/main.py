@@ -1,5 +1,6 @@
 import os
 import time
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -14,6 +15,10 @@ from sklearn.cluster import AgglomerativeClustering, MiniBatchKMeans
 from sklearn.decomposition import TruncatedSVD
 from fastapi import UploadFile, File, BackgroundTasks
 import csv, io, re, threading
+import urllib.request
+import urllib.parse
+import urllib.error
+import base64
 try:
     from ldap3 import ALL, NTLM, SIMPLE, Connection, Server, Tls, NONE
     import ssl
@@ -2250,6 +2255,19 @@ class ConnectorConfig(BaseModel):
     auth: str = Field("SIMPLE", description="SIMPLE oppure NTLM")
     port: int = Field(389, description="LDAP Port")
     use_ssl: bool = Field(False, description="Use SSL/LDAPS")
+    sap_base_url: str = Field("", description="SAP API base URL (es: https://sap.company.local)")
+    sap_auth_mode: str = Field("AUTO", description="AUTO, APIKEY, BASIC, OAUTH2")
+    sap_client: str = Field("", description="SAP client (es: 100)")
+    sap_system: str = Field("", description="SAP system id (es: ECC/4HANA)")
+    sap_username: str = Field("", description="SAP username")
+    sap_password: str = Field("", description="SAP password")
+    sap_api_key: str = Field("", description="SAP API key (Business Accelerator Hub sandbox)")
+    sap_token_url: str = Field("", description="OAuth2 token endpoint (es: https://<host>/oauth/token)")
+    sap_client_id: str = Field("", description="OAuth2 client id")
+    sap_client_secret: str = Field("", description="OAuth2 client secret")
+    sap_oauth_scope: str = Field("", description="OAuth2 scope (opzionale)")
+    sap_company_id: str = Field("", description="SuccessFactors company id (opzionale)")
+    sap_users_path: str = Field("/sap/opu/odata/sap/ZROLE_MINING_SRV/Users", description="SAP users endpoint path")
 
 
 class ExtractRequest(BaseModel):
@@ -2315,6 +2333,244 @@ def mock_users() -> List[Dict[str, Any]]:
         {"username": "erin", "displayName": "Erin Gialli", "groups": ["Sales", "AllEmployees", "CRM"]},
         {"username": "frank", "displayName": "Frank Blu", "groups": ["Sales", "AllEmployees", "CRM", "DiscountApproval"]},
     ]
+
+
+def mock_sap_users() -> List[Dict[str, Any]]:
+    return [
+        {
+            "username": "sap.mrossi",
+            "displayName": "Mario Rossi",
+            "department": "Finance",
+            "businessRole": "Accountant",
+            "groups": ["SAP_FI_DISPLAY", "SAP_CO_DISPLAY", "SAP_PORTAL_USER"],
+        },
+        {
+            "username": "sap.lbianchi",
+            "displayName": "Laura Bianchi",
+            "department": "Procurement",
+            "businessRole": "Buyer",
+            "groups": ["SAP_MM_DISPLAY", "SAP_MM_BUYER", "SAP_PORTAL_USER"],
+        },
+        {
+            "username": "sap.gverdi",
+            "displayName": "Giulia Verdi",
+            "department": "Warehouse",
+            "businessRole": "Warehouse Operator",
+            "groups": ["SAP_MM_DISPLAY", "SAP_MM_WM_WRITE", "SAP_PORTAL_USER"],
+        },
+    ]
+
+
+def _sap_pick(entry: Dict[str, Any], keys: List[str], default: Any = "") -> Any:
+    for key in keys:
+        if key in entry and entry.get(key) not in (None, ""):
+            return entry.get(key)
+        for k2, v2 in entry.items():
+            if str(k2).lower() == key.lower() and v2 not in (None, ""):
+                return v2
+    return default
+
+
+def _sap_parse_groups(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        out = [str(x).strip() for x in raw if str(x).strip()]
+        return sorted(set(out))
+    txt = str(raw).strip()
+    if not txt:
+        return []
+    parts = [p.strip() for p in re.split(r"[;,|]", txt) if p.strip()]
+    return sorted(set(parts))
+
+
+def _sap_normalize_users(payload: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]]
+    if isinstance(payload, list):
+        rows = payload
+    elif isinstance(payload, dict):
+        if isinstance(payload.get("value"), list):  # OData v4
+            rows = payload.get("value") or []
+        elif isinstance(payload.get("d"), dict) and isinstance((payload.get("d") or {}).get("results"), list):  # OData v2
+            rows = (payload.get("d") or {}).get("results") or []
+        else:
+            rows = payload.get("users") if isinstance(payload.get("users"), list) else []
+    else:
+        rows = []
+
+    users: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        username = str(_sap_pick(row, ["username", "UserName", "Bname", "user_id", "userid", "BusinessPartner", "businessPartner", "id", "ID"], "")).strip()
+        if not username:
+            continue
+        display_name = str(_sap_pick(row, ["displayName", "DisplayName", "fullName", "BusinessPartnerFullName", "OrganizationBPName1", "name", "uname"], username)).strip()
+        department = str(_sap_pick(row, ["department", "Department", "orgUnit", "OrgUnit"], "")).strip()
+        business_role = str(_sap_pick(row, ["businessRole", "BusinessRole", "jobRole", "RoleName"], "Unassigned")).strip()
+        account_type = str(_sap_pick(row, ["accountType", "AccountType", "userType"], "")).strip()
+        last_login = str(_sap_pick(row, ["lastLogin", "LastLogin", "last_logon", "lastLogon"], "")).strip()
+        groups = _sap_parse_groups(_sap_pick(row, ["groups", "Groups", "roles", "Roles", "authorizations", "Authorizations"], []))
+        users.append(
+            {
+                "username": username,
+                "displayName": display_name or username,
+                "department": department or "Unknown",
+                "businessRole": business_role or "Unassigned",
+                "accountType": account_type,
+                "lastLogin": last_login,
+                "groups": groups,
+            }
+        )
+    return users
+
+
+def _sap_fetch_oauth_token(cfg: Dict[str, Any]) -> str:
+    token_url = str(cfg.get("sap_token_url") or "").strip()
+    client_id = str(cfg.get("sap_client_id") or "").strip()
+    client_secret = str(cfg.get("sap_client_secret") or "").strip()
+    oauth_scope = str(cfg.get("sap_oauth_scope") or "").strip()
+    company_id = str(cfg.get("sap_company_id") or "").strip()
+
+    if not token_url:
+        raise HTTPException(status_code=400, detail="Configura sap_token_url per OAuth2")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=400, detail="Configura sap_client_id/sap_client_secret per OAuth2")
+
+    body = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
+    if oauth_scope:
+        body["scope"] = oauth_scope
+    if company_id:
+        body["company_id"] = company_id
+
+    data = urllib.parse.urlencode(body).encode("utf-8")
+    basic_blob = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        token_url,
+        headers={
+            "Authorization": f"Basic {basic_blob}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "RoleMining/1.0",
+        },
+        data=data,
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")[:500]
+        raise HTTPException(status_code=502, detail=f"SAP OAuth token HTTP {e.code}: {detail or 'errore upstream'}")
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=503, detail=f"SAP OAuth token endpoint non raggiungibile: {e.reason}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore OAuth token SAP: {e}")
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Risposta OAuth token non in formato JSON")
+
+    token = str(payload.get("access_token") or "").strip()
+    if not token:
+        raise HTTPException(status_code=502, detail="OAuth token mancante nella risposta SAP")
+    return token
+
+
+def extract_from_sap(scope: str) -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    sap_base_url = str(cfg.get("sap_base_url") or "").strip()
+    sap_auth_mode = str(cfg.get("sap_auth_mode") or "AUTO").strip().upper()
+    sap_username = str(cfg.get("sap_username") or "").strip()
+    sap_password = str(cfg.get("sap_password") or "").strip()
+    sap_api_key = str(cfg.get("sap_api_key") or "").strip()
+    sap_client = str(cfg.get("sap_client") or "").strip()
+    sap_system = str(cfg.get("sap_system") or "").strip()
+    sap_users_path = str(cfg.get("sap_users_path") or "/sap/opu/odata/sap/ZROLE_MINING_SRV/Users").strip()
+
+    sap_has_oauth = bool(str(cfg.get("sap_token_url") or "").strip() and str(cfg.get("sap_client_id") or "").strip() and str(cfg.get("sap_client_secret") or "").strip())
+
+    if not sap_base_url and not sap_username and not sap_password and not sap_api_key and not sap_has_oauth:
+        log("INFO", "Using MOCK SAP extract (connector not configured)")
+        return mock_sap_users()
+
+    if not sap_base_url:
+        raise HTTPException(status_code=400, detail="Configura sap_base_url in Connettori")
+
+    base = sap_base_url.rstrip("/")
+    path = sap_users_path if sap_users_path.startswith("/") else f"/{sap_users_path}"
+    query: Dict[str, str] = {}
+    if sap_client:
+        query["sap-client"] = sap_client
+    query["$format"] = "json"
+    qs = urllib.parse.urlencode(query)
+    url = f"{base}{path}"
+    if qs:
+        url = f"{url}?{qs}"
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "RoleMining/1.0",
+    }
+    if sap_auth_mode == "APIKEY":
+        if not sap_api_key:
+            raise HTTPException(status_code=400, detail="Auth mode APIKEY selezionato ma sap_api_key non configurata")
+        headers["APIKey"] = sap_api_key
+        headers["apikey"] = sap_api_key
+    elif sap_auth_mode == "BASIC":
+        if not sap_username or not sap_password:
+            raise HTTPException(status_code=400, detail="Auth mode BASIC selezionato ma sap_username/sap_password non configurati")
+        auth_blob = base64.b64encode(f"{sap_username}:{sap_password}".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {auth_blob}"
+    elif sap_auth_mode == "OAUTH2":
+        token = _sap_fetch_oauth_token(cfg)
+        headers["Authorization"] = f"Bearer {token}"
+    else:
+        # AUTO mode preference: API key -> OAuth2 -> Basic
+        if sap_api_key:
+            headers["APIKey"] = sap_api_key
+            headers["apikey"] = sap_api_key
+        elif sap_has_oauth:
+            token = _sap_fetch_oauth_token(cfg)
+            headers["Authorization"] = f"Bearer {token}"
+        elif sap_username and sap_password:
+            auth_blob = base64.b64encode(f"{sap_username}:{sap_password}".encode("utf-8")).decode("ascii")
+            headers["Authorization"] = f"Basic {auth_blob}"
+        else:
+            raise HTTPException(status_code=400, detail="Configura credenziali SAP (API key, OAuth2 o Basic)")
+    req = urllib.request.Request(
+        url,
+        headers=headers,
+        method="GET",
+    )
+
+    log("INFO", f"SAP extract call system={sap_system or 'N/A'} client={sap_client or 'N/A'} scope={scope or 'N/A'} endpoint={path}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")[:500]
+        raise HTTPException(status_code=502, detail=f"SAP API HTTP {e.code}: {detail or 'errore upstream'}")
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=503, detail=f"SAP API non raggiungibile: {e.reason}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore SAP extract: {e}")
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Risposta SAP non in formato JSON")
+
+    users = _sap_normalize_users(payload)
+    if not users:
+        raise HTTPException(status_code=502, detail="SAP API raggiunta ma nessun utente valido trovato")
+    return users
 def _mk_ldap_server(cfg: Dict[str, Any]):
     raw = (cfg.get("server") or "").strip()
     if not raw:
@@ -3406,6 +3662,55 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
             "mining_dirty": True
         }
         state.update(updates)
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
+    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username)
+
+    return ExtractResponse(
+        ou=state["last_extract"]["ou"],
+        total_users=len(state["last_extract"]["users"]),
+        total_groups=len(state["last_extract"]["groups"]),
+        snapshot_ready=True,
+        processing_in_background=True,
+        new_users=merge_stats.get("new_users", 0),
+        updated_users=merge_stats.get("updated_users", 0),
+        updated_by_displayname=merge_stats.get("updated_by_displayname", 0),
+        new_groups=merge_stats.get("new_groups", 0),
+        updated_groups=merge_stats.get("updated_groups", 0),
+        users=state["last_extract"]["users"],
+        groups=state["last_extract"]["groups"],
+    )
+
+
+@app.post("/api/sap/extract", response_model=ExtractResponse)
+def extract_sap(req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    scope = (req.ou or "").strip() or "SAP"
+    users = extract_from_sap(scope)
+
+    sap_candidates = []
+    for u in users:
+        sap_candidates.append(
+            _mk_candidate(
+                source="sap",
+                candidate_id=f"sap:{u.get('username', '')}",
+                display_name=u.get("displayName", ""),
+                business_role=u.get("businessRole", ""),
+                roles=(u.get("groups") or []),
+                raw=f"SAP:{u.get('username')}|{u.get('displayName')}|{','.join(u.get('groups') or [])}",
+                department=u.get("department") or "",
+                last_login=u.get("lastLogin"),
+            )
+        )
+
+    with state.batch():
+        users = filter_and_dedupe_connector_users(users, source="sap")
+        merge_stats = merge_from_connector_by_displayname(users, ou=scope, source="sap")
+        updates = {
+            "ingest_sources": {**state.get("ingest_sources", {}), "sap": sap_candidates},
+            "mining_dirty": True,
+        }
+        state.update(updates)
+
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
     background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username)

@@ -1,9 +1,23 @@
 
-  VITE v5.4.21  ready in 162 ms
+> role-mining-ui@1.0.0 dev
+> vite --host 0.0.0.0 --port 5173 --strictPort
+
+
+  VITE v5.4.21  ready in 181 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.46:5173/
-7:05:02 PM [vite] hmr update /src/app.jsx
-7:15:23 PM [vite] hmr update /src/app.jsx
-7:15:27 PM [vite] hmr update /src/app.jsx
-7:25:50 PM [vite] hmr update /src/app.jsx
+11:07:27 PM [vite] http proxy error: /api/me
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+11:07:27 PM [vite] http proxy error: /api/businessroles
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+11:07:27 PM [vite] http proxy error: /api/me
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+11:07:27 PM [vite] http proxy error: /api/businessroles
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+11:11:49 PM [vite] hmr update /src/app.jsx
+11:14:23 PM [vite] hmr update /src/app.jsx

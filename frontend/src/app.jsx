@@ -203,6 +203,7 @@ function Analytics() {
     {
       label: "Cluster Quality",
       value: clusterPct,
+      target: 100,
       color: "#75adff",
       route: "/kpi/cluster-quality",
       helper: "Coerenza tra utenti e cluster proposti.",
@@ -210,6 +211,7 @@ function Analytics() {
     {
       label: "Model Score",
       value: modelPct,
+      target: 100,
       color: "#ff8ea7",
       route: "/model-quality",
       helper: "Precisione complessiva del modello.",
@@ -217,22 +219,19 @@ function Analytics() {
     {
       label: "AI Detection",
       value: aiPct,
+      target: 0,
       color: "#7effc2",
       route: "/ai-detection",
       helper: "Capacita di rilevare anomalie e deviazioni.",
     },
   ];
   const routeByLabel = Object.fromEntries(kpiItems.map((item) => [item.label, item.route]));
-  const rankedByGap = [...kpiItems].sort((a, b) => (100 - b.value) - (100 - a.value));
+  const gapFor = (item) => Math.abs((Number(item.target) || 0) - (Number(item.value) || 0));
+  const rankedByGap = [...kpiItems].sort((a, b) => gapFor(b) - gapFor(a));
   const railItems = [...rankedByGap];
-  const railModelIdx = railItems.findIndex((item) => item.label === "Model Score");
-  const railAiIdx = railItems.findIndex((item) => item.label === "AI Detection");
-  if (railModelIdx >= 0 && railAiIdx >= 0) {
-    [railItems[railModelIdx], railItems[railAiIdx]] = [railItems[railAiIdx], railItems[railModelIdx]];
-  }
-  const modelScoreItem = kpiItems.find((item) => item.label === "Model Score") || kpiItems[1];
   const biggestGap = rankedByGap[0];
   const smallestGap = rankedByGap[rankedByGap.length - 1];
+  const focusItem = biggestGap || kpiItems[0];
   const overall = Math.round((clusterPct + modelPct + aiPct) / 3);
   const dispersion = Math.max(...kpiItems.map((i) => i.value)) - Math.min(...kpiItems.map((i) => i.value));
   const balanceIndex = Math.max(0, 100 - dispersion).toFixed(1);
@@ -250,7 +249,7 @@ function Analytics() {
         size: 9,
         color: kpiItems.map((item) => item.color).concat([kpiItems[0].color]),
       },
-      customdata: [...kpiItems.map((item) => [100 - item.value, item.helper]), [100 - kpiItems[0].value, kpiItems[0].helper]],
+      customdata: [...kpiItems.map((item) => [gapFor(item), item.helper]), [gapFor(kpiItems[0]), kpiItems[0].helper]],
       hovertemplate:
         "<b>%{theta}</b><br>Score: %{r:.0f}%<br>Gap: %{customdata[0]:.0f}%<br>%{customdata[1]}<extra></extra>",
       showlegend: false,
@@ -261,7 +260,7 @@ function Analytics() {
     {
       type: "bar",
       orientation: "h",
-      x: rankedByGap.map((item) => 100 - item.value),
+      x: rankedByGap.map((item) => gapFor(item)),
       y: rankedByGap.map((item) => item.label),
       marker: {
         color: rankedByGap.map((item) => item.color),
@@ -287,16 +286,21 @@ function Analytics() {
           <div className="analytics-hero-meta">
             <span>Overall Score {overall}%</span>
             <span>Balance Index {balanceIndex}%</span>
-            <span style={{ color: modelScoreItem.color }}>Focus Area: {modelScoreItem.label} (target 0%)</span>
+            <span style={{ color: focusItem.color }}>Focus Area: {focusItem.label} (target {focusItem.target}%)</span>
           </div>
         </div>
         <div className="analytics-widget analytics-widget--focus">
           <div className="analytics-widget__label">Current Focus</div>
-          <div className="analytics-focus-title">{modelScoreItem.label}</div>
-          <div className="analytics-focus-helper">Target operativo: portare il valore verso 0%.</div>
-          <button className="analytics-focus-btn" onClick={() => navigate(modelScoreItem.route)}>
-            Apri analisi prioritaria
-          </button>
+          <div className="analytics-focus-title">{focusItem.label}</div>
+          <div className="analytics-focus-helper">Target operativo: portare il valore verso {focusItem.target}%.</div>
+          <div style={{ marginTop: "auto", alignSelf: "flex-start", display: "flex", gap: 10 }}>
+            <button className="analytics-focus-btn" style={{ marginTop: 0 }} onClick={() => navigate(focusItem.route)}>
+              Apri analisi prioritaria
+            </button>
+            <button className="analytics-focus-btn" style={{ marginTop: 0 }} onClick={() => navigate("/cluster")}>
+              Role Modeling
+            </button>
+          </div>
         </div>
       </div>
 
@@ -405,11 +409,32 @@ function Analytics() {
 }
 
 function Connettori() {
-  const [cfg, setCfg] = useState({ server: "mock", bind_user: "", bind_password: "", base_dn: "", auth: "SIMPLE" });
+  const [cfg, setCfg] = useState({
+    server: "mock",
+    bind_user: "",
+    bind_password: "",
+    base_dn: "",
+    auth: "SIMPLE",
+    sap_base_url: "",
+    sap_auth_mode: "AUTO",
+    sap_client: "",
+    sap_system: "",
+    sap_username: "",
+    sap_password: "",
+    sap_api_key: "",
+    sap_token_url: "",
+    sap_client_id: "",
+    sap_client_secret: "",
+    sap_oauth_scope: "",
+    sap_company_id: "",
+    sap_users_path: "/sap/opu/odata/sap/ZROLE_MINING_SRV/Users",
+  });
   const [ou, setOu] = useState("OU=Users,DC=example,DC=local");
   const [statusMsg, setStatusMsg] = useState("");
+  const [sapStatusMsg, setSapStatusMsg] = useState("");
   const [err, setErr] = useState("");
   const [adLoading, setAdLoading] = useState(false);
+  const [sapLoading, setSapLoading] = useState(false);
   const [adExporting, setAdExporting] = useState(false);
 
   const [csvFile, setCsvFile] = useState(null);
@@ -435,6 +460,7 @@ function Connettori() {
 
   async function saveCfg() {
     setAdLoading(true);
+    setSapLoading(true);
     try {
       setErr(""); setStatusMsg("");
       await api.setConnector(cfg);
@@ -443,6 +469,7 @@ function Connettori() {
       setErr(String(e.message || e));
     } finally {
       setAdLoading(false);
+      setSapLoading(false);
     }
   }
 
@@ -470,6 +497,34 @@ function Connettori() {
       setErr(String(e.message || e));
     } finally {
       setAdLoading(false);
+    }
+  }
+
+  async function doSapExtract() {
+    setSapLoading(true);
+    try {
+      setErr(""); setSapStatusMsg("");
+      const scope = (cfg.sap_system || "").trim() || "SAP";
+      const res = await api.sapExtract(scope);
+      const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+      const parts = [
+        ["Nuovi utenti", n(res.new_users)],
+        ["Nuovi gruppi", n(res.new_groups)],
+        ["Utenti aggiornati", n(res.updated_users)],
+        ["Aggiornati per displayName", n(res.updated_by_displayname ?? res.updated_users)],
+        ["Gruppi aggiornati", n(res.updated_groups)],
+      ]
+        .filter(([, value]) => value > 0)
+        .map(([label, value]) => `${label}: ${value}`);
+      setSapStatusMsg(
+        `Snapshot SAP completato.` +
+        `${parts.length ? ` ${parts.join(", ")}.` : ""}` +
+        ` Logiche in background in esecuzione.`
+      );
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setSapLoading(false);
     }
   }
 
@@ -608,7 +663,135 @@ function Connettori() {
 
       <div style={{ height: 12 }} />
 
-      {/* CARD 2: CSV Import */}
+      {/* CARD 2: SAP Connector */}
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>SAP Connector</h3>
+
+        <div className="row">
+          <input
+            style={{ width: 360 }}
+            value={cfg.sap_base_url || ""}
+            onChange={e => setCfg({ ...cfg, sap_base_url: e.target.value })}
+            placeholder="SAP Base URL (es: https://sap.company.local)"
+            aria-label="SAP Base URL"
+          />
+          <select
+            style={{ width: 140 }}
+            value={cfg.sap_auth_mode || "AUTO"}
+            onChange={e => setCfg({ ...cfg, sap_auth_mode: e.target.value })}
+            aria-label="SAP Auth Mode"
+          >
+            <option value="AUTO">AUTO</option>
+            <option value="OAUTH2">OAUTH2</option>
+            <option value="APIKEY">APIKEY</option>
+            <option value="BASIC">BASIC</option>
+          </select>
+          <input
+            style={{ width: 120 }}
+            value={cfg.sap_client || ""}
+            onChange={e => setCfg({ ...cfg, sap_client: e.target.value })}
+            placeholder="Client (es: 100)"
+            aria-label="SAP Client"
+          />
+          <input
+            style={{ width: 180 }}
+            value={cfg.sap_system || ""}
+            onChange={e => setCfg({ ...cfg, sap_system: e.target.value })}
+            placeholder="System (es: ECC)"
+            aria-label="SAP System"
+          />
+        </div>
+
+        <div className="row" style={{ marginTop: 10 }}>
+          <input
+            style={{ width: 540 }}
+            value={cfg.sap_users_path || ""}
+            onChange={e => setCfg({ ...cfg, sap_users_path: e.target.value })}
+            placeholder="Users API Path (es: /sap/opu/odata/sap/ZROLE_MINING_SRV/Users)"
+            aria-label="SAP Users API Path"
+          />
+        </div>
+
+        <div className="row" style={{ marginTop: 10 }}>
+          <input
+            style={{ width: 260 }}
+            value={cfg.sap_username || ""}
+            onChange={e => setCfg({ ...cfg, sap_username: e.target.value })}
+            placeholder="SAP Username"
+            aria-label="SAP Username"
+          />
+          <input
+            style={{ width: 260 }}
+            value={cfg.sap_password || ""}
+            onChange={e => setCfg({ ...cfg, sap_password: e.target.value })}
+            placeholder="SAP Password"
+            type="password"
+            aria-label="SAP Password"
+          />
+          <input
+            style={{ width: 260 }}
+            value={cfg.sap_api_key || ""}
+            onChange={e => setCfg({ ...cfg, sap_api_key: e.target.value })}
+            placeholder="SAP API Key (opzionale)"
+            type="password"
+            aria-label="SAP API Key"
+          />
+        </div>
+
+        <div className="row" style={{ marginTop: 10 }}>
+          <input
+            style={{ width: 360 }}
+            value={cfg.sap_token_url || ""}
+            onChange={e => setCfg({ ...cfg, sap_token_url: e.target.value })}
+            placeholder="OAuth Token URL (es: https://<host>/oauth/token)"
+            aria-label="SAP OAuth Token URL"
+          />
+          <input
+            style={{ width: 180 }}
+            value={cfg.sap_client_id || ""}
+            onChange={e => setCfg({ ...cfg, sap_client_id: e.target.value })}
+            placeholder="OAuth Client ID"
+            aria-label="SAP OAuth Client ID"
+          />
+          <input
+            style={{ width: 180 }}
+            value={cfg.sap_client_secret || ""}
+            onChange={e => setCfg({ ...cfg, sap_client_secret: e.target.value })}
+            placeholder="OAuth Client Secret"
+            type="password"
+            aria-label="SAP OAuth Client Secret"
+          />
+        </div>
+
+        <div className="row" style={{ marginTop: 10 }}>
+          <input
+            style={{ width: 180 }}
+            value={cfg.sap_oauth_scope || ""}
+            onChange={e => setCfg({ ...cfg, sap_oauth_scope: e.target.value })}
+            placeholder="OAuth Scope (opz.)"
+            aria-label="SAP OAuth Scope"
+          />
+          <input
+            style={{ width: 180 }}
+            value={cfg.sap_company_id || ""}
+            onChange={e => setCfg({ ...cfg, sap_company_id: e.target.value })}
+            placeholder="SuccessFactors Company ID (opz.)"
+            aria-label="SAP SuccessFactors Company ID"
+          />
+          <button className="primary" onClick={saveCfg}>Salva</button>
+          <button className="primary" onClick={doSapExtract}>SAP Import</button>
+        </div>
+
+        {sapStatusMsg && <div className="ok">{sapStatusMsg}</div>}
+        {err && <div className="err">{err}</div>}
+        <div className="connector-loadingbar" aria-hidden="true">
+          <div className={`connector-loadingbar__fill${sapLoading ? " is-active" : ""}`} />
+        </div>
+      </div>
+
+      <div style={{ height: 12 }} />
+
+      {/* CARD 3: CSV Import */}
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>Connettore CSV</h3>
 
@@ -2062,7 +2245,7 @@ function BusinessRoleDetail() {
       setSuggLoading(true);
       let items = [];
       try {
-        const s = await api.businessRoleSuggestions(role, 0.60, 50);
+        const s = await api.businessRoleSuggestions(role, 0.50, 50);
         items = s.items || [];
         setSuggestions(items);
       } catch (e3) {
@@ -2264,7 +2447,7 @@ function BusinessRoleDetail() {
 
         <hr className="sep" />
 
-        <h3 style={{ marginTop: 0 }}>AI Suggestion (confidence &gt; 60%)</h3>
+        <h3 style={{ marginTop: 0 }}>AI Suggestion (confidence &gt; 50%)</h3>
 
         {suggLoading && <div style={{ color: "var(--muted)" }}>Caricamento suggestions…</div>}
         {suggErr && <div className="err">{suggErr}</div>}
@@ -2314,7 +2497,7 @@ function BusinessRoleDetail() {
 
         {!suggLoading && !suggErr && (suggestions || []).length === 0 && (
           <div style={{ color: "var(--muted)" }}>
-            Nessun gruppo suggerito sopra soglia.
+            Nessun gruppo suggerito sopra soglia 50%.
           </div>
         )}
 
@@ -2323,13 +2506,20 @@ function BusinessRoleDetail() {
         <h3 style={{ marginTop: 0 }}>Utenti Assegnati ({detail.users?.length || 0})</h3>
 
         <table className="table">
-          <thead><tr><th>Username</th><th>Display Name</th><th>Gruppi</th></tr></thead>
+          <thead><tr><th>DisplayName</th><th>Type</th><th>Numero di ruoli</th></tr></thead>
           <tbody>
             {(detail.users || []).slice(0, visibleCount).map(u => (
               <tr key={u.username}>
-                <td>{u.username}</td>
-                <td>{u.displayName}</td>
-                <td style={{ color: "var(--muted)" }}>{(u.groups || []).join(", ")}</td>
+                <td>
+                  <NavLink
+                    to={`/utenti/${encodeURIComponent(u.username)}`}
+                    className="roleRowLink"
+                  >
+                    {u.displayName || u.username}
+                  </NavLink>
+                </td>
+                <td style={{ color: "var(--muted)" }}>{u.accountType || "Internal"}</td>
+                <td>{(u.groups || []).length}</td>
               </tr>
             ))}
           </tbody>

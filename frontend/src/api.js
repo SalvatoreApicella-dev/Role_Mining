@@ -152,6 +152,7 @@ export const api = {
   setConnector: (cfg) => request("/api/config/connector", { method: "POST", body: cfg }),
 
   extract: (ou) => request("/api/ad/extract", { method: "POST", body: { ou } }),
+  sapExtract: (ou) => request("/api/sap/extract", { method: "POST", body: { ou } }),
   users: (q = "", limit = 100, offset = 0, sortBy = "", order = "asc", typeQ = "") => {
     let url = `/api/users?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`;
     if (sortBy) url += `&sort_by=${encodeURIComponent(sortBy)}&order=${encodeURIComponent(order)}`;
