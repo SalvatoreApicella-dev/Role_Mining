@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 STORAGE_PATH = Path("/Users/salvo/Development/Role_Mining/backend/data/storage.json")
-TOTAL_USERS = 5000
+TOTAL_USERS = 2500
 SEED = 42
 
 FIRST_NAMES = [

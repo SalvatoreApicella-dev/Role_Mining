@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sklearn.cluster import AgglomerativeClustering, MiniBatchKMeans
 from sklearn.decomposition import TruncatedSVD
 from fastapi import UploadFile, File, BackgroundTasks
-import csv, io, re
+import csv, io, re, threading
 try:
     from ldap3 import ALL, NTLM, SIMPLE, Connection, Server, Tls, NONE
     import ssl
@@ -56,6 +56,8 @@ from collections import defaultdict, Counter
 # ML Engine import
 from ml_engine import get_ml_engine, ACCOUNT_TYPES
 ml_engine = get_ml_engine(data_dir="./ml_data")
+
+REBUILD_LOCK = threading.Lock()
 
 
 # =============================================================================
@@ -122,17 +124,21 @@ CACHE_TTL_ROLES = 30.0       # Business roles
 
 # Cache dell’ultima esecuzione (serve per drilldown)
 
-def invalidate_hot_caches(*, users: bool = False, roles: bool = False, kpi: bool = False, mining: bool = False) -> None:
+def invalidate_hot_caches(*, users: bool = False, roles: bool = False, kpi: bool = False, mining: bool = False, ailab: bool = False) -> None:
     if users:
         RESPONSE_CACHE.invalidate_prefix("users_")
         RESPONSE_CACHE.invalidate("ad_groups")
     if roles:
         RESPONSE_CACHE.invalidate("businessroles")
         RESPONSE_CACHE.invalidate_prefix("role_meta_")
+        RESPONSE_CACHE.invalidate_prefix("role_detail_users_")
     if kpi:
         RESPONSE_CACHE.invalidate("kpi")
+        RESPONSE_CACHE.invalidate_prefix("kpi_drilldown_")
     if mining:
         RESPONSE_CACHE.invalidate_prefix("rolemining_last_")
+    if ailab:
+        RESPONSE_CACHE.invalidate_prefix("ailab_")
 
 BROAD_MARKERS = ['all','tutti','tutte','full','global','everyone','any','anyone','everybody']
 
@@ -741,126 +747,22 @@ BRDB_STOP_TOKENS = {
     "sec", "security", "global", "all", "everyone"
 }
 
-def brdb_norm_group(g: str) -> str:
-    return (g or "").strip()
-
-def brdb_tokens(g: str) -> List[str]:
-    s = (g or "").lower()
-    s = re.sub(r"[^a-z0-9]+", " ", s)
-    toks = [t for t in s.split() if len(t) >= 2 and t not in BRDB_STOP_TOKENS]
-    return toks[:20]
-
-def brdb_inc_stat(stats: Dict[str, Dict[str, int]], key: str, br: str, inc: int) -> None:
-    if not key or not br:
-        return
-    stats.setdefault(key, {})
-    stats[key][br] = int(stats[key].get(br, 0)) + int(inc)
-
-def brdb_rebuild() -> None:
-    """
-    Ricostruisce il DB interno usando:
-    - user_business_role + last_extract.users(groups)
-    - role_meta (template BR->groups) con peso maggiore
-    """
-    global BRDB_CACHE
-    state.setdefault("brdb_group_stats", {})
-    state.setdefault("brdb_token_stats", {})
-    BRDB_CACHE = {}
-
-    group_stats: Dict[str, Dict[str, int]] = {}
-    token_stats: Dict[str, Dict[str, int]] = {}
-
-    # 1) training da utenti assegnati
-    user_br = state.get("user_business_role", {}) or {}
-    users = (state.get("last_extract") or {}).get("users") or []
-    for u in users:
-        uname = u.get("username")
-        br = (user_br.get(uname) or u.get("businessRole") or "").strip()
-        if not br:
-            continue
-        for g in (u.get("groups") or []):
-            g0 = brdb_norm_group(g)
-            brdb_inc_stat(group_stats, g0, br, 1)
-            for t in brdb_tokens(g0):
-                brdb_inc_stat(token_stats, t, br, 1)
-
-    # 2) training forte da template role_meta
-    role_meta = state.get("role_meta") or {}
-    for br, meta in role_meta.items():
-        br = (br or "").strip()
-        for g in (meta.get("groups") or []):
-            g0 = brdb_norm_group(g)
-            brdb_inc_stat(group_stats, g0, br, 4)     # peso alto
-            for t in brdb_tokens(g0):
-                brdb_inc_stat(token_stats, t, br, 2)
-
-    state["brdb_group_stats"] = group_stats
-    state["brdb_token_stats"] = token_stats
-    BRDB_CACHE = {}
-    state["brdb_ready"] = True
+def brdb_norm_group(group: str) -> str:
+    """Standard normalization for group names."""
+    if not group: 
+        return ""
+    # Remove common prefix/suffix noise
+    g = group.strip()
+    return g
 
 def brdb_ensure_ready() -> None:
     if not state.get("brdb_ready"):
         brdb_rebuild()
 
-def brdb_infer_group(group: str) -> Dict[str, Any]:
-
-
-    """
-    Predice BR per un singolo gruppo.
-    """
+def brdb_infer_group(group: str) -> dict:
+    """Infer which role a group belongs to based on learned patterns."""
     brdb_ensure_ready()
-
-    g0 = brdb_norm_group(group)
-    if not g0:
-        return {"role": "Unassigned", "confidence": 0.0, "evidence": {"reason": "empty_group"}}
-
-    global BRDB_CACHE
-    if g0 in BRDB_CACHE:
-        return BRDB_CACHE[g0]
-
-    group_stats = (state.get("brdb_group_stats") or {}).get(g0) or {}
-    token_stats = state.get("brdb_token_stats") or {}
-
-    scores = defaultdict(float)
-
-    # segnale forte: gruppo già visto
-    tot_g = sum(group_stats.values())
-    if tot_g:
-        for br, c in group_stats.items():
-            scores[br] += 2.5 * (c / tot_g)
-
-    # segnale debole: token del nome
-    toks = brdb_tokens(g0)
-    for t in toks:
-        ts = token_stats.get(t) or {}
-        tot_t = sum(ts.values())
-        if not tot_t:
-            continue
-        for br, c in ts.items():
-            scores[br] += 1.0 * (c / tot_t)
-
-    if not scores:
-        out = {"role": "Unassigned", "confidence": 0.0, "evidence": {"reason": "no_stats"}}
-        BRDB_CACHE[g0] = out
-        return out
-
-    best_role, best_score = max(scores.items(), key=lambda x: x[1])
-    sum_scores = sum(scores.values()) or 1.0
-    conf = float(best_score / sum_scores)
-
-    out = {
-        "role": best_role,
-        "confidence": round(conf, 3),
-        "evidence": {
-            "scoresTop": sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5],
-            "groupSeen": group_stats,
-            "tokens": toks,
-        },
-        "ts": datetime.now(timezone.utc).isoformat(),
-    }
-    BRDB_CACHE[g0] = out
-    return out
+    return ml_engine.brdb_infer_group(group)
 
 # (imports already at top of file)
 
@@ -909,19 +811,31 @@ def classify_account(
 # =============================================================================
 
 def brdb_rebuild():
-    """Rebuild the Business Role Database from current user assignments."""
-    users = state.get("last_extract", {}).get("users") or []
-    ml_engine.brdb_rebuild(users)
+    """Rebuild the Business Role Database from current user assignments (Background)."""
+    def _worker():
+        with REBUILD_LOCK:
+            # Check again under lock to avoid redundant rebuilds
+            if state.get("brdb_ready"):
+                return
+                
+            users = state.get("last_extract", {}).get("users") or []
+            ml_engine.brdb_rebuild(users)
+            state["brdb_ready"] = True
+            log("INFO", f"Background BRDB rebuild finished ({len(users)} users)")
+            # Invalidate detail caches as roles might have changed
+            invalidate_hot_caches(roles=True)
 
-
-def brdb_infer_group(group: str) -> dict:
-    """Infer which role a group belongs to based on learned patterns."""
-    return ml_engine.brdb_infer_group(group)
-
+    # Start in background if not already running
+    if REBUILD_LOCK.locked():
+        return
+        
+    threading.Thread(target=_worker, daemon=True).start()
+    log("INFO", "Triggered background BRDB rebuild")
 
 def brdb_learn_assignment(role: str, groups: list, weight: float = 1.0):
     """Record a confirmed role→groups assignment for learning."""
     ml_engine.brdb_learn_assignment(role, groups, weight)
+    state["brdb_ready"] = False
 
 def _jaccard(a: set[str], b: set[str]) -> float:
     if not a and not b:
@@ -2039,6 +1953,7 @@ def rerun_auto_business_roles_after_connector(
     if not only_depts:
         # Full rebuild. For AD import we can start clean and let department/rules reassign.
         state["user_business_role"] = preserved_brs.copy() if preserve_existing_brs else {}
+        state["brdb_ready"] = False
     else:
         # Partial update: merge preserved into existing
         state.setdefault("user_business_role", {})
@@ -3481,15 +3396,16 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
 
     # 2) Build full AD pool first, then merge into local DB:
     #    update only by same displayName; keep all other local users.
-    users = filter_and_dedupe_connector_users(users, source="ad")
-    merge_stats = merge_from_connector_by_displayname(users, ou=ou_dn, source="ad")
-    
-    # 3) Batch updates to state to minimize disk I/O
-    updates = {
-        "ingest_sources": {**state.get("ingest_sources", {}), "ad": ad_candidates},
-        "mining_dirty": True
-    }
-    state.update(updates)
+    with state.batch():
+        users = filter_and_dedupe_connector_users(users, source="ad")
+        merge_stats = merge_from_connector_by_displayname(users, ou=ou_dn, source="ad")
+
+        # 3) Batch updates to state to minimize disk I/O
+        updates = {
+            "ingest_sources": {**state.get("ingest_sources", {}), "ad": ad_candidates},
+            "mining_dirty": True
+        }
+        state.update(updates)
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
     background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username)
@@ -3786,9 +3702,9 @@ def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(r
         "status": status
     }
     
-    # Cache only if mining is not running (stable result)
-    if status != "running":
-        RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_MINING)
+    # Cache also while running, but with very short TTL to reduce repeated sparse transforms.
+    ttl = 1.0 if status == "running" else CACHE_TTL_MINING
+    RESPONSE_CACHE.set(cache_key, result, ttl)
     
     return result
 
@@ -3895,10 +3811,20 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         raise HTTPException(status_code=400, detail="Nessun risultato: dataset vuoto o role mining non eseguibile")
 
     if metric == "overprivileged":
+        cache_key = "kpi_drilldown_overprivileged"
+        cached = RESPONSE_CACHE.get(cache_key)
+        if cached:
+            return cached
         payload = build_overprivileged_items(matrix, top_pct=10.0)
-        return {"metric": metric, **payload}
+        out = {"metric": metric, **payload}
+        RESPONSE_CACHE.set(cache_key, out, CACHE_TTL_KPI)
+        return out
 
     if metric == "ai-detection":
+        cache_key = "kpi_drilldown_ai-detection"
+        cached_out = RESPONSE_CACHE.get(cache_key)
+        if cached_out:
+            return cached_out
         # Always use smart detection logic
         cached = state.get("last_ai_detection")
         if not cached or cached.get("status") != "ready":
@@ -3907,8 +3833,10 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
              cached = run_smart_ai_detection(users, matrix)
              state["last_ai_detection"] = cached
              # Also update stats in main KPI if needed, but for now just return consistent data
-        
-        return {"metric": metric, "items": cached.get("items", []), "stats": cached.get("stats", {})}
+
+        out = {"metric": metric, "items": cached.get("items", []), "stats": cached.get("stats", {})}
+        RESPONSE_CACHE.set(cache_key, out, CACHE_TTL_KPI)
+        return out
 
     if metric == "cluster-quality":
         # Cluster Quality in dashboard is Data/Ingest Quality. 
@@ -4350,6 +4278,7 @@ def businessrole_add_group(role: str, body: RoleGroupRequest, username: str = De
     gs.add(body.group)
     state["role_meta"][role]["groups"] = sorted(gs)
     state.setdefault("business_roles", set()).add(role)
+    state["brdb_ready"] = False
     log("INFO", f"Role group add: {role} + {body.group} by {username}")
     invalidate_hot_caches(roles=True, kpi=True, mining=True)
     return {"ok": True}
@@ -4363,44 +4292,33 @@ class SuggestionPickRequest(BaseModel):
 def brdb_suggest_groups_for_role(role: str, *, limit: int = 50, min_conf: float = 0.60) -> List[Dict[str, Any]]:
     """
     Ritorna gruppi suggeriti da assegnare al Business Role (escludendo quelli già presenti in role_meta[role].groups).
-    Richiede che tu abbia già le funzioni BRDB: brdb_rebuild(), brdb_infer_group().
     """
     role = (role or "").strip()
     if not role:
         return []
 
-    # Assicura DB pronto (se usi brdb_ready/brdb_rebuild)
-    try:
-        brdb_rebuild()
-    except Exception:
-        # se non hai brdb_rebuild ancora incollato, evita crash dell'endpoint
-        return []
+    cache_key = f"suggestions_{role}_{min_conf}_{limit}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
 
+    # Suggestions must be computed only after explicit recalc from Business Roles page.
+    # Avoid implicit heavy rebuilds on page open.
+    if not state.get("brdb_ready"):
+        return []
     meta = (state.get("role_meta") or {}).get(role) or {}
     already = set(meta.get("groups") or [])
 
-    # candidati: tutti i gruppi visti a sistema
-    all_groups = (state.get("last_extract") or {}).get("groups") or []
+    # Use optimized ml_engine method
+    items = ml_engine.brdb_suggest_groups(role, exclude=already, min_conf=min_conf, limit=limit)
     out = []
-    for g in all_groups:
-        g = (g or "").strip()
-        if not g or g in already:
-            continue
-
-        s = brdb_infer_group(g)  # -> {"role": "...", "confidence": 0..1, "evidence": ...}
-        if s.get("role") != role:
-            continue
-        if float(s.get("confidence") or 0.0) < float(min_conf):
-            continue
-
+    for item in items:
         out.append({
-            "group": g,
-            "confidence": float(s.get("confidence") or 0.0),
-            "evidence": s.get("evidence", {}),
+            "group": item["group"],
+            "confidence": float(item["confidence"]),
+            "evidence": {"count": item.get("count", 0)},
         })
-
-    out.sort(key=lambda x: x["confidence"], reverse=True)
-    return out[: int(limit)]
+    RESPONSE_CACHE.set(cache_key, out, ttl_seconds=300)
+    return out
 
 @app.get("/api/businessroles/{role}/suggestions")
 def businessrole_suggestions(role: str, limit: int = 50, min_conf: float = 0.60, username: str = Depends(require_auth)):
@@ -4453,6 +4371,7 @@ def businessrole_remove_group(role: str, body: RoleGroupRequest, username: str =
     state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
     gs = [g for g in state["role_meta"][role].get("groups", []) if g != body.group]
     state["role_meta"][role]["groups"] = gs
+    state["brdb_ready"] = False
     log("INFO", f"Role group remove: {role} - {body.group} by {username}")
     invalidate_hot_caches(roles=True, kpi=True, mining=True)
     return {"ok": True}
@@ -4499,6 +4418,16 @@ def businessroles_recalculate_groups(username: str = Depends(require_auth)):
         assigned = sorted(role_groups.get(role, set()))
         state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
         state["role_meta"][role]["groups"] = assigned
+        state["brdb_ready"] = False
+
+    # Explicitly (re)build BRDB and suggestion cache only on user-triggered recalc.
+    # This keeps detail-page load fast and deterministic.
+    role_meta = state.get("role_meta") or {}
+    ml_engine.brdb_rebuild(users)
+    for role in state["business_roles"]:
+        assigned = set((role_meta.get(role) or {}).get("groups") or [])
+        ml_engine.brdb_suggest_groups(role, exclude=assigned, min_conf=0.10, limit=100)
+    state["brdb_ready"] = True
 
     state["mining_dirty"] = True
     log("INFO", f"Business role groups recalculated by {username}")
@@ -4507,6 +4436,7 @@ def businessroles_recalculate_groups(username: str = Depends(require_auth)):
         "ok": True,
         "rolesUpdated": len(state["business_roles"]),
         "groupsAssigned": len(group_role_counts),
+        "proposedGroupsCalculated": True,
     }
 
 
@@ -4579,10 +4509,17 @@ def choose_csv_duplicate_row(body: ChooseCsvRowRequest, username: str = Depends(
 
 @app.get("/api/businessroles/{role}")
 def businessrole_detail(role: str, username: str = Depends(require_auth)):
+    cache_key = f"role_detail_users_{role}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
+    
     users = active_users(state["last_extract"]["users"] or [])
     apply_business_roles(users)
     members = [u for u in users if u.get("businessRole") == role]
-    return {"role": role, "users": members}
+    
+    res = {"role": role, "users": members}
+    RESPONSE_CACHE.set(cache_key, res, ttl_seconds=300)
+    return res
 
 @app.get("/api/ingest/conflicts/duplicate-displayname")
 def conflicts_duplicate_displayname(username: str = Depends(require_auth)):
@@ -4715,6 +4652,7 @@ def businessrole_add(role: str, body: RoleAssignRequest, username: str = Depends
     m = state.get("user_business_role", {})
     m[body.username] = role
     state["user_business_role"] = m
+    state["brdb_ready"] = False
     # aggiorna cache estrazione per riflettere subito la modifica in UI
     users = state["last_extract"]["users"] or []
     apply_business_roles(users)
@@ -4948,11 +4886,11 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             orphan_groups,
         )
 
-    state.setdefault("ingest_sources", {})
-    state["ingest_sources"]["csv"] = []
-    state["last_csv_rows"] = []
-    state["csv_choice_by_dn"] = {}
-    state["csv_rows_by_dn"] = defaultdict(list)
+    ingest_sources = state.get("ingest_sources") or {}
+    ingest_sources["csv"] = []
+    last_csv_rows: List[Dict[str, Any]] = []
+    csv_choice_by_dn: Dict[str, str] = {}
+    csv_rows_by_dn: Dict[str, List[str]] = defaultdict(list)
 
     csv_rows_total = 0
     csv_dup_dn_rows = 0
@@ -4966,8 +4904,8 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
 
     existing_users_list = state.get("last_extract", {}).get("users", [])
     csv_candidates: List[Dict[str, Any]] = []
-    state.setdefault("choice_by_displayName", {})
-    state["duplicate_autoselect"] = {}
+    choice_by_displayname = state.get("choice_by_displayName") or {}
+    duplicate_autoselect: Dict[str, Any] = {}
 
     for row in reader:
         csv_rows_total += 1
@@ -5051,9 +4989,9 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             "manager": manager,
             "rawLine": f"{dnraw};{dept};{roles}",
         }
-        state["last_csv_rows"].append(rec)
-        state["csv_rows_by_dn"][dnraw].append(row_id)
-        state["csv_choice_by_dn"].setdefault(dnraw, row_id)
+        last_csv_rows.append(rec)
+        csv_rows_by_dn[dnraw].append(row_id)
+        csv_choice_by_dn.setdefault(dnraw, row_id)
         csv_candidates.append({"rowId": row_id, "rec": rec, "user": user_payload})
 
         candidate = _mk_candidate(
@@ -5066,8 +5004,8 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             department=dept,
             last_login=last_login,
         )
-        state["ingest_sources"]["csv"].append(candidate)
-        state["choice_by_displayName"].setdefault(candidate["displayName"], candidate["candidateId"])
+        ingest_sources["csv"].append(candidate)
+        choice_by_displayname.setdefault(candidate["displayName"], candidate["candidateId"])
 
     profile_rows = []
     for u in existing_users_list:
@@ -5121,8 +5059,8 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
 
         if len(scored_rows) > 1:
             display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
-            state["choice_by_displayName"][display_name] = winner["rowId"]
-            state["duplicate_autoselect"][display_name] = {
+            choice_by_displayname[display_name] = winner["rowId"]
+            duplicate_autoselect[display_name] = {
                 "candidateId": winner["rowId"],
                 "reason": winner["score"]["reason"],
                 "alternatives": [
@@ -5135,7 +5073,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             }
         else:
             display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
-            state["choice_by_displayName"].setdefault(display_name, winner["rowId"])
+            choice_by_displayname.setdefault(display_name, winner["rowId"])
 
     # Merge with existing users - match ONLY by displayName.
     # Keep all local users; update only same displayName; add others.
@@ -5204,9 +5142,9 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             state["user_business_role"][uname] = br
 
     touched_depts = {u.get("department") for u in new_users if u.get("department")}
-    csv_auto_resolved_duplicates = len(state.get("duplicate_autoselect") or {})
+    csv_auto_resolved_duplicates = len(duplicate_autoselect)
 
-    state["last_ingest_stats"] = {
+    last_ingest_stats = {
         "source": "csv",
         "rowsTotal": csv_rows_total,
         "rowsKept": len(merged_users),
@@ -5217,11 +5155,11 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         "missingUsername": 0,
         "missingRoles": csv_missing_roles,
         "orphanGroupsCatalog": len(csv_orphan_groups_catalog),
-        "autoResolvedDuplicateUsers": csv_auto_resolved_duplicates,
+        "autoResolvedDuplicateUsers": len(duplicate_autoselect),
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
-    state["last_csv_stats"] = {
+    last_csv_stats = {
         "csvRowsTotal": csv_rows_total,
         "csvRowsMissingBR": csv_missing_businessrole,
         "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
@@ -5229,8 +5167,18 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
-    state["last_rejects"] = csv_rejects
-    state["mining_dirty"] = True
+    state.update({
+        "ingest_sources": ingest_sources,
+        "last_csv_rows": last_csv_rows,
+        "csv_choice_by_dn": csv_choice_by_dn,
+        "csv_rows_by_dn": dict(csv_rows_by_dn),
+        "choice_by_displayName": choice_by_displayname,
+        "duplicate_autoselect": duplicate_autoselect,
+        "last_ingest_stats": last_ingest_stats,
+        "last_csv_stats": last_csv_stats,
+        "last_rejects": csv_rejects,
+        "mining_dirty": True,
+    })
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
     touched_depts_list = sorted([d for d in touched_depts if d])
@@ -5638,6 +5586,10 @@ def _default_timeline_entry() -> Dict[str, Any]:
 
 @app.get("/api/ai-lab/drift")
 def ai_lab_drift(username: str = Depends(require_auth)):
+    cache_key = "ailab_drift"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
+
     users = _ai_lab_users()
     if len(users) < 10:
         return {"summary": {"population": len(users), "psi_account_type": 0, "psi_department": 0, "mean_groups_delta": 0}, "signals": []}
@@ -5685,7 +5637,7 @@ def ai_lab_drift(username: str = Depends(require_auth)):
             "severity": "high" if abs(delta_groups) >= 2.5 else ("medium" if abs(delta_groups) >= 1.0 else "low"),
         },
     ]
-    return {
+    res = {
         "summary": {
             "population": len(users),
             "psi_account_type": round(psi_type, 4),
@@ -5694,16 +5646,24 @@ def ai_lab_drift(username: str = Depends(require_auth)):
         },
         "signals": signals,
     }
+    RESPONSE_CACHE.set(cache_key, res, ttl_seconds=600)
+    return res
 
 
 @app.get("/api/ai-lab/training-timeline")
 def ai_lab_timeline(username: str = Depends(require_auth)):
+    cache_key = "ailab_timeline"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
+
     timeline = state.setdefault("ai_training_timeline", [])
     if not timeline:
         timeline.append(_default_timeline_entry())
     timeline.sort(key=lambda x: str(x.get("ts") or ""), reverse=True)
     learning = sorted(state.get("llm_learning_history") or [], key=lambda x: str(x.get("ts") or ""), reverse=True)
-    return {"items": timeline[:60], "learningHistory": learning[:500]}
+    res = {"items": timeline[:60], "learningHistory": learning[:500]}
+    RESPONSE_CACHE.set(cache_key, res, ttl_seconds=300)
+    return res
 
 
 @app.post("/api/ai-lab/training-timeline/run")
@@ -5734,6 +5694,7 @@ def ai_lab_timeline_run(body: TimelineRunRequest, username: str = Depends(requir
     timeline = state.setdefault("ai_training_timeline", [])
     timeline.append(item)
     timeline.sort(key=lambda x: str(x.get("ts") or ""), reverse=True)
+    invalidate_hot_caches(ailab=True)
     return {"ok": True, "item": item}
 
 
@@ -6028,6 +5989,10 @@ async def ai_lab_ab_compare_upload(
 
 @app.get("/api/ai-lab/fairness")
 def ai_lab_fairness(username: str = Depends(require_auth)):
+    cache_key = "ailab_fairness"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
+
     users = _ai_lab_users()
     if not users:
         return {"overallErrorRate": 0.0, "byDepartment": [], "byAccountType": []}
@@ -6061,15 +6026,21 @@ def ai_lab_fairness(username: str = Depends(require_auth)):
         out.sort(key=lambda x: abs(x["gapVsOverall"]), reverse=True)
         return out
 
-    return {
+    res = {
         "overallErrorRate": round(float(overall), 4),
         "byDepartment": _aggregate("department")[:20],
         "byAccountType": _aggregate("accountType")[:20],
     }
+    RESPONSE_CACHE.set(cache_key, res, ttl_seconds=600)
+    return res
 
 
 @app.get("/api/ai-lab/synthetic")
 def ai_lab_synthetic(username: str = Depends(require_auth)):
+    cache_key = "ailab_synthetic"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
+
     templates = [
         {"id": "svc_admin_overlap", "label": "Service con gruppi admin", "risk": "high"},
         {"id": "missing_identity_keys", "label": "Chiavi identita mancanti", "risk": "medium"},
@@ -6077,7 +6048,9 @@ def ai_lab_synthetic(username: str = Depends(require_auth)):
         {"id": "department_role_mismatch", "label": "Dipartimento/BusinessRole incoerenti", "risk": "high"},
         {"id": "ghost_manager", "label": "Manager non esistente", "risk": "high"},
     ]
-    return {"templates": templates, "lastGenerated": state.get("ai_synthetic_cases", [])[:100]}
+    res = {"templates": templates, "lastGenerated": state.get("ai_synthetic_cases", [])[:100]}
+    RESPONSE_CACHE.set(cache_key, res, ttl_seconds=300)
+    return res
 
 
 @app.post("/api/ai-lab/synthetic/generate")
@@ -6100,23 +6073,30 @@ def ai_lab_synthetic_generate(body: SyntheticGenerateRequest, username: str = De
         })
     if body.persist:
         state["ai_synthetic_cases"] = generated
+        invalidate_hot_caches(ailab=True)
     return {"ok": True, "count": len(generated), "items": generated}
 
 
 @app.get("/api/ai-lab/feedback")
 def ai_lab_feedback(username: str = Depends(require_auth)):
+    cache_key = "ailab_feedback"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
+
     events = state.get("ai_feedback_events") or []
     total = len(events)
     recent = sorted(events, key=lambda x: str(x.get("ts") or ""), reverse=True)[:200]
     by_corrected = Counter([str(e.get("corrected_type") or "Unknown") for e in events])
     history = list(state.get("manual_user_changes") or [])
     history = sorted(history, key=lambda x: str(x.get("ts") or ""), reverse=True)[:500]
-    return {
+    res = {
         "total": total,
         "byCorrectedType": [{"type": k, "count": v} for k, v in by_corrected.most_common()],
         "items": recent,
         "history": history,
     }
+    RESPONSE_CACHE.set(cache_key, res, ttl_seconds=300)
+    return res
 
 
 @app.post("/api/ai-lab/feedback")
@@ -6174,6 +6154,7 @@ def ai_lab_feedback_add(body: FeedbackEventRequest, background_tasks: Background
     )
     # Persist once in background to reduce response latency on large storage files.
     background_tasks.add_task(state.save)
+    invalidate_hot_caches(ailab=True)
     return {"ok": True, "event": event, "manualEvent": manual_event}
 
 

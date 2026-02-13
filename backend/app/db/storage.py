@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 import threading
+from contextlib import contextmanager
 
 
 class JsonFileStore:
@@ -17,9 +18,17 @@ class JsonFileStore:
         self.filepath = Path(filepath)
         self._lock = threading.RLock()
         self._state: Dict[str, Any] = {}
+        self._batch_depth = 0
+        self._dirty = False
         self._json_indent = 2 if os.getenv("STATE_JSON_PRETTY", "0") == "1" else None
         self._ensure_file()
         self.load()
+
+    def _schedule_save_locked(self):
+        if self._batch_depth > 0:
+            self._dirty = True
+            return
+        self.save()
     
     def _ensure_file(self):
         """Create storage file and directory if they don't exist."""
@@ -101,21 +110,21 @@ class JsonFileStore:
         """Set value in state and persist."""
         with self._lock:
             self._state[key] = value
-            self.save()
+            self._schedule_save_locked()
     
     def setdefault(self, key: str, default: Any) -> Any:
         """Set default value if key doesn't exist."""
         with self._lock:
             if key not in self._state:
                 self._state[key] = default
-                self.save()
+                self._schedule_save_locked()
             return self._state[key]
     
     def update(self, updates: Dict[str, Any]):
         """Update multiple keys at once."""
         with self._lock:
             self._state.update(updates)
-            self.save()
+            self._schedule_save_locked()
     
     def __getitem__(self, key: str) -> Any:
         """Dict-like access."""
@@ -145,7 +154,24 @@ class JsonFileStore:
         """Clear all state."""
         with self._lock:
             self._state = {}
-            self.save()
+            self._schedule_save_locked()
+
+    @contextmanager
+    def batch(self):
+        """
+        Group multiple state mutations into a single disk save.
+        Nested batches are supported.
+        """
+        with self._lock:
+            self._batch_depth += 1
+        try:
+            yield self
+        finally:
+            with self._lock:
+                self._batch_depth = max(0, self._batch_depth - 1)
+                if self._batch_depth == 0 and self._dirty:
+                    self._dirty = False
+                    self.save()
 
 
 # Global instance

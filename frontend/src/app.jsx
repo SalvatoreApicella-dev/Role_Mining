@@ -41,7 +41,7 @@ function Sidebar({ onLogout, roles }) {
             alt="Logo"
             className="sidebar-overview-btn__logo"
           />
-          <span className="sidebar-overview-btn__label">Role Builder AI</span>
+          <span className="sidebar-overview-btn__label">Role Modeling</span>
         </NavLink>
       </div>
 
@@ -1921,30 +1921,38 @@ function BusinessRolesHome() {
         <hr className="sep" />
 
         <table className="table">
-          <thead><tr><th>Business Role</th><th>Users</th></tr></thead>
+          <thead><tr><th>Business Role</th><th>Users</th><th>Ruoli</th></tr></thead>
           <tbody>
             {roles
               .filter((r) => String(r?.role || "").toLowerCase().includes(searchRole.trim().toLowerCase()))
               .map(r => (
-              <tr key={r.role}>
-                <td>
-                  <NavLink
-                    to={`/business-roles/${encodeURIComponent(r.role)}`}
-                    className="roleRowLink"
-                  >
-                    {r.role}
-                  </NavLink>
-                </td>
-                <td>
-                  <NavLink
-                    to={`/business-roles/${encodeURIComponent(r.role)}`}
-                    className="roleRowLink roleRowLinkCount mutedLink"
-                  >
-                    {r.count}
-                  </NavLink>
-                </td>
-              </tr>
-            ))}
+                <tr key={r.role}>
+                  <td>
+                    <NavLink
+                      to={`/business-roles/${encodeURIComponent(r.role)}`}
+                      className="roleRowLink"
+                    >
+                      {r.role}
+                    </NavLink>
+                  </td>
+                  <td>
+                    <NavLink
+                      to={`/business-roles/${encodeURIComponent(r.role)}`}
+                      className="roleRowLink roleRowLinkCount mutedLink"
+                    >
+                      {r.count}
+                    </NavLink>
+                  </td>
+                  <td>
+                    <NavLink
+                      to={`/business-roles/${encodeURIComponent(r.role)}`}
+                      className="roleRowLink roleRowLinkCount mutedLink"
+                    >
+                      {(r.groups || []).length}
+                    </NavLink>
+                  </td>
+                </tr>
+              ))}
           </tbody>
 
         </table>
@@ -2042,10 +2050,12 @@ function BusinessRoleDetail() {
   async function load() {
     try {
       setErr(""); setOk("");
-      const d = await api.businessRoleDetail(role);
-      const u = await api.users("");
-      const m = await api.businessRoleMeta(role);
-      const g = await api.adGroups();
+      const [d, u, m, g] = await Promise.all([
+        api.businessRoleDetail(role),
+        api.users(""),
+        api.businessRoleMeta(role),
+        api.adGroups(),
+      ]);
       setMeta({ color: m.color, groups: m.groups }),
 
         setSuggErr("");
@@ -2109,6 +2119,9 @@ function BusinessRoleDetail() {
       setErr(String(e.message || e));
     }
   }
+
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   return (
     <div className="main">
@@ -2305,12 +2318,14 @@ function BusinessRoleDetail() {
           </div>
         )}
 
+        <hr className="sep" />
 
+        <h3 style={{ marginTop: 0 }}>Utenti Assegnati ({detail.users?.length || 0})</h3>
 
         <table className="table">
           <thead><tr><th>Username</th><th>Display Name</th><th>Gruppi</th></tr></thead>
           <tbody>
-            {(detail.users || []).map(u => (
+            {(detail.users || []).slice(0, visibleCount).map(u => (
               <tr key={u.username}>
                 <td>{u.username}</td>
                 <td>{u.displayName}</td>
@@ -2319,6 +2334,17 @@ function BusinessRoleDetail() {
             ))}
           </tbody>
         </table>
+
+        {detail.users?.length > visibleCount && (
+          <div style={{ textAlign: "center", marginTop: 20 }}>
+            <button
+              className="primary"
+              onClick={() => setVisibleCount(prev => prev + PAGE_SIZE)}
+            >
+              Mostra altri ({detail.users.length - visibleCount} rimanenti)
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2341,7 +2367,7 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      if (!getToken) return;
+      if (!getToken()) return;
       try {
         const r = await api.businessRoles();
         setRoles(r.roles || []);

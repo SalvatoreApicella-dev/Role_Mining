@@ -214,7 +214,7 @@ export default function KpiDrilldownPage() {
   }
 
   const visibleClusterSections = (data?.items || []).filter(
-    (s) => s?.type === "Duplicates" || s?.type === "Missing Business Role" || s?.type === "Identity Integrity"
+    (s) => s?.type === "Duplicates" || s?.type === "Missing Business Role" || s?.type === "Identity Integrity" || s?.type === "Missing Department"
   );
 
   return (

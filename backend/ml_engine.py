@@ -13,12 +13,14 @@ CPU-friendly classification without requiring GPU.
 
 import os
 import json
+import time
 import pickle
 import re
 from datetime import datetime
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Set, DefaultDict, Union
 import numpy as np
+import threading
 
 # scikit-learn imports (lightweight ML)
 try:
@@ -140,6 +142,10 @@ class MLEngine:
         self.vectorizer = None
         self.training_history = {"corrections": [], "confirmations": [], "last_train": None}
         
+        # Knowledge Base (LLM derived)
+        self.kb_path = os.path.join(data_dir, "knowledge_base.json")
+        self.kb = {}
+        
         # Custom regex patterns (user-defined, loaded from JSON)
         self.custom_patterns: List[Dict[str, str]] = []
         
@@ -148,7 +154,10 @@ class MLEngine:
             "role_group_counts": defaultdict(lambda: defaultdict(float)),  # role -> group -> count
             "group_role_primary": {},  # group -> primary role
             "total_assignments": 0,
+            "role_suggestions": {}, # Pre-calculated suggestions
         }
+        
+        self.lock = threading.Lock()
         
         
         # Load all persisted state
@@ -213,7 +222,23 @@ class MLEngine:
         self._load_classifier()
         self._load_training_history()
         self._load_custom_patterns()
+        self._load_knowledge_base()
         self._load_brdb()
+
+    def _load_knowledge_base(self):
+        """Load the LLM-derived knowledge base."""
+        if os.path.exists(self.kb_path):
+            try:
+                with open(self.kb_path, "r", encoding="utf-8") as f:
+                    self.kb = json.load(f)
+                # Optimization: pre-lower KB roles for faster matching
+                kb_defs = self.kb.get("role_definitions", {})
+                self._kb_roles_lowered = {k.lower(): v for k, v in kb_defs.items()}
+            except Exception as e:
+                print(f"[ML Engine] Failed to load KB: {e}")
+                self._kb_roles_lowered = {}
+        else:
+            self._kb_roles_lowered = {}
 
     def _load_classifier(self):
         """Load classifier and vectorizer models."""
@@ -264,6 +289,7 @@ class MLEngine:
                         "role_group_counts": role_group_counts,
                         "group_role_primary": data.get("group_role_primary", {}),
                         "total_assignments": int(data.get("total_assignments", 0)),
+                        "role_suggestions": data.get("role_suggestions", {}),
                     }
             except Exception as e:
                 print(f"[ML Engine] Failed to load BRDB: {e}")
@@ -276,6 +302,7 @@ class MLEngine:
             "role_group_counts": defaultdict(lambda: defaultdict(float)),
             "group_role_primary": {}, 
             "total_assignments": 0,
+            "role_suggestions": {},
         }
     
     def _save_state(self):
@@ -300,17 +327,23 @@ class MLEngine:
             print(f"[ML Engine] Failed to save history: {e}")
             
         # Save BRDB
-        try:
-            with open(self.brdb_path, "w", encoding="utf-8") as f:
-                # Convert defaultdicts to dicts for JSON serialization
-                serializable_brdb = {
-                    "role_group_counts": {k: dict(v) for k, v in self.brdb["role_group_counts"].items()},
-                    "group_role_primary": self.brdb.get("group_role_primary", {}),
-                    "total_assignments": self.brdb.get("total_assignments", 0),
-                }
-                json.dump(serializable_brdb, f, indent=2)
-        except Exception as e:
-            print(f"[ML Engine] Failed to save BRDB: {e}")
+        with self.lock:
+            try:
+                # Take a snapshot to avoid "dictionary changed size during iteration"
+                snapshot_counts = {k: dict(v) for k, v in self.brdb["role_group_counts"].items()}
+                snapshot_primaries = dict(self.brdb.get("group_role_primary", {}))
+                snapshot_suggestions = dict(self.brdb.get("role_suggestions", {}))
+                
+                with open(self.brdb_path, "w", encoding="utf-8") as f:
+                    serializable_brdb = {
+                        "role_group_counts": snapshot_counts,
+                        "group_role_primary": snapshot_primaries,
+                        "total_assignments": int(self.brdb.get("total_assignments", 0)),
+                        "role_suggestions": snapshot_suggestions,
+                    }
+                    json.dump(serializable_brdb, f, indent=2)
+            except Exception as e:
+                print(f"[ML Engine] Failed to save BRDB: {e}")
 
     def is_ready(self) -> bool:
         """Check if ML classifier is trained and ready."""
@@ -869,25 +902,29 @@ class MLEngine:
     # =========================================================================
     
     
-    def brdb_learn_assignment(self, role: str, groups: List[str], weight: float = 1.0):
+    def brdb_learn_assignment(self, role: str, groups: List[str], weight: float = 1.0, suppress_save: bool = False):
         """Record a confirmed role→groups assignment for learning."""
         role = (role or "").strip()
         if not role or not groups:
             return
         
-        counts = self._role_group_counts
+        with self.lock:
+            counts = self._role_group_counts
 
-        for g in groups:
-            g = (g or "").strip()
-            if not g:
-                continue
-            counts[role][g] += weight
+            for g in groups:
+                g = (g or "").strip()
+                if not g:
+                    continue
+                counts[role][g] += weight
+            
+            self._set_total_assignments(self._total_assignments + 1)
         
-        self._set_total_assignments(self._total_assignments + 1)
-        
-        # Update primary role for each group
-        self._update_group_primaries()
-        self._save_state()
+        if not suppress_save:
+            # Update primary role for each group
+            self._update_group_primaries()
+            # Update cache for this role specifically
+            self.brdb["role_suggestions"][role] = self._calculate_suggestions(role, set(), 0.1, 100)
+            self._save_state()
     
     def _update_group_primaries(self):
         """Update the primary role for each group based on counts."""
@@ -955,56 +992,138 @@ class MLEngine:
     
     def brdb_rebuild(self, users: List[Dict[str, Any]]):
         """Rebuild BRDB from user data."""
-        # Reset counts
-        self.brdb["role_group_counts"] = defaultdict(lambda: defaultdict(float))
-        self.brdb["group_role_primary"] = {}
-        self.brdb["total_assignments"] = 0
+        with self.lock:
+            # Reset counts
+            self.brdb["role_group_counts"] = defaultdict(lambda: defaultdict(float))
+            self.brdb["group_role_primary"] = {}
+            self.brdb["total_assignments"] = 0
+            # role_suggestions is kept to allow stale hits while rebuilding
+            for u in users:
+                # Defensive: AD extracts may contain null businessRole
+                role = (u.get("businessRole") or "").strip()
+                groups = u.get("groups", [])
+                
+                if role and role != "Unassigned" and groups:
+                    # Optimized: skip saving/updating on every single user
+                    # Pass weight=1.0 directly to logic since we are under the lock
+                    # and we don't want to nested-lock by calling brdb_learn_assignment
+                    for g in groups:
+                        g = (g or "").strip()
+                        if not g: continue
+                        self.brdb["role_group_counts"][role][g] += 1.0
+                    self.brdb["total_assignments"] += 1
         
-        for u in users:
-            # Defensive: AD extracts may contain null businessRole
-            role = (u.get("businessRole") or "").strip()
-            groups = u.get("groups", [])
-            
-            if role and role != "Unassigned" and groups:
-                self.brdb_learn_assignment(role, groups, weight=1.0)
-        
+        # Final batch update
+        self._update_group_primaries()
+        # Optimization: remove synchronous precompute to avoid long hangs.
+        # Cache will be populated on-demand.
         self._save_state()
     
-    def brdb_suggest_groups(self, role: str, exclude: set = None, min_conf: float = 0.5, limit: int = 20) -> List[Dict[str, Any]]:
-        """Suggest groups for a role based on learned patterns."""
+    def brdb_suggest_groups(self, role: str, exclude: set = None, min_conf: float = 0.5, limit: int = 50) -> List[Dict[str, Any]]:
+        """Suggest groups for a role based on learned patterns and LLM Knowledge Base."""
         role = (role or "").strip()
         exclude = exclude or set()
         
         if not role:
             return []
+
+        # 1. Use cached suggestions if available and no specific exclude/min_conf constraint
+        # (Actually, we always filter by exclude/min_conf/limit for safety)
+        cached = self.brdb.get("role_suggestions", {}).get(role)
+        if cached:
+            out = []
+            for item in cached:
+                if item["group"] in exclude: continue
+                if item["confidence"] < min_conf: continue
+                out.append(item)
+                if len(out) >= limit: break
+            if out: return out
+            # If out is empty, it might be because min_conf is too strict, 
+            # or the cache is just old. We'll recalculate.
+
+        # 2. Fallback to calculation
+        suggestions = self._calculate_suggestions(role, exclude, min_conf, limit)
         
-        # Get all groups seen for this role
-        counts = self.brdb["role_group_counts"]
-        if isinstance(counts, int):
-            return []
+        # 3. On-demand cache population
+        # We store the most complete version (low min_conf, NO exclude) to the cache
+        complete_suggestions = self._calculate_suggestions(role, set(), 0.1, 100)
+        with self.lock:
+            self.brdb["role_suggestions"][role] = complete_suggestions
             
-        role_groups = counts.get(role, {})
+        return suggestions
+
+    def _calculate_suggestions(self, role: str, exclude: set, min_conf: float, limit: int) -> List[Dict[str, Any]]:
+        counts = self.brdb["role_group_counts"]
+        if isinstance(counts, int): return []
         
-        # Calculate total for normalization
+        role_groups = counts.get(role, {})
         total = sum(role_groups.values()) if role_groups else 0
-        if total == 0:
-            return []
         
         suggestions = []
-        for group, count in role_groups.items():
-            if group in exclude:
-                continue
-            
-            conf = count / total
-            if conf >= min_conf:
-                suggestions.append({
-                    "group": group,
-                    "confidence": round(conf, 3),
-                    "count": int(count),
-                })
+        seen_groups = set()
+
+        # A) Add groups from Statistical analysis
+        if total > 0:
+            for group, count in role_groups.items():
+                if group in exclude: continue
+                conf = count / total
+                if conf >= min_conf:
+                    suggestions.append({
+                        "group": group,
+                        "confidence": round(conf, 3),
+                        "count": int(count),
+                        "source": "statistical"
+                    })
+                    seen_groups.add(group)
+
+        # B) Add groups from Knowledge Base (LLM-based confidence)
+        # These are high-priority/high-confidence suggestions
+        kb_role_defs = self.kb.get("role_definitions", {})
         
+        # Optimized lookup: lower role once
+        role_lowered = role.lower()
+        role_kb_groups = kb_role_defs.get(role) # exact match first
+        
+        if not role_kb_groups:
+             # Try optimized substring match using pre-lowered keys
+             for k_low, v in self._kb_roles_lowered.items():
+                 if k_low in role_lowered or role_lowered in k_low:
+                     role_kb_groups = v
+                     break
+        
+        if role_kb_groups:
+            for group in role_kb_groups:
+                if group in exclude: continue
+                # Boost confidence for KB-defined groups
+                if group in seen_groups:
+                    for s in suggestions:
+                        if s["group"] == group:
+                            s["confidence"] = max(s["confidence"], 0.95)
+                            s["source"] = "hybrid"
+                else:
+                    suggestions.append({
+                        "group": group,
+                        "confidence": 0.95,
+                        "count": 0,
+                        "source": "llm_kb"
+                    })
+                    seen_groups.add(group)
+
         suggestions.sort(key=lambda x: x["confidence"], reverse=True)
         return suggestions[:limit]
+
+    def _precompute_all_suggestions(self):
+        """Pre-calculate and store suggestions for all known roles."""
+        roles = list(self.brdb["role_group_counts"].keys())
+        kb_roles = list(self.kb.get("role_definitions", {}).keys())
+        all_roles = set(roles) | set(kb_roles)
+        
+        suggestions_cache = {}
+        for role in all_roles:
+            # We calculate with low min_conf and high limit for the cache
+            suggestions_cache[role] = self._calculate_suggestions(role, set(), 0.1, 100)
+        
+        self.brdb["role_suggestions"] = suggestions_cache
     
     # =========================================================================
     # STATUS & METRICS
