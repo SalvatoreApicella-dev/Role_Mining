@@ -1315,6 +1315,23 @@ hr.sep {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
+  outline: none;
+}
+
+.user-graph-list__item.is-clickable {
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.user-graph-list__item.is-clickable:hover,
+.user-graph-list__item.is-clickable:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.user-graph-list__item.is-disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .user-graph-list__dot {

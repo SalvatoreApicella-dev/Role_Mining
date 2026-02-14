@@ -1754,7 +1754,24 @@ function UserDetail() {
               {graphGroupsList.length > 0 ? (
                 <div className="user-graph-list">
                   {graphGroupsList.map((g) => (
-                    <div key={g.name} className="user-graph-list__item">
+                    <div
+                      key={g.name}
+                      className={`user-graph-list__item ${saving ? "is-disabled" : "is-clickable"}`}
+                      role="button"
+                      tabIndex={saving ? -1 : 0}
+                      onClick={() => {
+                        const node = forceNodeById[`group:${g.name}`];
+                        if (node) handleGraphNodeClick(node);
+                      }}
+                      onKeyDown={(e) => {
+                        if (saving) return;
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        const node = forceNodeById[`group:${g.name}`];
+                        if (node) handleGraphNodeClick(node);
+                      }}
+                      aria-label={`${g.inUser ? "Deactivate" : "Activate"} role ${g.name}`}
+                    >
                       <span className={`user-graph-list__dot ${g.inUser ? "is-user" : "is-role"}`} />
                       <span className="user-graph-list__name">{g.name}</span>
                     </div>
