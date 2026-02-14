@@ -4,6 +4,8 @@ import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 import { api, clearToken, getToken, setToken } from "./api.js";
 import Select from "react-select";
+import ForceGraph2D from "react-force-graph-2d";
+import { forceCollide, forceRadial } from "d3-force";
 import { importBusinessRolesCsv, exportLastAdExtractCsv } from "./api";
 
 import React, { useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
@@ -25,7 +27,9 @@ const Plot = lazy(() => import("react-plotly.js"));
 
 
 const SPLIT_KEY = "cluster_assignments_height_v1";
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const ACTIVE_PARTICLE_SPEED = 0.0048;
+const MAX_GRAPH_NODES = 220;
+const OUTER_NODE_RADIUS = 27; // all non-center nodes use the same radius
 
 
 function Sidebar({ onLogout, roles }) {
@@ -1029,7 +1033,6 @@ function UserDetail() {
   const nav = useNavigate();
 
   const [user, setUser] = useState(null);
-  const [allGroups, setAllGroups] = useState([]);
   const [rolesData, setRolesData] = useState({ roles: [], assignments: {} });
 
   const [selectedRole, setSelectedRole] = useState("Unassigned");
@@ -1037,7 +1040,17 @@ function UserDetail() {
   const [accountType, setAccountType] = useState("Internal");
   const [peerStats, setPeerStats] = useState(null);
   const [analyzingPeers, setAnalyzingPeers] = useState(false);
-  const [filter, setFilter] = useState("");
+  const [graphSize, setGraphSize] = useState({ width: 0, height: 0 });
+  const [hoveredGraphNode, setHoveredGraphNode] = useState(null);
+  const [animatingNodeId, setAnimatingNodeId] = useState("");
+  const [graphTypeFilter, setGraphTypeFilter] = useState("all"); // all | active | inactive
+  const [activationTransition, setActivationTransition] = useState(null); // {id,start,duration}
+  const graphRef = useRef(null);
+  const forceGraphRef = useRef(null);
+  const nodePositionsRef = useRef(new Map());
+  const pendingActiveIdsRef = useRef(new Set());
+  const focusTimeoutRef = useRef(null);
+  const releaseNodeTimeoutRef = useRef(null);
 
   const [ok, setOk] = useState("");
   const [err, setErr] = useState("");
@@ -1087,7 +1100,6 @@ function UserDetail() {
       const br = await api.businessRoles(); // {roles, assignments}
 
       setUser(u.user);
-      setAllGroups(u.allGroups || []);
       setRolesData(br);
 
       setSelectedRole(u.user?.businessRole || "Unassigned");
@@ -1139,7 +1151,7 @@ function UserDetail() {
         accountType: accountType,
       });
 
-      setOk("Salvato.");
+      setOk("Saved.");
       await load();
     } catch (e) {
       setErr(String(e?.message || e));
@@ -1148,14 +1160,305 @@ function UserDetail() {
     }
   }
 
-  const shownGroups = (allGroups || [])
-    .filter((g) => String(g).toLowerCase().includes(filter.trim().toLowerCase()))
-    .sort((a, b) => {
-      const sa = selectedGroups.includes(a) ? 0 : 1; // selezionati prima
-      const sb = selectedGroups.includes(b) ? 0 : 1;
-      if (sa !== sb) return sa - sb;
-      return String(a).localeCompare(String(b));
-    });
+  const roleGroups = useMemo(() => {
+    if (!selectedRole || selectedRole === "Unassigned") return [];
+    const roleMeta = (rolesData.roles || []).find((x) => x?.role === selectedRole);
+    if (!roleMeta?.groups) return [];
+    return Array.from(new Set(roleMeta.groups.map((g) => String(g).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [rolesData, selectedRole]);
+
+  const groupRoleHints = useMemo(() => {
+    const out = {};
+    for (const roleMeta of (rolesData.roles || [])) {
+      const roleName = String(roleMeta?.role || "").trim();
+      if (!roleName) continue;
+      for (const group of (roleMeta?.groups || [])) {
+        const key = String(group || "").trim();
+        if (!key) continue;
+        if (!out[key]) out[key] = [];
+        out[key].push(roleName);
+      }
+    }
+    return out;
+  }, [rolesData]);
+
+  const peerFrequencyByGroup = useMemo(() => {
+    const out = {};
+    const ingest = (arr, source) => {
+      for (const row of (arr || [])) {
+        const key = String(row?.group || "").trim();
+        if (!key) continue;
+        const curr = out[key];
+        const next = {
+          source,
+          frequency: Number(row?.frequency || 0),
+          count: Number(row?.count || 0),
+          peers: Number(row?.peers || 0),
+        };
+        if (!curr || next.frequency > curr.frequency) out[key] = next;
+      }
+    };
+    ingest(peerStats?.anomalies, "anomaly");
+    ingest(peerStats?.suggestedGroups, "suggested");
+    return out;
+  }, [peerStats]);
+
+  const forceGraphData = useMemo(() => {
+    const selectedSet = new Set((selectedGroups || []).map((g) => String(g)));
+    const roleSet = new Set((roleGroups || []).map((g) => String(g)));
+    const merged = Array.from(new Set([...selectedSet, ...roleSet]));
+    const orderedAll = merged
+      .filter((group) => {
+        if (graphTypeFilter === "active") return selectedSet.has(group);
+        if (graphTypeFilter === "inactive") return !selectedSet.has(group);
+        return true;
+      })
+      .sort((a, b) => {
+        const aUser = selectedSet.has(a);
+        const bUser = selectedSet.has(b);
+        if (aUser !== bUser) return aUser ? -1 : 1;
+        return a.localeCompare(b);
+      });
+    const ordered = orderedAll.slice(0, MAX_GRAPH_NODES);
+    const userNodeId = "__user_center__";
+    const nodes = [
+      {
+        id: userNodeId,
+        type: "center",
+        isCenter: true,
+        label: user?.displayName || user?.username || username,
+        fx: 0,
+        fy: 0,
+      },
+      ...ordered.map((group) => ({
+        ...(nodePositionsRef.current.get(`group:${group}`) || {}),
+        id: `group:${group}`,
+        group,
+        label: group,
+        inUser: selectedSet.has(group),
+        inRole: roleSet.has(group),
+        type: selectedSet.has(group) ? "user" : "role",
+      })),
+    ];
+    const links = ordered.map((group) => ({
+      source: userNodeId,
+      target: `group:${group}`,
+      type: selectedSet.has(group) ? "user" : "role",
+      isParticle: false,
+    }));
+    const particleLinks = ordered
+      .filter((group) => selectedSet.has(group))
+      .flatMap((group) => ([
+        {
+          source: userNodeId,
+          target: `group:${group}`,
+          type: "user",
+          isParticle: true,
+        },
+        {
+          source: `group:${group}`,
+          target: userNodeId,
+          type: "user",
+          isParticle: true,
+        },
+      ]));
+    return {
+      userNodeId,
+      nodes,
+      links: [...links, ...particleLinks],
+      totalRequested: orderedAll.length,
+      totalRendered: ordered.length,
+      truncated: orderedAll.length > ordered.length,
+    };
+  }, [selectedGroups, roleGroups, graphTypeFilter]);
+
+  const allGraphCounts = useMemo(() => {
+    const selectedSet = new Set((selectedGroups || []).map((g) => String(g)));
+    const roleSet = new Set((roleGroups || []).map((g) => String(g)));
+    const merged = Array.from(new Set([...selectedSet, ...roleSet]));
+    let active = 0;
+    let inactive = 0;
+    for (const g of merged) {
+      if (selectedSet.has(g)) active += 1;
+      else if (roleSet.has(g)) inactive += 1;
+    }
+    return { active, inactive };
+  }, [selectedGroups, roleGroups]);
+
+  const forceNodeById = useMemo(
+    () => forceGraphData.nodes.reduce((acc, n) => {
+      acc[n.id] = n;
+      return acc;
+    }, {}),
+    [forceGraphData]
+  );
+
+  const graphCounts = useMemo(() => {
+    let active = 0;
+    let inactive = 0;
+    for (const n of (forceGraphData.nodes || [])) {
+      if (n?.isCenter) continue;
+      if (n?.inUser) active += 1;
+      else inactive += 1;
+    }
+    return { active, inactive };
+  }, [forceGraphData]);
+
+  const graphGroupsList = useMemo(
+    () => (forceGraphData.nodes || [])
+      .filter((n) => !n?.isCenter)
+      .map((n) => ({ name: n.group, inUser: Boolean(n.inUser), type: n.type }))
+      .sort((a, b) => {
+        if (a.inUser !== b.inUser) return a.inUser ? -1 : 1;
+        return String(a.name).localeCompare(String(b.name));
+      }),
+    [forceGraphData]
+  );
+
+  const graphPerf = useMemo(() => {
+    const nodeCount = Math.max(0, (forceGraphData.nodes || []).length - 1); // exclude center
+    const heavy = nodeCount > 140;
+    const medium = nodeCount > 90;
+    return {
+      nodeCount,
+      particleSpeed: heavy ? 0 : medium ? 0.0024 : ACTIVE_PARTICLE_SPEED,
+      particleCount: heavy ? 0 : medium ? 1 : 2,
+      autoPauseRedraw: heavy,
+      cooldownTicks: heavy ? 120 : 240,
+      heavy,
+      medium,
+    };
+  }, [forceGraphData]);
+
+  const captureNodePositions = React.useCallback(() => {
+    const fg = forceGraphRef.current;
+    if (!fg) return;
+    const data = typeof fg.graphData === "function" ? fg.graphData() : null;
+    const nodes = data?.nodes || [];
+    const nextMap = new Map();
+
+    for (const node of nodes) {
+      if (!node || node.isCenter) {
+        if (node?.isCenter) {
+          node.x = 0;
+          node.y = 0;
+          node.vx = 0;
+          node.vy = 0;
+        }
+        continue;
+      }
+      nextMap.set(node.id, {
+        x: node.x,
+        y: node.y,
+        vx: node.vx,
+        vy: node.vy,
+      });
+    }
+    nodePositionsRef.current = nextMap;
+  }, []);
+
+  useEffect(() => {
+    const allowed = new Set((forceGraphData.nodes || []).map((n) => n.id));
+    const nextMap = new Map();
+    for (const [k, v] of nodePositionsRef.current.entries()) {
+      if (allowed.has(k)) nextMap.set(k, v);
+    }
+    nodePositionsRef.current = nextMap;
+  }, [forceGraphData]);
+
+  useEffect(() => {
+    const node = graphRef.current;
+    if (!node) return;
+    const sync = () => setGraphSize({ width: node.clientWidth || 0, height: node.clientHeight || 0 });
+    sync();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(sync);
+      ro.observe(node);
+      return () => ro.disconnect();
+    }
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, []);
+
+  useEffect(() => () => {
+    if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+    if (releaseNodeTimeoutRef.current) clearTimeout(releaseNodeTimeoutRef.current);
+  }, []);
+
+  useEffect(() => {
+    const fg = forceGraphRef.current;
+    if (!fg) return;
+    fg.centerAt(0, 0, 0);
+    fg.zoom(0.76, 0);
+    const charge = fg.d3Force("charge");
+    if (charge && typeof charge.strength === "function") charge.strength(-245);
+    const link = fg.d3Force("link");
+    if (link) {
+      if (typeof link.distance === "function") link.distance(208);
+      if (typeof link.strength === "function") link.strength((l) => (l?.isParticle ? 0 : 0.58));
+    }
+    fg.d3Force(
+      "radial",
+      forceRadial((node) => {
+        if (node?.isCenter) return 0;
+        const pendingActivation = pendingActiveIdsRef.current.has(node?.id);
+        return (node?.inUser || pendingActivation) ? 160 : 305; // red closer, blue farther from center
+      }).strength(0.11)
+    );
+    fg.d3Force("collide", forceCollide((node) => (node?.isCenter ? 52 : 31)).iterations(2));
+    if (typeof fg.d3VelocityDecay === "function") fg.d3VelocityDecay(0.28);
+    if (typeof fg.d3AlphaDecay === "function") fg.d3AlphaDecay(0.018);
+    fg.d3ReheatSimulation();
+  }, [forceGraphData]);
+
+  function handleGraphNodeClick(node) {
+    if (!node?.group || node?.isCenter || saving) return;
+    captureNodePositions();
+    const fg = forceGraphRef.current;
+    const isActivating = !Boolean(node?.inUser);
+    if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+    if (releaseNodeTimeoutRef.current) clearTimeout(releaseNodeTimeoutRef.current);
+    setAnimatingNodeId(node.id);
+
+    // Start from center, then let physics push outward to the new target ring.
+    nodePositionsRef.current.set(node.id, { x: 0, y: 0, vx: 0, vy: 0 });
+    if (fg) {
+      node.x = 0;
+      node.y = 0;
+      node.vx = 0;
+      node.vy = 0;
+      fg.d3ReheatSimulation();
+    }
+
+    if (isActivating) {
+      pendingActiveIdsRef.current.add(node.id);
+      setActivationTransition({ id: node.id, start: Date.now(), duration: 1200 });
+    } else {
+      setActivationTransition(null);
+    }
+    const toggleDelayMs = isActivating ? 260 : 180;
+    focusTimeoutRef.current = setTimeout(() => {
+      toggleGroup(node.group);
+      if (isActivating) pendingActiveIdsRef.current.delete(node.id);
+      if (fg) fg.d3ReheatSimulation();
+      focusTimeoutRef.current = null;
+    }, toggleDelayMs);
+    if (fg) fg.d3ReheatSimulation();
+    releaseNodeTimeoutRef.current = setTimeout(() => {
+      setAnimatingNodeId("");
+      setActivationTransition((prev) => (prev?.id === node.id ? null : prev));
+      releaseNodeTimeoutRef.current = null;
+    }, isActivating ? 1600 : 700);
+  }
+
+  const getGraphNodeRadius = React.useCallback((node) => {
+    if (!node) return 0;
+    const isAnimating = Boolean(animatingNodeId && node?.id === animatingNodeId);
+    const isActivatingNode = Boolean(activationTransition && activationTransition.id === node?.id);
+    let baseRadius = node?.isCenter ? 32 : OUTER_NODE_RADIUS;
+    if (isActivatingNode) baseRadius = OUTER_NODE_RADIUS;
+    return node?.isCenter ? baseRadius : baseRadius + (isAnimating ? 2 : 0);
+  }, [animatingNodeId, activationTransition]);
 
 
   return (
@@ -1163,13 +1466,8 @@ function UserDetail() {
       <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
         <div>
           <h2 style={{ marginTop: 0 }}>
-            Utente {user?.displayName || user?.username || username}
+            User {user?.displayName || user?.username || username}
           </h2>
-          <div style={{ color: "var(--muted)", fontSize: 12 }}>
-            Username: {user?.username || username}
-            {user?.department ? ` • Department: ${user.department}` : ""}
-            {user?.accountType ? ` • Type: ${user.accountType}` : ""}
-          </div>
         </div>
 
         <button className="link" onClick={() => nav("/utenti")}>← Back</button>
@@ -1184,7 +1482,7 @@ function UserDetail() {
               styles={selectStyles}
               value={{ value: selectedRole, label: selectedRole }}
               onChange={(opt) => setSelectedRole(opt?.value || "Unassigned")}
-              placeholder="Seleziona ruolo..."
+              placeholder="Select role..."
               options={[
                 { value: "Unassigned", label: "Unassigned" },
                 ...(rolesData.roles || []).map((x) => ({ value: x.role, label: x.role })),
@@ -1227,23 +1525,23 @@ function UserDetail() {
 
           <div style={{ marginLeft: 20, display: "flex", gap: 10, alignItems: "center" }}>
             <button className="secondary" onClick={runPeerAnalysis} disabled={analyzingPeers}>
-              {analyzingPeers ? "Analyzing..." : "Run Peer Analysis"}
+              {analyzingPeers ? "Remediation..." : "Remediation"}
             </button>
           </div>
         </div>
 
         {peerStats && (
           <div style={{ marginTop: 15, background: "rgba(0,0,0,0.2)", padding: 10, borderRadius: 8 }}>
-            <h4 style={{ marginTop: 0 }}>Peer Analysis Results</h4>
+            <h4 style={{ marginTop: 0 }}>Remediation Actions</h4>
             <div style={{ fontSize: 13, marginBottom: 10 }}>
-              Peers found: <b>{peerStats?.peersCount ?? 0}</b> (Same Business Role + Same Account Type)
+              Detected users: <b>{peerStats?.peersCount ?? 0}</b> (same Business Role + same Account Type)
             </div>
 
             {peerStats?.anomalies?.length > 0 ? (
               <table className="table" style={{ fontSize: 13 }}>
                 <thead>
                   <tr>
-                    <th>Anomalous Group (Redundant?)</th>
+                    <th>Anomalous Role</th>
                     <th>Freq</th>
                     <th>Count</th>
                   </tr>
@@ -1259,17 +1557,17 @@ function UserDetail() {
                 </tbody>
               </table>
             ) : (
-              <div style={{ color: "#71ffb2", fontSize: 13 }}>No anomalies found (all groups are consistent with peers).</div>
+              <div style={{ color: "#71ffb2", fontSize: 13 }}>No anomalies found (all roles are consistent with peers).</div>
             )}
 
-            {/* Suggested Groups – green */}
+            {/* Suggested Roles – green */}
             {peerStats?.suggestedGroups?.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <h4 style={{ marginTop: 0, color: "#4ade80" }}>✅ Suggested Groups (present in peers, missing here)</h4>
+                <h4 style={{ marginTop: 0, color: "#4ade80" }}>✅ Suggested Roles (present in peers, missing here)</h4>
                 <table className="table" style={{ fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th>Suggested Group</th>
+                      <th>Suggested Role</th>
                       <th>Freq</th>
                       <th>Count</th>
                     </tr>
@@ -1291,48 +1589,182 @@ function UserDetail() {
 
         <hr className="sep" />
 
-        <h3 style={{ marginTop: 0 }}>Gruppi</h3>
-
-        <div className="row">
-          <input
-            style={{ width: 360 }}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filtro gruppi..."
-          />
-          <div style={{ color: "var(--muted)", fontSize: 12 }}>
-            Selezionati: {selectedGroups.length}
-          </div>
-        </div>
+        <h3 style={{ marginTop: 0 }}>Roles</h3>
 
         <div style={{ height: 12 }} />
 
-        <div style={{ maxHeight: 380, overflow: "auto", borderRadius: 10, border: "1px solid rgba(255,255,255,0.10)" }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{ width: 90 }}>On</th>
-                <th>Group</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shownGroups.map((g) => {
-                const checked = selectedGroups.includes(g);
+        <div className="user-graph-card">
+          <div className="user-graph-legend">
+            <button
+              type="button"
+              className={`user-graph-pill is-user ${graphTypeFilter === "active" ? "is-selected" : ""}`}
+              onClick={() => setGraphTypeFilter((prev) => (prev === "active" ? "all" : "active"))}
+              title="Filter active user roles only"
+            >
+              Active user roles: {allGraphCounts.active}
+            </button>
+            <button
+              type="button"
+              className={`user-graph-pill is-role ${graphTypeFilter === "inactive" ? "is-selected" : ""}`}
+              onClick={() => setGraphTypeFilter((prev) => (prev === "inactive" ? "all" : "inactive"))}
+              title="Filter inactive roles only"
+            >
+              Inactive roles: {allGraphCounts.inactive}
+            </button>
+            <span className="user-graph-pill is-muted">Shown: {graphCounts.active + graphCounts.inactive}</span>
+            {forceGraphData.truncated ? (
+              <span className="user-graph-pill is-muted">
+                Capped to {forceGraphData.totalRendered}/{forceGraphData.totalRequested} for stability
+              </span>
+            ) : null}
+          </div>
+
+          <div className="user-graph-content">
+            <div className="user-graph-stage" ref={graphRef}>
+              {forceGraphData.nodes.length > 1 ? (
+                <ForceGraph2D
+                  ref={forceGraphRef}
+                  graphData={forceGraphData}
+                  width={graphSize.width || 980}
+                  height={graphSize.height || 560}
+                  backgroundColor="rgba(0,0,0,0)"
+                  nodeRelSize={8}
+                  cooldownTicks={graphPerf.cooldownTicks}
+                  autoPauseRedraw={graphPerf.autoPauseRedraw}
+                  enablePanInteraction={false}
+                  enableZoomInteraction={false}
+                  enableNodeDrag={false}
+                  linkWidth={(link) => (link?.isParticle ? 0 : (link?.type === "user" ? 1.8 : 1.3))}
+                  linkColor={(link) => (link?.isParticle ? "rgba(0,0,0,0)" : (link?.type === "user" ? "rgba(225,35,55,0.58)" : "rgba(0,75,160,0.52)"))}
+                  linkCurvature={0}
+                  linkDirectionalParticles={(link) => (link?.isParticle ? graphPerf.particleCount : 0)}
+                  linkDirectionalParticleWidth={() => 4.2}
+                  linkDirectionalParticleColor={() => "rgba(255,120,133,0.88)"}
+                  linkDirectionalParticleSpeed={() => graphPerf.particleSpeed}
+                  nodeLabel={() => ""}
+                  nodeCanvasObject={(node, ctx, globalScale) => {
+                    const isAnimating = Boolean(animatingNodeId && node?.id === animatingNodeId);
+                    const now = Date.now();
+                    const centerPulse = 0.5 + 0.5 * Math.sin(now / 900);
+                    const isActivatingNode = Boolean(activationTransition && activationTransition.id === node?.id);
+                    const t = isActivatingNode
+                      ? Math.max(0, Math.min(1, (now - activationTransition.start) / Math.max(1, activationTransition.duration)))
+                      : 0;
+                    const lerp = (a, b, x) => a + ((b - a) * x);
+                    const radius = getGraphNodeRadius(node);
+                    const fromBlue = [0, 83, 179];
+                    const toRed = [225, 35, 55];
+                    const tr = Math.round(lerp(fromBlue[0], toRed[0], t));
+                    const tg = Math.round(lerp(fromBlue[1], toRed[1], t));
+                    const tb = Math.round(lerp(fromBlue[2], toRed[2], t));
+                    const fill = node?.isCenter
+                      ? "#a7adb7"
+                      : isActivatingNode
+                        ? `rgb(${tr},${tg},${tb})`
+                        : (node?.type === "user" ? "#e12337" : "#0053b3");
+                    const border = node?.isCenter ? "rgba(226,230,236,0.95)" : "rgba(245,248,255,0.76)";
+
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+                    ctx.fillStyle = fill;
+                    ctx.fill();
+                    ctx.lineWidth = node?.isCenter ? 2 : 1.4;
+                    ctx.strokeStyle = border;
+                    ctx.stroke();
+
+                    if (node?.isCenter) {
+                      ctx.beginPath();
+                      ctx.arc(node.x, node.y, radius + 7 + centerPulse * 2, 0, 2 * Math.PI, false);
+                      ctx.lineWidth = 1.2;
+                      ctx.strokeStyle = `rgba(210,216,226,${0.22 + centerPulse * 0.2})`;
+                      ctx.stroke();
+                    }
+
+                    if (isAnimating) {
+                      ctx.beginPath();
+                      ctx.arc(node.x, node.y, radius + 6 + centerPulse, 0, 2 * Math.PI, false);
+                      ctx.lineWidth = 1.2;
+                      ctx.strokeStyle = "rgba(255,255,255,0.45)";
+                      ctx.stroke();
+                    }
+
+                    if (!node?.isCenter && node?.type === "user" && graphPerf.particleCount > 0) {
+                      // Alternating pulse: each active node listens to only one particle phase.
+                      const dist = Math.max(1, Math.hypot(Number(node.x) || 0, Number(node.y) || 0));
+                      const travelMs = Math.max(900, Math.min(2300, dist * 7.4));
+                      const seed = String(node.id || "")
+                        .split("")
+                        .reduce((acc, ch) => ((acc * 33) + ch.charCodeAt(0)) % 1000003, 17);
+                      const phase = (((now + seed) % travelMs) / travelMs); // 0..1
+                      const lane = seed % 2; // alternate particle lane by node
+                      const target = lane === 0 ? 0 : 0.5;
+                      const d = Math.abs(phase - target);
+                      const cyc = Math.min(d, 1 - d);
+                      const spike = Math.exp(-(cyc * cyc) / 0.00042);
+                      if (spike > 0.05) {
+                        ctx.beginPath();
+                        ctx.arc(node.x, node.y, radius + 1.5 + spike * 7.5, 0, 2 * Math.PI, false);
+                        ctx.lineWidth = 1.2 + spike * 0.6;
+                        ctx.strokeStyle = `rgba(225,35,55,${0.18 + spike * 0.52})`;
+                        ctx.stroke();
+                      }
+                    }
+                  }}
+                  nodePointerAreaPaint={(node, color, ctx) => {
+                    const radius = getGraphNodeRadius(node);
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, radius + 1, 0, 2 * Math.PI, false);
+                    ctx.fill();
+                  }}
+                  onNodeHover={(node) => {
+                    if (!node || node.isCenter) setHoveredGraphNode(null);
+                    else setHoveredGraphNode(node);
+                  }}
+                  onNodeClick={handleGraphNodeClick}
+                  onEngineStop={captureNodePositions}
+                />
+              ) : (
+                <div className="user-graph-empty">
+                  No roles to display with this filter.
+                </div>
+              )}
+
+              {hoveredGraphNode && forceNodeById[hoveredGraphNode.id] && (() => {
+                const node = forceNodeById[hoveredGraphNode.id];
+                const roles = groupRoleHints[node.group] || [];
+                const freq = peerFrequencyByGroup[node.group];
                 return (
-                  <tr key={g}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleGroup(g)}
-                      />
-                    </td>
-                    <td style={{ color: checked ? "var(--fg)" : "var(--muted)" }}>{g}</td>
-                  </tr>
+                  <div className="user-graph-tooltip user-graph-tooltip--dock">
+                    <div className="user-graph-tooltip__title">{node.group}</div>
+                    <div className="user-graph-tooltip__row">Status: <b>{node.inUser ? "Active" : "Inactive"}</b></div>
+                    <div className="user-graph-tooltip__row">
+                      Business Role: <b>{roles.length ? roles.join(", ") : "None"}</b>
+                    </div>
+                    <div className="user-graph-tooltip__row">
+                      Peer frequency: <b>{freq ? `${Math.round(freq.frequency * 100)}% (${freq.count}/${freq.peers})` : "n/a"}</b>
+                    </div>
+                  </div>
                 );
-              })}
-            </tbody>
-          </table>
+              })()}
+            </div>
+
+            <div className="user-graph-list-card">
+              <div className="user-graph-list-card__title">Roles in graph</div>
+              {graphGroupsList.length > 0 ? (
+                <div className="user-graph-list">
+                  {graphGroupsList.map((g) => (
+                    <div key={g.name} className="user-graph-list__item">
+                      <span className={`user-graph-list__dot ${g.inUser ? "is-user" : "is-role"}`} />
+                      <span className="user-graph-list__name">{g.name}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="user-graph-empty-list">No visible roles.</div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div style={{ height: 12 }} />
@@ -1346,6 +1778,7 @@ function UserDetail() {
             onClick={() => {
               setSelectedRole(user?.businessRole || "Unassigned");
               setSelectedGroups((user?.groups || []).slice().sort());
+              setHoveredGraphNode(null);
               setOk("");
               setErr("");
             }}
