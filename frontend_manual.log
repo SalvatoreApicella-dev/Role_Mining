@@ -48,3 +48,4 @@ Error: connect ECONNREFUSED 127.0.0.1:8000
 6:06:09 PM [vite] hmr update /src/app.jsx, /src/pages/AiDetectionPage.jsx
 6:21:28 PM [vite] hmr update /src/app.jsx
 6:28:53 PM [vite] hmr update /src/app.jsx
+6:37:26 PM [vite] hmr update /src/app.jsx

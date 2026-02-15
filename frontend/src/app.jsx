@@ -831,7 +831,7 @@ function Connettori() {
         Lista per categoria con un solo connettore per target.
       </div>
 
-      <details className="connector-category" open>
+      <details className="connector-category">
         <summary>
           <span>HRIS</span>
         </summary>
@@ -955,7 +955,7 @@ function Connettori() {
         </div>
       </details>
 
-      <details className="connector-category" open>
+      <details className="connector-category">
         <summary>
           <span>IDP</span>
         </summary>
@@ -976,7 +976,7 @@ function Connettori() {
         </div>
       </details>
 
-      <details className="connector-category" open>
+      <details className="connector-category">
         <summary>
           <span>IGA</span>
         </summary>
@@ -1033,7 +1033,7 @@ function Connettori() {
         </div>
       </details>
 
-      <details className="connector-category" open>
+      <details className="connector-category">
         <summary>
           <span>Directories</span>
         </summary>
@@ -1115,7 +1115,7 @@ function Connettori() {
         </div>
       </details>
 
-      <details className="connector-category" open>
+      <details className="connector-category">
         <summary>
           <span>ITSM</span>
         </summary>
@@ -1177,7 +1177,7 @@ function Connettori() {
         </div>
       </details>
 
-      <details className="connector-category" open>
+      <details className="connector-category">
         <summary>
           <span>File-based</span>
         </summary>
