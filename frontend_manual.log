@@ -3,25 +3,19 @@
 > vite --host 0.0.0.0 --port 5173 --strictPort
 
 
-  VITE v5.4.21  ready in 199 ms
+  VITE v5.4.21  ready in 219 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.46:5173/
-9:38:37 PM [vite] http proxy error: /api/me
+12:24:28 AM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:38:37 PM [vite] http proxy error: /api/businessroles
+12:24:28 AM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:38:37 PM [vite] http proxy error: /api/me
+12:24:28 AM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:38:37 PM [vite] http proxy error: /api/businessroles
+12:24:28 AM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-9:57:31 PM [vite] hmr update /src/app.jsx
-9:57:44 PM [vite] hmr update /src/styles.css
-10:19:05 PM [vite] hmr update /src/app.jsx, /src/pages/AiDetectionPage.jsx, /src/pages/AiTrainingPage.jsx
-10:19:18 PM [vite] hmr update /src/app.jsx
-10:19:23 PM [vite] hmr update /src/app.jsx
-10:19:26 PM [vite] hmr update /src/app.jsx

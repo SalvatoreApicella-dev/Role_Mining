@@ -573,6 +573,7 @@ function Connettori() {
     m365_client_id: "",
     m365_client_secret: "",
     m365_users_path: "/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled",
+    connector_provisioning: {},
     discovery_schedules: {},
     discovery_results: {},
   });
@@ -592,6 +593,11 @@ function Connettori() {
   const [discoveryLoadingTarget, setDiscoveryLoadingTarget] = useState("");
   const [provisioningLoadingTarget, setProvisioningLoadingTarget] = useState("");
   const [provisioningMsg, setProvisioningMsg] = useState("");
+  const [sapBulkCount, setSapBulkCount] = useState(100);
+  const [sapBulkGroups, setSapBulkGroups] = useState(20);
+  const [sapBulkDepartment, setSapBulkDepartment] = useState("SAP Bulk Department");
+  const [sapBulkLoading, setSapBulkLoading] = useState(false);
+  const [sapBulkMsg, setSapBulkMsg] = useState("");
   const [scheduleModal, setScheduleModal] = useState({ open: false, target: "" });
   const [resultModal, setResultModal] = useState({ open: false, target: "" });
   const [scheduleForm, setScheduleForm] = useState({
@@ -824,14 +830,31 @@ function Connettori() {
         });
         return;
       }
-      const msg = `Discovery ${connectorLabels[target] || target} salvata. Endpoint Discovery backend da collegare.`;
+      const res = await api.connectorExtract(target, "");
+      const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+      const label = connectorLabels[target] || target;
+      const msg = (
+        `Discovery ${label} completata.` +
+        ` Users: ${n(res?.total_users)}.` +
+        ` Groups: ${n(res?.total_groups)}.` +
+        ` New users: ${n(res?.new_users)}.` +
+        ` Updated users: ${n(res?.updated_users)}.`
+      );
       setCfgStatusMsg(msg);
       await persistDiscoveryResult(target, {
-        status: "pending",
+        status: "ok",
         message: msg,
         source: "manual",
-        summary: {},
-        csv_available: false,
+        summary: {
+          users: n(res?.total_users),
+          groups: n(res?.total_groups),
+          new_users: n(res?.new_users),
+          updated_users: n(res?.updated_users),
+          updated_by_displayname: n(res?.updated_by_displayname),
+          new_groups: n(res?.new_groups),
+          updated_groups: n(res?.updated_groups),
+        },
+        csv_available: true,
       });
     } catch (e) {
       const msg = String(e?.message || e);
@@ -869,6 +892,30 @@ function Connettori() {
       setErr(String(e?.message || e));
     } finally {
       setProvisioningLoadingTarget("");
+    }
+  }
+
+  async function runSapBulkProvision() {
+    setSapBulkLoading(true);
+    try {
+      setErr("");
+      setSapBulkMsg("");
+      await saveCfg("", { silent: true });
+      const out = await api.sapBulkProvision({
+        count: Math.max(1, Number(sapBulkCount) || 100),
+        groups_per_user: Math.max(1, Number(sapBulkGroups) || 20),
+        department: String(sapBulkDepartment || "SAP Bulk Department").trim() || "SAP Bulk Department",
+        business_role: "SAP Bulk Role",
+      });
+      const uploaded = Number(out?.uploaded_users || 0);
+      const failed = Number(out?.failed_users || 0);
+      const generated = Number(out?.generated_users || 0);
+      const msg = `SAP bulk upload completed. Generated: ${generated} | Uploaded: ${uploaded} | Failed: ${failed}`;
+      setSapBulkMsg(msg);
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setSapBulkLoading(false);
     }
   }
 
@@ -1080,10 +1127,41 @@ function Connettori() {
                 aria-label="SAP SuccessFactors Company ID"
               />
             </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input
+                style={{ width: 120 }}
+                type="number"
+                min={1}
+                value={sapBulkCount}
+                onChange={(e) => setSapBulkCount(e.target.value)}
+                placeholder="Users"
+                aria-label="SAP Bulk Users"
+              />
+              <input
+                style={{ width: 140 }}
+                type="number"
+                min={1}
+                value={sapBulkGroups}
+                onChange={(e) => setSapBulkGroups(e.target.value)}
+                placeholder="Groups per user"
+                aria-label="SAP Bulk Groups"
+              />
+              <input
+                style={{ width: 320 }}
+                value={sapBulkDepartment}
+                onChange={(e) => setSapBulkDepartment(e.target.value)}
+                placeholder="Department"
+                aria-label="SAP Bulk Department"
+              />
+              <button className="primary" onClick={runSapBulkProvision} disabled={cfgSaving || sapBulkLoading}>
+                {sapBulkLoading ? "Uploading..." : "Upload Bulk Users"}
+              </button>
+            </div>
             {renderConnectorActions("sap", "Configurazione SAP salvata.")}
             {sapStatusMsg && <div className="ok">{sapStatusMsg}</div>}
+            {sapBulkMsg && <div className="ok">{sapBulkMsg}</div>}
             <div className="connector-loadingbar" aria-hidden="true">
-              <div className={`connector-loadingbar__fill${(sapLoading || cfgSaving) ? " is-active" : ""}`} />
+              <div className={`connector-loadingbar__fill${(sapLoading || cfgSaving || sapBulkLoading) ? " is-active" : ""}`} />
             </div>
           </div>
         </div>
@@ -2407,6 +2485,15 @@ function UserDetail() {
                     if (!node || node.isCenter) return;
                     toggleGroup(node.group);
                   }}
+                  nodePointerAreaPaint={(node, color, ctx) => {
+                    // Keep pointer hit-area aligned with custom canvas radius.
+                    // Center has white core (r=36) + animated halo; keep hit area larger than both.
+                    const pointerRadius = node?.isCenter ? 52 : 13;
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, pointerRadius, 0, 2 * Math.PI, false);
+                    ctx.fill();
+                  }}
                   onRenderFramePre={(ctx) => {
                     // Draw Orbits
                     const ORBIT_RADII = {
@@ -2515,6 +2602,26 @@ function UserDetail() {
 
               {hoveredGraphNode && forceNodeById[hoveredGraphNode.id] && (() => {
                 const node = forceNodeById[hoveredGraphNode.id];
+                const fmt = (v, fallback = "n/a") => {
+                  const s = String(v ?? "").trim();
+                  return s || fallback;
+                };
+
+                if (node?.isCenter) {
+                  const dataSource = fmt(user?.DataSource ?? user?.datasource, "UNKNOWN");
+                  return (
+                    <div className="user-graph-tooltip user-graph-tooltip--dock">
+                      <div className="user-graph-tooltip__title">{fmt(user?.displayName ?? user?.username ?? node?.label, "User")}</div>
+                      <div className="user-graph-tooltip__row">Username: <b>{fmt(user?.username)}</b></div>
+                      <div className="user-graph-tooltip__row">DataSource: <b>{dataSource}</b></div>
+                      <div className="user-graph-tooltip__row">Business Role: <b>{fmt(selectedRole || user?.businessRole, "Unassigned")}</b></div>
+                      <div className="user-graph-tooltip__row">Department: <b>{fmt(user?.department)}</b></div>
+                      <div className="user-graph-tooltip__row">Account Type: <b>{fmt(accountType || user?.accountType)}</b></div>
+                      <div className="user-graph-tooltip__row">Active groups: <b>{Number(selectedGroups?.length || 0)}</b></div>
+                    </div>
+                  );
+                }
+
                 const roles = groupRoleHints[node.group] || [];
                 const freq = peerFrequencyByGroup[node.group];
                 const totalUsers = groupCounts[node.group] || 0;

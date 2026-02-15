@@ -20,11 +20,15 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import base64
+from http.cookiejar import CookieJar
 try:
-    from ldap3 import ALL, NTLM, SIMPLE, Connection, Server, Tls, NONE
+    from ldap3 import ALL, NTLM, SIMPLE, Connection, Server, Tls, NONE, MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
     import ssl
 except Exception:
     Connection = None  # type: ignore
+    MODIFY_ADD = 0  # type: ignore
+    MODIFY_DELETE = 1  # type: ignore
+    MODIFY_REPLACE = 2  # type: ignore
 
 
 APP_TITLE = "Role Mining API"
@@ -1483,6 +1487,83 @@ def stamp_users_datasource(users: List[Dict[str, Any]], source: str) -> List[Dic
     return users
 
 
+def infer_user_datasource(user: Dict[str, Any], fallback_source: str = "") -> str:
+    current = str(user.get("DataSource") or user.get("datasource") or "").strip()
+    if current and current.upper() != "UNKNOWN":
+        return current.upper()
+
+    uname = str(user.get("username") or "").strip().lower()
+    if uname.startswith("sap.") or uname.startswith("sf."):
+        return "SAP"
+    if uname.startswith("ad.") or uname.startswith("ldap."):
+        return "AD"
+    if uname.startswith("azure.") or uname.startswith("aad."):
+        return "AZURE"
+    if uname.startswith("m365.") or uname.startswith("o365."):
+        return "M365"
+    if uname.startswith("snow.") or uname.startswith("servicenow."):
+        return "SERVICENOW"
+    if uname.startswith("sfdc.") or uname.startswith("salesforce."):
+        return "SALESFORCE"
+    if uname.startswith("sail.") or uname.startswith("sailpoint."):
+        return "SAILPOINT"
+    if uname.startswith("sav.") or uname.startswith("saviynt."):
+        return "SAVIYNT"
+    if uname.startswith("oneid.") or uname.startswith("oneidentity."):
+        return "ONE_IDENTITY"
+
+    inferred = datasource_from_source(fallback_source)
+    if inferred and inferred != "UNKNOWN":
+        return inferred
+    return "UNKNOWN"
+
+
+def _ingest_displayname_source_index() -> Dict[str, set[str]]:
+    index: Dict[str, set[str]] = defaultdict(set)
+    ingest_sources = state.get("ingest_sources") or {}
+    for source_key, candidates in ingest_sources.items():
+        datasource = datasource_from_source(str(source_key or ""))
+        if not datasource or datasource == "UNKNOWN":
+            continue
+        for cand in (candidates or []):
+            dn = str((cand or {}).get("displayName") or "").strip().lower()
+            if not dn:
+                continue
+            index[dn].add(datasource)
+    return index
+
+
+def backfill_datasource_in_state(*, persist: bool = True, fallback_source: str = "") -> int:
+    extract_state = state.get("last_extract") or {}
+    users = extract_state.get("users") or []
+    if not users:
+        return 0
+
+    display_index = _ingest_displayname_source_index()
+    changed = 0
+    for user in users:
+        previous = str(user.get("DataSource") or user.get("datasource") or "").strip().upper()
+        inferred = infer_user_datasource(user, fallback_source=fallback_source)
+        if inferred == "UNKNOWN":
+            dn_key = str(user.get("displayName") or "").strip().lower()
+            matches = sorted(display_index.get(dn_key) or [])
+            if len(matches) == 1:
+                inferred = matches[0]
+            elif len(matches) > 1:
+                fallback_ds = datasource_from_source(fallback_source)
+                if fallback_ds in matches:
+                    inferred = fallback_ds
+        if inferred != previous:
+            user["DataSource"] = inferred
+            changed += 1
+
+    if changed and persist:
+        with state.batch():
+            state["last_extract"] = extract_state
+            state["mining_dirty"] = True
+    return changed
+
+
 def _provision_payload_for_user(user: Dict[str, Any], datasource: str) -> Dict[str, Any]:
     # Keep payload canonical so we can hash and detect true changes reliably.
     groups = sorted({str(g).strip() for g in (user.get("groups") or []) if str(g).strip()})
@@ -1530,6 +1611,7 @@ def run_connector_provisioning(target: str, actor: str) -> Dict[str, Any]:
 
     current_snapshot: Dict[str, str] = {}
     changed_usernames: List[str] = []
+    changed_payloads: List[Dict[str, Any]] = []
     for user in users:
         payload = _provision_payload_for_user(user, datasource)
         username = payload["username"]
@@ -1537,14 +1619,35 @@ def run_connector_provisioning(target: str, actor: str) -> Dict[str, Any]:
         current_snapshot[username] = fingerprint
         if previous_snapshot.get(username) != fingerprint:
             changed_usernames.append(username)
+            changed_payloads.append(payload)
 
     removed_usernames = sorted([u for u in previous_snapshot.keys() if u not in current_snapshot])
+    upstream = {
+        "attempted": False,
+        "success": 0,
+        "failed": 0,
+        "errors": [],
+    }
+    upstream = _provision_users_upstream(
+        target=connector,
+        datasource=datasource,
+        changed_payloads=changed_payloads,
+        removed_usernames=removed_usernames,
+        force_enable=False,
+    )
+
     provisioned_at = datetime.now(timezone.utc).isoformat()
     message = (
         f"Provisioned {len(changed_usernames)} changed users and {len(removed_usernames)} removals for {datasource}."
         if changed_usernames or removed_usernames
         else f"No changes to provision for {datasource}."
     )
+    if bool(upstream.get("attempted")):
+        message = (
+            f"{message} "
+            f"Upstream write success={int(upstream.get('success') or 0)} "
+            f"failed={int(upstream.get('failed') or 0)}."
+        )
 
     run_summary = {
         "target": connector,
@@ -1557,6 +1660,10 @@ def run_connector_provisioning(target: str, actor: str) -> Dict[str, Any]:
         "provisioned_at": provisioned_at,
         "by": actor,
         "message": message,
+        "upstream_attempted": bool(upstream.get("attempted")),
+        "upstream_success": int(upstream.get("success") or 0),
+        "upstream_failed": int(upstream.get("failed") or 0),
+        "upstream_errors": list(upstream.get("errors") or [])[:200],
     }
 
     with state.batch():
@@ -1576,6 +1683,10 @@ def run_connector_provisioning(target: str, actor: str) -> Dict[str, Any]:
 
     log("INFO", f"Connector provisioning executed target={connector} datasource={datasource} changed={len(changed_usernames)} removed={len(removed_usernames)} by={actor}")
     return run_summary
+
+
+# Best-effort startup repair for legacy snapshots imported before DataSource support.
+_DATASOURCE_BACKFILL_COUNT = backfill_datasource_in_state(persist=True)
 
 
 def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
@@ -2379,6 +2490,20 @@ class ConnectorConfig(BaseModel):
     sap_oauth_scope: str = Field("", description="OAuth2 scope (opzionale)")
     sap_company_id: str = Field("", description="SuccessFactors company id (opzionale)")
     sap_users_path: str = Field("/sap/opu/odata/sap/ZROLE_MINING_SRV/Users", description="SAP users endpoint path")
+    sap_provision_enabled: bool = Field(True, description="Enable real SAP write provisioning")
+    sap_provision_method: str = Field("POST", description="SAP write method: POST, PUT, PATCH")
+    sap_provision_path: str = Field("", description="SAP write endpoint path (fallback: sap_users_path)")
+    sap_provision_user_path_template: str = Field("", description="Optional per-user write path template, e.g. /odata/v2/User('{username}')")
+    sap_deprovision_enabled: bool = Field(False, description="Enable delete for removed SAP users")
+    sap_deprovision_user_path_template: str = Field("", description="Per-user delete path template, e.g. /odata/v2/User('{username}')")
+    sap_use_csrf_token: bool = Field(True, description="Use x-csrf-token for SAP write calls")
+    sap_provision_username_field: str = Field("username", description="Outbound field name for username")
+    sap_provision_display_name_field: str = Field("displayName", description="Outbound field name for display name")
+    sap_provision_department_field: str = Field("department", description="Outbound field name for department")
+    sap_provision_business_role_field: str = Field("businessRole", description="Outbound field name for business role")
+    sap_provision_groups_field: str = Field("groups", description="Outbound field name for groups")
+    sap_provision_datasource_field: str = Field("DataSource", description="Outbound field name for DataSource")
+    sap_provision_groups_as_csv: bool = Field(False, description="Serialize groups as CSV string instead of list")
     azure_base_url: str = Field("https://graph.microsoft.com", description="Azure Graph base URL")
     azure_tenant_id: str = Field("", description="Azure tenant id")
     azure_client_id: str = Field("", description="Azure app client id")
@@ -2417,6 +2542,7 @@ class ConnectorConfig(BaseModel):
     m365_client_id: str = Field("", description="Microsoft 365 client id")
     m365_client_secret: str = Field("", description="Microsoft 365 client secret")
     m365_users_path: str = Field("/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled", description="Microsoft 365 users query path")
+    connector_provisioning: Dict[str, Any] = Field(default_factory=dict, description="Per-connector upstream provisioning settings")
     discovery_schedules: Dict[str, Any] = Field(default_factory=dict, description="Discovery schedule by connector target")
     discovery_results: Dict[str, Any] = Field(default_factory=dict, description="Last discovery result by connector target")
 
@@ -2451,6 +2577,35 @@ class ConnectorProvisionResponse(BaseModel):
     provisioned_at: str
     by: str
     message: str
+    upstream_attempted: bool = False
+    upstream_success: int = 0
+    upstream_failed: int = 0
+    upstream_errors: List[str] = Field(default_factory=list)
+
+
+class SapBulkProvisionRequest(BaseModel):
+    count: int = Field(100, ge=1, le=5000, description="How many users to create")
+    groups_per_user: int = Field(20, ge=1, le=200, description="How many groups per generated user")
+    department: str = Field("SAP Bulk Department", description="Department to assign to generated users")
+    business_role: str = Field("SAP Bulk Role", description="Business role to assign to generated users")
+    username_prefix: str = Field("sap.bulk", description="Username prefix")
+    display_prefix: str = Field("SAP Bulk User", description="Display name prefix")
+    group_prefix: str = Field("SAP_BULK_GRP", description="Group name prefix")
+    start_index: int = Field(1, ge=1, le=999999, description="Starting index for generated usernames")
+    dry_run: bool = Field(False, description="Generate payloads but skip upstream write")
+
+
+class SapBulkProvisionResponse(BaseModel):
+    requested_users: int
+    generated_users: int
+    groups_per_user: int
+    department: str
+    business_role: str
+    dry_run: bool
+    uploaded_users: int
+    failed_users: int
+    uploaded_usernames: List[str] = Field(default_factory=list)
+    failed_details: List[str] = Field(default_factory=list)
 
 
 class RoleMiningRequest(BaseModel):
@@ -2647,40 +2802,22 @@ def _sap_fetch_oauth_token(cfg: Dict[str, Any]) -> str:
     return token
 
 
-def extract_from_sap(scope: str) -> List[Dict[str, Any]]:
-    cfg = state.get("connector", {}) or {}
-    sap_base_url = str(cfg.get("sap_base_url") or "").strip()
+def _sap_has_oauth_credentials(cfg: Dict[str, Any]) -> bool:
+    return bool(
+        str(cfg.get("sap_token_url") or "").strip()
+        and str(cfg.get("sap_client_id") or "").strip()
+        and str(cfg.get("sap_client_secret") or "").strip()
+    )
+
+
+def _sap_build_auth_headers(cfg: Dict[str, Any]) -> Dict[str, str]:
     sap_auth_mode = str(cfg.get("sap_auth_mode") or "AUTO").strip().upper()
     sap_username = str(cfg.get("sap_username") or "").strip()
     sap_password = str(cfg.get("sap_password") or "").strip()
     sap_api_key = str(cfg.get("sap_api_key") or "").strip()
-    sap_client = str(cfg.get("sap_client") or "").strip()
-    sap_system = str(cfg.get("sap_system") or "").strip()
-    sap_users_path = str(cfg.get("sap_users_path") or "/sap/opu/odata/sap/ZROLE_MINING_SRV/Users").strip()
+    sap_has_oauth = _sap_has_oauth_credentials(cfg)
 
-    sap_has_oauth = bool(str(cfg.get("sap_token_url") or "").strip() and str(cfg.get("sap_client_id") or "").strip() and str(cfg.get("sap_client_secret") or "").strip())
-
-    if not sap_base_url and not sap_username and not sap_password and not sap_api_key and not sap_has_oauth:
-        raise HTTPException(
-            status_code=400,
-            detail="Connettore SAP non configurato: imposta SAP Base URL e credenziali reali in Connettori",
-        )
-
-    if not sap_base_url:
-        raise HTTPException(status_code=400, detail="Configura sap_base_url in Connettori")
-
-    base = sap_base_url.rstrip("/")
-    path = sap_users_path if sap_users_path.startswith("/") else f"/{sap_users_path}"
-    query: Dict[str, str] = {}
-    if sap_client:
-        query["sap-client"] = sap_client
-    query["$format"] = "json"
-    qs = urllib.parse.urlencode(query)
-    url = f"{base}{path}"
-    if qs:
-        url = f"{url}?{qs}"
-
-    headers = {
+    headers: Dict[str, str] = {
         "Accept": "application/json",
         "User-Agent": "RoleMining/1.0",
     }
@@ -2710,23 +2847,108 @@ def extract_from_sap(scope: str) -> List[Dict[str, Any]]:
             headers["Authorization"] = f"Basic {auth_blob}"
         else:
             raise HTTPException(status_code=400, detail="Configura credenziali SAP (API key, OAuth2 o Basic)")
-    req = urllib.request.Request(
-        url,
-        headers=headers,
-        method="GET",
-    )
+    return headers
 
-    log("INFO", f"SAP extract call system={sap_system or 'N/A'} client={sap_client or 'N/A'} scope={scope or 'N/A'} endpoint={path}")
+
+def _sap_build_url(cfg: Dict[str, Any], path: str, query: Optional[Dict[str, str]] = None) -> str:
+    sap_base_url = str(cfg.get("sap_base_url") or "").strip()
+    if not sap_base_url:
+        raise HTTPException(status_code=400, detail="Configura sap_base_url in Connettori")
+    base = sap_base_url.rstrip("/")
+    norm_path = path if str(path or "").startswith("/") else f"/{str(path or '').strip()}"
+    norm_path = norm_path if norm_path != "/" else ""
+    merged_query: Dict[str, str] = {}
+    sap_client = str(cfg.get("sap_client") or "").strip()
+    if sap_client:
+        merged_query["sap-client"] = sap_client
+    for key, value in (query or {}).items():
+        if value is None:
+            continue
+        txt = str(value).strip()
+        if txt:
+            merged_query[str(key)] = txt
+    qs = urllib.parse.urlencode(merged_query)
+    if qs:
+        return f"{base}{norm_path}?{qs}"
+    return f"{base}{norm_path}"
+
+
+def _sap_request(
+    cfg: Dict[str, Any],
+    *,
+    method: str,
+    path: str,
+    payload: Optional[Dict[str, Any]] = None,
+    query: Optional[Dict[str, str]] = None,
+    use_csrf_token: bool = False,
+) -> Tuple[int, str]:
+    method_upper = str(method or "GET").strip().upper() or "GET"
+    url = _sap_build_url(cfg, path, query=query)
+    headers = _sap_build_auth_headers(cfg)
+    data: Optional[bytes] = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    opener = None
+    if use_csrf_token and method_upper in {"POST", "PUT", "PATCH", "DELETE"}:
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
+        csrf_headers = dict(headers)
+        csrf_headers["x-csrf-token"] = "Fetch"
+        csrf_req = urllib.request.Request(url, headers=csrf_headers, method="GET")
+        try:
+            with opener.open(csrf_req, timeout=30) as csrf_resp:
+                token = str(csrf_resp.headers.get("x-csrf-token") or "").strip()
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")[:500]
+            raise HTTPException(status_code=502, detail=f"SAP CSRF token HTTP {e.code}: {detail or 'errore upstream'}")
+        except urllib.error.URLError as e:
+            raise HTTPException(status_code=503, detail=f"SAP CSRF endpoint non raggiungibile: {e.reason}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Errore fetch CSRF SAP: {e}")
+        if token:
+            headers["x-csrf-token"] = token
+
+    req = urllib.request.Request(url, headers=headers, data=data, method=method_upper)
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
+        if opener is not None:
+            with opener.open(req, timeout=30) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                status_code = int(getattr(resp, "status", 200) or 200)
+        else:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                status_code = int(getattr(resp, "status", 200) or 200)
+        return status_code, raw
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")[:500]
         raise HTTPException(status_code=502, detail=f"SAP API HTTP {e.code}: {detail or 'errore upstream'}")
     except urllib.error.URLError as e:
         raise HTTPException(status_code=503, detail=f"SAP API non raggiungibile: {e.reason}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore SAP extract: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore SAP API: {e}")
+
+
+def extract_from_sap(scope: str) -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    sap_system = str(cfg.get("sap_system") or "").strip()
+    sap_users_path = str(cfg.get("sap_users_path") or "/sap/opu/odata/sap/ZROLE_MINING_SRV/Users").strip()
+    sap_has_oauth = _sap_has_oauth_credentials(cfg)
+    sap_base_url = str(cfg.get("sap_base_url") or "").strip()
+    sap_username = str(cfg.get("sap_username") or "").strip()
+    sap_password = str(cfg.get("sap_password") or "").strip()
+    sap_api_key = str(cfg.get("sap_api_key") or "").strip()
+
+    if not sap_base_url and not sap_username and not sap_password and not sap_api_key and not sap_has_oauth:
+        raise HTTPException(
+            status_code=400,
+            detail="Connettore SAP non configurato: imposta SAP Base URL e credenziali reali in Connettori",
+        )
+
+    path = sap_users_path if sap_users_path.startswith("/") else f"/{sap_users_path}"
+    sap_client = str(cfg.get("sap_client") or "").strip()
+    log("INFO", f"SAP extract call system={sap_system or 'N/A'} client={sap_client or 'N/A'} scope={scope or 'N/A'} endpoint={path}")
+    _, raw = _sap_request(cfg, method="GET", path=path, query={"$format": "json"}, use_csrf_token=False)
 
     try:
         payload = json.loads(raw)
@@ -2737,6 +2959,1137 @@ def extract_from_sap(scope: str) -> List[Dict[str, Any]]:
     if not users:
         raise HTTPException(status_code=502, detail="SAP API raggiunta ma nessun utente valido trovato")
     return users
+
+
+def _sap_apply_user_path_template(path_template: str, username: str) -> str:
+    template = str(path_template or "").strip()
+    if not template:
+        return ""
+    if "{username}" in template:
+        return template.replace("{username}", urllib.parse.quote(str(username or "").strip(), safe=""))
+    return template
+
+
+def _sap_build_provision_payload(user_payload: Dict[str, Any], datasource: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
+    groups = sorted({str(g).strip() for g in (user_payload.get("groups") or []) if str(g).strip()})
+    groups_value: Any = ",".join(groups) if bool(cfg.get("sap_provision_groups_as_csv")) else groups
+
+    mappings = [
+        (cfg.get("sap_provision_username_field"), user_payload.get("username")),
+        (cfg.get("sap_provision_display_name_field"), user_payload.get("displayName")),
+        (cfg.get("sap_provision_department_field"), user_payload.get("department")),
+        (cfg.get("sap_provision_business_role_field"), user_payload.get("businessRole")),
+        (cfg.get("sap_provision_groups_field"), groups_value),
+        (cfg.get("sap_provision_datasource_field"), datasource),
+    ]
+
+    payload: Dict[str, Any] = {}
+    for field_name, value in mappings:
+        key = str(field_name or "").strip()
+        if not key:
+            continue
+        payload[key] = value
+    return payload
+
+
+def _sap_provision_users_upstream(
+    *,
+    datasource: str,
+    changed_payloads: List[Dict[str, Any]],
+    removed_usernames: List[str],
+    force_enable: bool = False,
+) -> Dict[str, Any]:
+    cfg = state.get("connector", {}) or {}
+    enabled = bool(cfg.get("sap_provision_enabled", True))
+    if not enabled and not force_enable:
+        return {
+            "attempted": False,
+            "success": 0,
+            "failed": 0,
+            "errors": [],
+            "uploaded_usernames": [],
+            "message": "SAP upstream provisioning is disabled in connector settings.",
+        }
+
+    method = str(cfg.get("sap_provision_method") or "POST").strip().upper() or "POST"
+    if method not in {"POST", "PUT", "PATCH"}:
+        raise HTTPException(status_code=400, detail="sap_provision_method must be POST, PUT or PATCH")
+    default_path = str(cfg.get("sap_provision_path") or cfg.get("sap_users_path") or "").strip()
+    if not default_path:
+        raise HTTPException(status_code=400, detail="Configura sap_provision_path oppure sap_users_path")
+
+    user_path_template = str(cfg.get("sap_provision_user_path_template") or "").strip()
+    deprovision_enabled = bool(cfg.get("sap_deprovision_enabled"))
+    deprovision_template = str(cfg.get("sap_deprovision_user_path_template") or "").strip()
+    use_csrf = bool(cfg.get("sap_use_csrf_token", True))
+
+    success = 0
+    failed = 0
+    uploaded_usernames: List[str] = []
+    errors: List[str] = []
+
+    for payload in (changed_payloads or []):
+        username = str(payload.get("username") or "").strip()
+        if not username:
+            failed += 1
+            errors.append("Missing username in provisioning payload")
+            continue
+        path = _sap_apply_user_path_template(user_path_template, username) or default_path
+        outbound_payload = _sap_build_provision_payload(payload, datasource, cfg)
+        try:
+            _sap_request(
+                cfg,
+                method=method,
+                path=path,
+                payload=outbound_payload,
+                query={"$format": "json"},
+                use_csrf_token=use_csrf,
+            )
+            success += 1
+            uploaded_usernames.append(username)
+        except HTTPException as exc:
+            failed += 1
+            errors.append(f"{username}: {exc.detail}")
+        except Exception as exc:
+            failed += 1
+            errors.append(f"{username}: {exc}")
+
+    if deprovision_enabled and deprovision_template:
+        for username in (removed_usernames or []):
+            path = _sap_apply_user_path_template(deprovision_template, username)
+            if not path:
+                failed += 1
+                errors.append(f"{username}: missing deprovision path template")
+                continue
+            try:
+                _sap_request(
+                    cfg,
+                    method="DELETE",
+                    path=path,
+                    query={"$format": "json"},
+                    use_csrf_token=use_csrf,
+                )
+                success += 1
+            except HTTPException as exc:
+                failed += 1
+                errors.append(f"{username} (delete): {exc.detail}")
+            except Exception as exc:
+                failed += 1
+                errors.append(f"{username} (delete): {exc}")
+
+    return {
+        "attempted": bool(changed_payloads or (deprovision_enabled and removed_usernames)),
+        "success": success,
+        "failed": failed,
+        "errors": errors[:200],
+        "uploaded_usernames": uploaded_usernames[:500],
+        "message": f"SAP upstream write success={success} failed={failed}.",
+    }
+
+
+def _generate_sap_bulk_users(req: SapBulkProvisionRequest) -> List[Dict[str, Any]]:
+    count = int(req.count)
+    groups_per_user = int(req.groups_per_user)
+    start_index = int(req.start_index)
+    group_pool_size = max(groups_per_user, 100)
+    group_pool = [f"{req.group_prefix}_{idx:03d}" for idx in range(1, group_pool_size + 1)]
+
+    users: List[Dict[str, Any]] = []
+    for offset in range(count):
+        absolute = start_index + offset
+        username = f"{req.username_prefix}.{absolute:04d}"
+        display_name = f"{req.display_prefix} {absolute:04d}"
+        base_idx = absolute % group_pool_size
+        groups = [group_pool[(base_idx + j) % group_pool_size] for j in range(groups_per_user)]
+        users.append(
+            {
+                "username": username,
+                "displayName": display_name,
+                "department": req.department,
+                "businessRole": req.business_role,
+                "accountType": "Internal",
+                "groups": sorted(set(groups)),
+                "DataSource": "SAP",
+            }
+        )
+    return users
+
+
+def _connector_pick(entry: Dict[str, Any], keys: List[str], default: Any = "") -> Any:
+    for key in keys:
+        if key in entry and entry.get(key) not in (None, ""):
+            return entry.get(key)
+        for k2, v2 in entry.items():
+            if str(k2).lower() == key.lower() and v2 not in (None, ""):
+                return v2
+    return default
+
+
+def _connector_parse_groups(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, dict):
+        for k in ("value", "results", "items", "roles", "groups", "entitlements"):
+            if isinstance(raw.get(k), list):
+                return _connector_parse_groups(raw.get(k))
+        txt = str(raw.get("name") or raw.get("displayName") or raw.get("value") or "").strip()
+        return [txt] if txt else []
+    if isinstance(raw, list):
+        out: List[str] = []
+        for item in raw:
+            if isinstance(item, dict):
+                txt = str(
+                    item.get("displayName")
+                    or item.get("name")
+                    or item.get("value")
+                    or item.get("role")
+                    or item.get("entitlement")
+                    or item.get("id")
+                    or ""
+                ).strip()
+                if txt:
+                    out.append(txt)
+            else:
+                txt = str(item or "").strip()
+                if txt:
+                    out.append(txt)
+        return sorted(set(out))
+    txt = str(raw or "").strip()
+    if not txt:
+        return []
+    return sorted(set([p.strip() for p in re.split(r"[;,|]", txt) if p and p.strip()]))
+
+
+def _connector_rows(payload: Any) -> List[Dict[str, Any]]:
+    if isinstance(payload, list):
+        return [x for x in payload if isinstance(x, dict)]
+    if not isinstance(payload, dict):
+        return []
+    if isinstance(payload.get("value"), list):  # OData v4
+        return [x for x in (payload.get("value") or []) if isinstance(x, dict)]
+    if isinstance(payload.get("d"), dict) and isinstance((payload.get("d") or {}).get("results"), list):  # OData v2
+        return [x for x in ((payload.get("d") or {}).get("results") or []) if isinstance(x, dict)]
+    for key in ("users", "results", "result", "items", "resources", "Resources", "data", "records"):
+        if isinstance(payload.get(key), list):
+            return [x for x in (payload.get(key) or []) if isinstance(x, dict)]
+    if isinstance(payload.get("data"), dict):
+        nested = payload.get("data") or {}
+        for key in ("users", "results", "items", "records"):
+            if isinstance(nested.get(key), list):
+                return [x for x in (nested.get(key) or []) if isinstance(x, dict)]
+    # Last-resort: single-object payload
+    return [payload]
+
+
+def _normalize_connector_users(payload: Any) -> List[Dict[str, Any]]:
+    users: List[Dict[str, Any]] = []
+    for row in _connector_rows(payload):
+        username = str(
+            _connector_pick(
+                row,
+                [
+                    "username",
+                    "userName",
+                    "user_name",
+                    "samAccountName",
+                    "sAMAccountName",
+                    "userPrincipalName",
+                    "upn",
+                    "login",
+                    "uid",
+                    "id",
+                    "Id",
+                ],
+                "",
+            )
+        ).strip()
+        display_name = str(_connector_pick(row, ["displayName", "DisplayName", "name", "fullName"], username)).strip()
+        department = str(_connector_pick(row, ["department", "Department", "dept", "orgUnit", "organization"], "")).strip()
+        business_role = str(_connector_pick(row, ["businessRole", "BusinessRole", "jobRole", "jobTitle", "title", "role"], "")).strip()
+        account_type = str(_connector_pick(row, ["accountType", "AccountType", "userType", "type", "employeeType"], "")).strip()
+        last_login = str(_connector_pick(row, ["lastLogin", "LastLogin", "last_logon", "lastLogon", "last_login"], "")).strip()
+        email = str(_connector_pick(row, ["email", "mail", "Email"], "")).strip().lower()
+        upn = str(_connector_pick(row, ["upn", "userPrincipalName", "UPN"], "")).strip().lower()
+        employee_id = str(_connector_pick(row, ["employeeId", "employee_id", "EmployeeId"], "")).strip()
+        manager = str(_connector_pick(row, ["manager", "Manager", "managerName"], "")).strip()
+        raw_groups = _connector_pick(
+            row,
+            ["groups", "Groups", "roles", "Roles", "entitlements", "permissions", "authorizations"],
+            [],
+        )
+        groups = _connector_parse_groups(raw_groups)
+
+        # Try deriving username from email/upn if source uses email-based identity.
+        if not username:
+            candidate = upn or email
+            if candidate:
+                username = candidate.split("@")[0]
+        if not username:
+            continue
+
+        users.append(
+            {
+                "username": username,
+                "displayName": display_name or username,
+                "department": department or "Unknown",
+                "businessRole": business_role or "Unassigned",
+                "accountType": account_type,
+                "lastLogin": last_login,
+                "groups": groups,
+                "email": email or None,
+                "upn": upn or None,
+                "employeeId": employee_id or None,
+                "manager": manager or None,
+            }
+        )
+    return users
+
+
+def _connector_url(base_url: str, path: str) -> str:
+    base = str(base_url or "").strip().rstrip("/")
+    if not base:
+        raise HTTPException(status_code=400, detail="Base URL connettore non configurato")
+    p = str(path or "").strip()
+    if not p:
+        p = "/"
+    if p.startswith("http://") or p.startswith("https://"):
+        return p
+    if not p.startswith("/"):
+        p = f"/{p}"
+    return f"{base}{p}"
+
+
+def _http_raw_request(
+    url: str,
+    *,
+    headers: Optional[Dict[str, str]] = None,
+    method: str = "GET",
+    body: Optional[bytes] = None,
+    timeout: int = 30,
+    error_prefix: str = "Connector API",
+) -> Tuple[int, str]:
+    req = urllib.request.Request(url, headers=headers or {}, data=body, method=method.upper())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            status_code = int(getattr(resp, "status", 200) or 200)
+            return status_code, raw
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")[:500]
+        raise HTTPException(status_code=502, detail=f"{error_prefix} HTTP {e.code}: {detail or 'errore upstream'}")
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=503, detail=f"{error_prefix} non raggiungibile: {e.reason}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{error_prefix} errore: {e}")
+
+
+def _http_json_request(url: str, *, headers: Optional[Dict[str, str]] = None, method: str = "GET", body: Optional[bytes] = None, timeout: int = 30, error_prefix: str = "Connector API") -> Any:
+    _, raw = _http_raw_request(
+        url,
+        headers=headers,
+        method=method,
+        body=body,
+        timeout=timeout,
+        error_prefix=error_prefix,
+    )
+    try:
+        return json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=502, detail=f"{error_prefix} risposta non JSON")
+
+
+def _oauth_client_credentials_token(
+    *,
+    token_url: str,
+    client_id: str,
+    client_secret: str,
+    scope: str = "",
+    extra_fields: Optional[Dict[str, str]] = None,
+    error_prefix: str = "OAuth token",
+) -> Dict[str, Any]:
+    if not token_url:
+        raise HTTPException(status_code=400, detail=f"{error_prefix}: token_url mancante")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=400, detail=f"{error_prefix}: client_id/client_secret mancanti")
+
+    form = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
+    if scope:
+        form["scope"] = scope
+    for k, v in (extra_fields or {}).items():
+        if v:
+            form[str(k)] = str(v)
+
+    data = urllib.parse.urlencode(form).encode("utf-8")
+    basic_blob = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("ascii")
+    payload = _http_json_request(
+        token_url,
+        method="POST",
+        body=data,
+        headers={
+            "Authorization": f"Basic {basic_blob}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "RoleMining/1.0",
+        },
+        error_prefix=error_prefix,
+    )
+    token = str((payload or {}).get("access_token") or "").strip()
+    if not token:
+        raise HTTPException(status_code=502, detail=f"{error_prefix}: access_token mancante")
+    return payload
+
+
+def _extract_http_connector_users(
+    *,
+    target: str,
+    base_url: str,
+    users_path: str,
+    auth_headers: Optional[Dict[str, str]] = None,
+    query: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    url = _connector_url(base_url, users_path)
+    if query:
+        parsed = urllib.parse.urlsplit(url)
+        current_q = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+        current_q.update({k: v for k, v in query.items() if v is not None and str(v) != ""})
+        merged_q = urllib.parse.urlencode(current_q, doseq=True)
+        url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, merged_q, parsed.fragment))
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "RoleMining/1.0",
+    }
+    headers.update(auth_headers or {})
+    payload = _http_json_request(url, headers=headers, error_prefix=f"{target} API")
+    users = _normalize_connector_users(payload)
+    if not users:
+        raise HTTPException(status_code=502, detail=f"{target} API raggiunta ma nessun utente valido trovato")
+    return users
+
+
+def extract_from_azure(scope: str = "") -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    base_url = str(cfg.get("azure_base_url") or "").strip()
+    users_path = str(cfg.get("azure_users_path") or "").strip()
+    tenant_id = str(cfg.get("azure_tenant_id") or "").strip()
+    client_id = str(cfg.get("azure_client_id") or "").strip()
+    client_secret = str(cfg.get("azure_client_secret") or "").strip()
+    if not (base_url and users_path and tenant_id and client_id and client_secret):
+        raise HTTPException(status_code=400, detail="Configura Azure AD: base_url, users_path, tenant_id, client_id, client_secret")
+
+    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    scope_value = f"{base_url.rstrip('/')}/.default"
+    token_payload = _oauth_client_credentials_token(
+        token_url=token_url,
+        client_id=client_id,
+        client_secret=client_secret,
+        scope=scope_value,
+        error_prefix="Azure OAuth token",
+    )
+    token = str(token_payload.get("access_token") or "").strip()
+    return _extract_http_connector_users(
+        target="Azure",
+        base_url=base_url,
+        users_path=users_path,
+        auth_headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+def extract_from_m365(scope: str = "") -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    base_url = str(cfg.get("m365_base_url") or "").strip()
+    users_path = str(cfg.get("m365_users_path") or "").strip()
+    tenant_id = str(cfg.get("m365_tenant_id") or "").strip()
+    client_id = str(cfg.get("m365_client_id") or "").strip()
+    client_secret = str(cfg.get("m365_client_secret") or "").strip()
+    if not (base_url and users_path and tenant_id and client_id and client_secret):
+        raise HTTPException(status_code=400, detail="Configura Microsoft 365: base_url, users_path, tenant_id, client_id, client_secret")
+
+    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    scope_value = f"{base_url.rstrip('/')}/.default"
+    token_payload = _oauth_client_credentials_token(
+        token_url=token_url,
+        client_id=client_id,
+        client_secret=client_secret,
+        scope=scope_value,
+        error_prefix="M365 OAuth token",
+    )
+    token = str(token_payload.get("access_token") or "").strip()
+    return _extract_http_connector_users(
+        target="M365",
+        base_url=base_url,
+        users_path=users_path,
+        auth_headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+def extract_from_one_identity(scope: str = "") -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    base_url = str(cfg.get("one_identity_base_url") or "").strip()
+    users_path = str(cfg.get("one_identity_users_path") or "").strip()
+    token_url = str(cfg.get("one_identity_token_url") or "").strip()
+    client_id = str(cfg.get("one_identity_client_id") or "").strip()
+    client_secret = str(cfg.get("one_identity_client_secret") or "").strip()
+    username = str(cfg.get("one_identity_username") or "").strip()
+    password = str(cfg.get("one_identity_password") or "").strip()
+    if not (base_url and users_path):
+        raise HTTPException(status_code=400, detail="Configura One Identity: base_url e users_path")
+
+    headers: Dict[str, str] = {}
+    if token_url and client_id and client_secret:
+        token_payload = _oauth_client_credentials_token(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            error_prefix="One Identity OAuth token",
+        )
+        headers["Authorization"] = f"Bearer {str(token_payload.get('access_token') or '').strip()}"
+    elif username and password:
+        auth_blob = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {auth_blob}"
+    return _extract_http_connector_users(target="One Identity", base_url=base_url, users_path=users_path, auth_headers=headers)
+
+
+def extract_from_sailpoint(scope: str = "") -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    base_url = str(cfg.get("sailpoint_base_url") or "").strip()
+    users_path = str(cfg.get("sailpoint_users_path") or "").strip()
+    token_url = str(cfg.get("sailpoint_token_url") or "").strip()
+    client_id = str(cfg.get("sailpoint_client_id") or "").strip()
+    client_secret = str(cfg.get("sailpoint_client_secret") or "").strip()
+    if not (base_url and users_path):
+        raise HTTPException(status_code=400, detail="Configura SailPoint: base_url e users_path")
+    if not token_url:
+        # Common default for IdentityNow API base
+        token_url = f"{base_url.rstrip('/').rsplit('/v3', 1)[0]}/oauth/token"
+    token_payload = _oauth_client_credentials_token(
+        token_url=token_url,
+        client_id=client_id,
+        client_secret=client_secret,
+        error_prefix="SailPoint OAuth token",
+    )
+    token = str(token_payload.get("access_token") or "").strip()
+    return _extract_http_connector_users(
+        target="SailPoint",
+        base_url=base_url,
+        users_path=users_path,
+        auth_headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+def extract_from_saviynt(scope: str = "") -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    base_url = str(cfg.get("saviynt_base_url") or "").strip()
+    users_path = str(cfg.get("saviynt_users_path") or "").strip()
+    token_url = str(cfg.get("saviynt_token_url") or "").strip()
+    client_id = str(cfg.get("saviynt_client_id") or "").strip()
+    client_secret = str(cfg.get("saviynt_client_secret") or "").strip()
+    username = str(cfg.get("saviynt_username") or "").strip()
+    password = str(cfg.get("saviynt_password") or "").strip()
+    if not (base_url and users_path):
+        raise HTTPException(status_code=400, detail="Configura Saviynt: base_url e users_path")
+
+    headers: Dict[str, str] = {}
+    if token_url and client_id and client_secret:
+        token_payload = _oauth_client_credentials_token(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            error_prefix="Saviynt OAuth token",
+        )
+        headers["Authorization"] = f"Bearer {str(token_payload.get('access_token') or '').strip()}"
+    elif username and password:
+        auth_blob = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {auth_blob}"
+    return _extract_http_connector_users(target="Saviynt", base_url=base_url, users_path=users_path, auth_headers=headers)
+
+
+def extract_from_servicenow(scope: str = "") -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    base_url = str(cfg.get("servicenow_base_url") or "").strip()
+    users_path = str(cfg.get("servicenow_users_path") or "").strip()
+    username = str(cfg.get("servicenow_username") or "").strip()
+    password = str(cfg.get("servicenow_password") or "").strip()
+    if not (base_url and users_path and username and password):
+        raise HTTPException(status_code=400, detail="Configura ServiceNow: base_url, users_path, username, password")
+
+    auth_blob = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    return _extract_http_connector_users(
+        target="ServiceNow",
+        base_url=base_url,
+        users_path=users_path,
+        auth_headers={"Authorization": f"Basic {auth_blob}"},
+    )
+
+
+def extract_from_salesforce(scope: str = "") -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    base_url_cfg = str(cfg.get("salesforce_base_url") or "").strip()
+    users_path = str(cfg.get("salesforce_users_path") or "").strip()
+    token_url = str(cfg.get("salesforce_token_url") or "").strip()
+    client_id = str(cfg.get("salesforce_client_id") or "").strip()
+    client_secret = str(cfg.get("salesforce_client_secret") or "").strip()
+    if not users_path:
+        raise HTTPException(status_code=400, detail="Configura salesforce_users_path")
+
+    token_payload = _oauth_client_credentials_token(
+        token_url=token_url,
+        client_id=client_id,
+        client_secret=client_secret,
+        error_prefix="Salesforce OAuth token",
+    )
+    token = str(token_payload.get("access_token") or "").strip()
+    instance_url = str(token_payload.get("instance_url") or "").strip()
+    base_url = base_url_cfg or instance_url
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Configura salesforce_base_url o usa un token response con instance_url")
+    return _extract_http_connector_users(
+        target="Salesforce",
+        base_url=base_url,
+        users_path=users_path,
+        auth_headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+CONNECTOR_EXTRACTORS = {
+    "azure": extract_from_azure,
+    "m365": extract_from_m365,
+    "one_identity": extract_from_one_identity,
+    "sailpoint": extract_from_sailpoint,
+    "saviynt": extract_from_saviynt,
+    "servicenow": extract_from_servicenow,
+    "salesforce": extract_from_salesforce,
+}
+
+
+HTTP_UPSTREAM_CONNECTORS = set(CONNECTOR_EXTRACTORS.keys())
+
+
+def _connector_upstream_auth_and_base(target: str, cfg: Dict[str, Any]) -> Tuple[str, str, Dict[str, str]]:
+    connector = normalize_connector_target(target)
+    if connector == "azure":
+        base_url = str(cfg.get("azure_base_url") or "").strip()
+        users_path = str(cfg.get("azure_users_path") or "").strip()
+        tenant_id = str(cfg.get("azure_tenant_id") or "").strip()
+        client_id = str(cfg.get("azure_client_id") or "").strip()
+        client_secret = str(cfg.get("azure_client_secret") or "").strip()
+        if not (base_url and users_path and tenant_id and client_id and client_secret):
+            raise HTTPException(status_code=400, detail="Configura Azure AD per provisioning: base_url, users_path, tenant_id, client_id, client_secret")
+        token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+        scope_value = f"{base_url.rstrip('/')}/.default"
+        token_payload = _oauth_client_credentials_token(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            scope=scope_value,
+            error_prefix="Azure OAuth token",
+        )
+        token = str(token_payload.get("access_token") or "").strip()
+        return base_url, users_path, {"Authorization": f"Bearer {token}"}
+    if connector == "m365":
+        base_url = str(cfg.get("m365_base_url") or "").strip()
+        users_path = str(cfg.get("m365_users_path") or "").strip()
+        tenant_id = str(cfg.get("m365_tenant_id") or "").strip()
+        client_id = str(cfg.get("m365_client_id") or "").strip()
+        client_secret = str(cfg.get("m365_client_secret") or "").strip()
+        if not (base_url and users_path and tenant_id and client_id and client_secret):
+            raise HTTPException(status_code=400, detail="Configura Microsoft 365 per provisioning: base_url, users_path, tenant_id, client_id, client_secret")
+        token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+        scope_value = f"{base_url.rstrip('/')}/.default"
+        token_payload = _oauth_client_credentials_token(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            scope=scope_value,
+            error_prefix="M365 OAuth token",
+        )
+        token = str(token_payload.get("access_token") or "").strip()
+        return base_url, users_path, {"Authorization": f"Bearer {token}"}
+    if connector == "one_identity":
+        base_url = str(cfg.get("one_identity_base_url") or "").strip()
+        users_path = str(cfg.get("one_identity_users_path") or "").strip()
+        token_url = str(cfg.get("one_identity_token_url") or "").strip()
+        client_id = str(cfg.get("one_identity_client_id") or "").strip()
+        client_secret = str(cfg.get("one_identity_client_secret") or "").strip()
+        username = str(cfg.get("one_identity_username") or "").strip()
+        password = str(cfg.get("one_identity_password") or "").strip()
+        if not (base_url and users_path):
+            raise HTTPException(status_code=400, detail="Configura One Identity per provisioning: base_url e users_path")
+        headers: Dict[str, str] = {}
+        if token_url and client_id and client_secret:
+            token_payload = _oauth_client_credentials_token(
+                token_url=token_url,
+                client_id=client_id,
+                client_secret=client_secret,
+                error_prefix="One Identity OAuth token",
+            )
+            headers["Authorization"] = f"Bearer {str(token_payload.get('access_token') or '').strip()}"
+        elif username and password:
+            auth_blob = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+            headers["Authorization"] = f"Basic {auth_blob}"
+        return base_url, users_path, headers
+    if connector == "sailpoint":
+        base_url = str(cfg.get("sailpoint_base_url") or "").strip()
+        users_path = str(cfg.get("sailpoint_users_path") or "").strip()
+        token_url = str(cfg.get("sailpoint_token_url") or "").strip()
+        client_id = str(cfg.get("sailpoint_client_id") or "").strip()
+        client_secret = str(cfg.get("sailpoint_client_secret") or "").strip()
+        if not (base_url and users_path):
+            raise HTTPException(status_code=400, detail="Configura SailPoint per provisioning: base_url e users_path")
+        if not token_url:
+            token_url = f"{base_url.rstrip('/').rsplit('/v3', 1)[0]}/oauth/token"
+        token_payload = _oauth_client_credentials_token(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            error_prefix="SailPoint OAuth token",
+        )
+        token = str(token_payload.get("access_token") or "").strip()
+        return base_url, users_path, {"Authorization": f"Bearer {token}"}
+    if connector == "saviynt":
+        base_url = str(cfg.get("saviynt_base_url") or "").strip()
+        users_path = str(cfg.get("saviynt_users_path") or "").strip()
+        token_url = str(cfg.get("saviynt_token_url") or "").strip()
+        client_id = str(cfg.get("saviynt_client_id") or "").strip()
+        client_secret = str(cfg.get("saviynt_client_secret") or "").strip()
+        username = str(cfg.get("saviynt_username") or "").strip()
+        password = str(cfg.get("saviynt_password") or "").strip()
+        if not (base_url and users_path):
+            raise HTTPException(status_code=400, detail="Configura Saviynt per provisioning: base_url e users_path")
+        headers: Dict[str, str] = {}
+        if token_url and client_id and client_secret:
+            token_payload = _oauth_client_credentials_token(
+                token_url=token_url,
+                client_id=client_id,
+                client_secret=client_secret,
+                error_prefix="Saviynt OAuth token",
+            )
+            headers["Authorization"] = f"Bearer {str(token_payload.get('access_token') or '').strip()}"
+        elif username and password:
+            auth_blob = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+            headers["Authorization"] = f"Basic {auth_blob}"
+        return base_url, users_path, headers
+    if connector == "servicenow":
+        base_url = str(cfg.get("servicenow_base_url") or "").strip()
+        users_path = str(cfg.get("servicenow_users_path") or "").strip()
+        username = str(cfg.get("servicenow_username") or "").strip()
+        password = str(cfg.get("servicenow_password") or "").strip()
+        if not (base_url and users_path and username and password):
+            raise HTTPException(status_code=400, detail="Configura ServiceNow per provisioning: base_url, users_path, username, password")
+        auth_blob = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        return base_url, users_path, {"Authorization": f"Basic {auth_blob}"}
+    if connector == "salesforce":
+        base_url_cfg = str(cfg.get("salesforce_base_url") or "").strip()
+        users_path = str(cfg.get("salesforce_users_path") or "").strip()
+        token_url = str(cfg.get("salesforce_token_url") or "").strip()
+        client_id = str(cfg.get("salesforce_client_id") or "").strip()
+        client_secret = str(cfg.get("salesforce_client_secret") or "").strip()
+        if not users_path:
+            raise HTTPException(status_code=400, detail="Configura salesforce_users_path")
+        token_payload = _oauth_client_credentials_token(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            error_prefix="Salesforce OAuth token",
+        )
+        token = str(token_payload.get("access_token") or "").strip()
+        instance_url = str(token_payload.get("instance_url") or "").strip()
+        base_url = base_url_cfg or instance_url
+        if not base_url:
+            raise HTTPException(status_code=400, detail="Configura salesforce_base_url o usa instance_url dal token")
+        return base_url, users_path, {"Authorization": f"Bearer {token}"}
+    raise HTTPException(status_code=400, detail=f"Upstream provisioning non supportato per connettore '{target}'")
+
+
+def _connector_build_provision_payload(
+    user_payload: Dict[str, Any],
+    datasource: str,
+    *,
+    field_map: Optional[Dict[str, str]] = None,
+    groups_as_csv: bool = False,
+) -> Dict[str, Any]:
+    groups = sorted({str(g).strip() for g in (user_payload.get("groups") or []) if str(g).strip()})
+    source_payload: Dict[str, Any] = {
+        "username": user_payload.get("username"),
+        "displayName": user_payload.get("displayName"),
+        "department": user_payload.get("department"),
+        "businessRole": user_payload.get("businessRole"),
+        "accountType": user_payload.get("accountType"),
+        "email": user_payload.get("email"),
+        "upn": user_payload.get("upn"),
+        "employeeId": user_payload.get("employeeId"),
+        "manager": user_payload.get("manager"),
+        "statusAd": user_payload.get("statusAd"),
+        "statusHr": user_payload.get("statusHr"),
+        "excluded": user_payload.get("excluded"),
+        "groups": ",".join(groups) if groups_as_csv else groups,
+        "DataSource": datasource,
+    }
+    mapped: Dict[str, Any] = {}
+    for key, value in source_payload.items():
+        target_key = str((field_map or {}).get(key) or key).strip()
+        if not target_key:
+            continue
+        mapped[target_key] = value
+    return mapped
+
+
+def _ldap_escape_filter_value(value: str) -> str:
+    txt = str(value or "")
+    return (
+        txt.replace("\\", r"\5c")
+        .replace("*", r"\2a")
+        .replace("(", r"\28")
+        .replace(")", r"\29")
+        .replace("\x00", r"\00")
+    )
+
+
+def _ad_provision_users_upstream(changed_payloads: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if Connection is None:
+        raise HTTPException(status_code=500, detail="ldap3 library not installed or failed to import")
+
+    cfg = state.get("connector", {}) or {}
+    if not cfg.get("server") or not cfg.get("bind_user") or not cfg.get("bind_password"):
+        raise HTTPException(status_code=400, detail="Configura AD target: server, bind_user e bind_password")
+    base_dn = str(cfg.get("base_dn") or "").strip()
+    if not base_dn:
+        raise HTTPException(status_code=400, detail="Configura base_dn per provisioning AD")
+
+    resolved = _mk_ldap_server(cfg)
+    server = resolved["server"]
+    auth_mode = str(cfg.get("auth") or "SIMPLE").upper()
+    conn = None
+    success = 0
+    failed = 0
+    errors: List[str] = []
+    uploaded_usernames: List[str] = []
+    group_dn_cache: Dict[str, str] = {}
+
+    try:
+        if auth_mode == "NTLM":
+            conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=NTLM, auto_bind=True)
+        else:
+            conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=SIMPLE, auto_bind=True)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"AD bind failed: {exc}")
+
+    def _find_group_dn(group_cn: str) -> str:
+        cached = group_dn_cache.get(group_cn)
+        if cached is not None:
+            return cached
+        group_filter = f"(&(objectClass=group)(cn={_ldap_escape_filter_value(group_cn)}))"
+        if not conn.search(base_dn, group_filter, attributes=["distinguishedName"], size_limit=1):
+            group_dn_cache[group_cn] = ""
+            return ""
+        if not conn.entries:
+            group_dn_cache[group_cn] = ""
+            return ""
+        group_dn = str(conn.entries[0].entry_dn or "").strip()
+        group_dn_cache[group_cn] = group_dn
+        return group_dn
+
+    for payload in (changed_payloads or []):
+        username = str(payload.get("username") or "").strip()
+        if not username:
+            failed += 1
+            errors.append("Missing username in AD payload")
+            continue
+
+        try:
+            user_filter = f"(&(objectClass=user)(sAMAccountName={_ldap_escape_filter_value(username)}))"
+            if not conn.search(base_dn, user_filter, attributes=["distinguishedName", "memberOf"], size_limit=1) or not conn.entries:
+                failed += 1
+                errors.append(f"{username}: AD user not found")
+                continue
+
+            user_entry = conn.entries[0]
+            user_dn = str(user_entry.entry_dn or "").strip()
+            current_member_dns = []
+            if "memberOf" in set(getattr(user_entry, "entry_attributes", []) or []):
+                try:
+                    current_member_dns = [str(v) for v in (user_entry.memberOf.values or [])]
+                except Exception:
+                    current_member_dns = []
+            current_group_by_cn = {str(_extract_group_cn(dn)).strip(): str(dn) for dn in current_member_dns if _extract_group_cn(dn)}
+
+            mod_attrs: Dict[str, List[Tuple[int, List[str]]]] = {}
+
+            def _set_attr(attr_name: str, raw_value: Any) -> None:
+                if raw_value is None:
+                    return
+                val = str(raw_value).strip()
+                if not val:
+                    return
+                mod_attrs[attr_name] = [(MODIFY_REPLACE, [val])]
+
+            _set_attr("displayName", payload.get("displayName"))
+            _set_attr("department", payload.get("department"))
+            _set_attr("title", payload.get("businessRole"))
+            _set_attr("mail", payload.get("email"))
+            _set_attr("userPrincipalName", payload.get("upn"))
+            _set_attr("employeeID", payload.get("employeeId"))
+
+            if mod_attrs and not conn.modify(user_dn, mod_attrs):
+                err = conn.result or {}
+                failed += 1
+                errors.append(f"{username}: AD attribute update failed ({err.get('description') or err})")
+                continue
+
+            desired_groups = sorted({str(g).strip() for g in (payload.get("groups") or []) if str(g).strip()})
+            desired_group_set = set(desired_groups)
+            current_group_set = set(current_group_by_cn.keys())
+
+            to_add = sorted(desired_group_set - current_group_set)
+            to_remove = sorted(current_group_set - desired_group_set)
+
+            for group_cn in to_add:
+                group_dn = _find_group_dn(group_cn)
+                if not group_dn:
+                    errors.append(f"{username}: AD group '{group_cn}' not found")
+                    continue
+                if not conn.modify(group_dn, {"member": [(MODIFY_ADD, [user_dn])]}):
+                    err = conn.result or {}
+                    desc = str(err.get("description") or "").lower()
+                    if "typeorvalueexists" in desc:
+                        continue
+                    errors.append(f"{username}: add group '{group_cn}' failed ({err.get('description') or err})")
+
+            for group_cn in to_remove:
+                group_dn = str(current_group_by_cn.get(group_cn) or "").strip()
+                if not group_dn:
+                    group_dn = _find_group_dn(group_cn)
+                if not group_dn:
+                    continue
+                if not conn.modify(group_dn, {"member": [(MODIFY_DELETE, [user_dn])]}):
+                    err = conn.result or {}
+                    desc = str(err.get("description") or "").lower()
+                    if "nosuchattribute" in desc:
+                        continue
+                    errors.append(f"{username}: remove group '{group_cn}' failed ({err.get('description') or err})")
+
+            success += 1
+            uploaded_usernames.append(username)
+        except Exception as exc:
+            failed += 1
+            errors.append(f"{username}: {exc}")
+
+    try:
+        if conn is not None:
+            conn.unbind()
+    except Exception:
+        pass
+
+    return {
+        "attempted": bool(changed_payloads),
+        "success": success,
+        "failed": failed,
+        "errors": errors[:200],
+        "uploaded_usernames": uploaded_usernames[:500],
+        "message": f"AD upstream write success={success} failed={failed}.",
+    }
+
+
+def _provision_users_upstream(
+    *,
+    target: str,
+    datasource: str,
+    changed_payloads: List[Dict[str, Any]],
+    removed_usernames: List[str],
+    force_enable: bool = False,
+) -> Dict[str, Any]:
+    connector = normalize_connector_target(target)
+    if connector == "ad":
+        return _ad_provision_users_upstream(changed_payloads)
+    if connector == "sap":
+        return _sap_provision_users_upstream(
+            datasource=datasource,
+            changed_payloads=changed_payloads,
+            removed_usernames=removed_usernames,
+            force_enable=force_enable,
+        )
+    if connector not in HTTP_UPSTREAM_CONNECTORS:
+        return {
+            "attempted": False,
+            "success": 0,
+            "failed": 0,
+            "errors": [],
+            "uploaded_usernames": [],
+            "message": f"Upstream provisioning not implemented for {connector}.",
+        }
+
+    cfg = state.get("connector", {}) or {}
+    provisioning_cfg = cfg.get("connector_provisioning") or {}
+    if not isinstance(provisioning_cfg, dict):
+        provisioning_cfg = {}
+    target_cfg = provisioning_cfg.get(connector) or {}
+    if not isinstance(target_cfg, dict):
+        target_cfg = {}
+    enabled = bool(target_cfg.get("enabled", True))
+    if not enabled and not force_enable:
+        return {
+            "attempted": False,
+            "success": 0,
+            "failed": 0,
+            "errors": [],
+            "uploaded_usernames": [],
+            "message": f"Upstream provisioning disabled for {connector}.",
+        }
+
+    method = str(target_cfg.get("method") or "POST").strip().upper() or "POST"
+    if method not in {"POST", "PUT", "PATCH"}:
+        raise HTTPException(status_code=400, detail=f"connector_provisioning.{connector}.method must be POST, PUT or PATCH")
+    user_path_template = str(target_cfg.get("user_path_template") or "").strip()
+    deprovision_enabled = bool(target_cfg.get("deprovision_enabled", False))
+    deprovision_template = str(target_cfg.get("deprovision_user_path_template") or "").strip()
+    groups_as_csv = bool(target_cfg.get("groups_as_csv", False))
+    field_map = target_cfg.get("field_map") if isinstance(target_cfg.get("field_map"), dict) else {}
+
+    base_url, default_users_path, auth_headers = _connector_upstream_auth_and_base(connector, cfg)
+    default_path = str(target_cfg.get("path") or default_users_path or "").strip()
+    if not default_path:
+        raise HTTPException(status_code=400, detail=f"connector_provisioning.{connector}.path non configurato")
+
+    success = 0
+    failed = 0
+    uploaded_usernames: List[str] = []
+    errors: List[str] = []
+
+    for payload in (changed_payloads or []):
+        username = str(payload.get("username") or "").strip()
+        if not username:
+            failed += 1
+            errors.append("Missing username in provisioning payload")
+            continue
+        path = _sap_apply_user_path_template(user_path_template, username) or default_path
+        url = _connector_url(base_url, path)
+        outbound_payload = _connector_build_provision_payload(
+            payload,
+            datasource,
+            field_map=field_map,
+            groups_as_csv=groups_as_csv,
+        )
+        req_headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "RoleMining/1.0",
+            **auth_headers,
+        }
+        try:
+            _http_raw_request(
+                url,
+                headers=req_headers,
+                method=method,
+                body=json.dumps(outbound_payload, ensure_ascii=False).encode("utf-8"),
+                error_prefix=f"{connector} provisioning API",
+            )
+            success += 1
+            uploaded_usernames.append(username)
+        except HTTPException as exc:
+            failed += 1
+            errors.append(f"{username}: {exc.detail}")
+        except Exception as exc:
+            failed += 1
+            errors.append(f"{username}: {exc}")
+
+    if deprovision_enabled and deprovision_template:
+        for username in (removed_usernames or []):
+            path = _sap_apply_user_path_template(deprovision_template, username)
+            if not path:
+                failed += 1
+                errors.append(f"{username}: missing deprovision path template")
+                continue
+            url = _connector_url(base_url, path)
+            req_headers = {
+                "Accept": "application/json",
+                "User-Agent": "RoleMining/1.0",
+                **auth_headers,
+            }
+            try:
+                _http_raw_request(
+                    url,
+                    headers=req_headers,
+                    method="DELETE",
+                    error_prefix=f"{connector} provisioning API",
+                )
+                success += 1
+            except HTTPException as exc:
+                failed += 1
+                errors.append(f"{username} (delete): {exc.detail}")
+            except Exception as exc:
+                failed += 1
+                errors.append(f"{username} (delete): {exc}")
+
+    return {
+        "attempted": bool(changed_payloads or (deprovision_enabled and removed_usernames)),
+        "success": success,
+        "failed": failed,
+        "errors": errors[:200],
+        "uploaded_usernames": uploaded_usernames[:500],
+        "message": f"{connector.upper()} upstream write success={success} failed={failed}.",
+    }
+
+
+def _build_ingest_candidates_for_source(users: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for u in users:
+        uname = str(u.get("username") or "").strip()
+        out.append(
+            _mk_candidate(
+                source=source,
+                candidate_id=f"{source}:{uname}",
+                display_name=u.get("displayName", ""),
+                business_role=u.get("businessRole", ""),
+                roles=(u.get("groups") or []),
+                raw=f"{source.upper()}:{uname}|{u.get('displayName')}|{','.join(u.get('groups') or [])}",
+                department=u.get("department") or "",
+                last_login=u.get("lastLogin"),
+            )
+        )
+    return out
+
+
+def _run_connector_extract_pipeline(
+    *,
+    source: str,
+    scope: str,
+    users: List[Dict[str, Any]],
+    background_tasks: BackgroundTasks,
+    actor: str,
+) -> ExtractResponse:
+    candidates = _build_ingest_candidates_for_source(users, source)
+    with state.batch():
+        users = filter_and_dedupe_connector_users(users, source=source)
+        merge_stats = merge_from_connector_by_displayname(users, ou=scope, source=source)
+        updates = {
+            "ingest_sources": {**state.get("ingest_sources", {}), source: candidates},
+            "mining_dirty": True,
+        }
+        state.update(updates)
+
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
+    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, actor)
+    return ExtractResponse(
+        ou=state["last_extract"]["ou"],
+        total_users=len(state["last_extract"]["users"]),
+        total_groups=len(state["last_extract"]["groups"]),
+        snapshot_ready=True,
+        processing_in_background=True,
+        new_users=merge_stats.get("new_users", 0),
+        updated_users=merge_stats.get("updated_users", 0),
+        updated_by_displayname=merge_stats.get("updated_by_displayname", merge_stats.get("updated_users", 0)),
+        new_groups=merge_stats.get("new_groups", 0),
+        updated_groups=merge_stats.get("updated_groups", 0),
+        users=state["last_extract"]["users"],
+        groups=state["last_extract"]["groups"],
+    )
+
+
 def _mk_ldap_server(cfg: Dict[str, Any]):
     raw = (cfg.get("server") or "").strip()
     if not raw:
@@ -4050,6 +5403,33 @@ def _run_discovery_target(target: str) -> Dict[str, Any]:
         }
     if target == "csv":
         raise HTTPException(status_code=400, detail="Discovery schedulata CSV non supportata (richiede file input)")
+    if target in CONNECTOR_EXTRACTORS:
+        scope = target.upper()
+        users = CONNECTOR_EXTRACTORS[target](scope)
+        res = _run_connector_extract_pipeline(
+            source=target,
+            scope=scope,
+            users=users,
+            background_tasks=bg,
+            actor="scheduler",
+        )
+        _run_background_tasks_sync(bg)
+        summary = {
+            "users": int(getattr(res, "total_users", 0) or 0),
+            "groups": int(getattr(res, "total_groups", 0) or 0),
+            "new_users": int(getattr(res, "new_users", 0) or 0),
+            "updated_users": int(getattr(res, "updated_users", 0) or 0),
+            "updated_by_displayname": int(getattr(res, "updated_by_displayname", 0) or 0),
+            "new_groups": int(getattr(res, "new_groups", 0) or 0),
+            "updated_groups": int(getattr(res, "updated_groups", 0) or 0),
+        }
+        label = (target or "").upper()
+        return {
+            "status": "ok",
+            "message": f"{label} discovery completed. Users:{summary['users']} Groups:{summary['groups']}",
+            "summary": summary,
+            "csv_available": True,
+        }
     raise HTTPException(status_code=400, detail=f"Discovery schedulata non supportata per target '{target}'")
 
 
@@ -4304,9 +5684,103 @@ def extract_sap(req: ExtractRequest, background_tasks: BackgroundTasks, username
     )
 
 
+@app.post("/api/connectors/{target}/extract", response_model=ExtractResponse)
+def extract_connector(target: str, req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    connector_target = normalize_connector_target(target)
+    if connector_target == "ad":
+        return extract(req, background_tasks, username)
+    if connector_target == "sap":
+        return extract_sap(req, background_tasks, username)
+    if connector_target == "csv":
+        raise HTTPException(status_code=400, detail="Per CSV usa /api/import/csv con file upload")
+    extractor = CONNECTOR_EXTRACTORS.get(connector_target)
+    if extractor is None:
+        raise HTTPException(status_code=400, detail=f"Connettore '{target}' non supportato")
+
+    scope = (req.ou or "").strip() or connector_target.upper()
+    users = extractor(scope)
+    return _run_connector_extract_pipeline(
+        source=connector_target,
+        scope=scope,
+        users=users,
+        background_tasks=background_tasks,
+        actor=username,
+    )
+
+
 @app.post("/api/connectors/{target}/provision", response_model=ConnectorProvisionResponse)
 def provision_connector(target: str, username: str = Depends(require_auth)):
     return ConnectorProvisionResponse(**run_connector_provisioning(target, actor=username))
+
+
+@app.post("/api/sap/provision/bulk", response_model=SapBulkProvisionResponse)
+def sap_bulk_provision(body: SapBulkProvisionRequest, username: str = Depends(require_auth)):
+    generated_users = _generate_sap_bulk_users(body)
+    generated_payloads = [_provision_payload_for_user(user, "SAP") for user in generated_users]
+
+    if body.dry_run:
+        uploaded_usernames = [str(p.get("username") or "").strip() for p in generated_payloads if str(p.get("username") or "").strip()]
+        return SapBulkProvisionResponse(
+            requested_users=body.count,
+            generated_users=len(generated_payloads),
+            groups_per_user=body.groups_per_user,
+            department=body.department,
+            business_role=body.business_role,
+            dry_run=True,
+            uploaded_users=len(uploaded_usernames),
+            failed_users=0,
+            uploaded_usernames=uploaded_usernames[:500],
+            failed_details=[],
+        )
+
+    upstream = _provision_users_upstream(
+        target="sap",
+        datasource="SAP",
+        changed_payloads=generated_payloads,
+        removed_usernames=[],
+        force_enable=True,
+    )
+    uploaded_usernames = list(upstream.get("uploaded_usernames") or [])
+    uploaded_set = set(uploaded_usernames)
+    successful_users = [user for user in generated_users if str(user.get("username") or "").strip() in uploaded_set]
+
+    if successful_users:
+        sap_candidates: List[Dict[str, Any]] = []
+        for user in successful_users:
+            sap_candidates.append(
+                _mk_candidate(
+                    source="sap",
+                    candidate_id=f"sap:{user.get('username')}",
+                    display_name=user.get("displayName", ""),
+                    business_role=user.get("businessRole", ""),
+                    roles=(user.get("groups") or []),
+                    raw=f"SAP:{user.get('username')}|{user.get('displayName')}|{','.join(user.get('groups') or [])}",
+                    department=user.get("department") or "",
+                    last_login=user.get("lastLogin"),
+                )
+            )
+
+        with state.batch():
+            stamped_users = filter_and_dedupe_connector_users(successful_users, source="sap")
+            merge_from_connector_by_displayname(stamped_users, ou="SAP-BULK", source="sap")
+            ingest_sources = dict(state.get("ingest_sources") or {})
+            ingest_sources["sap"] = list(sap_candidates)
+            state["ingest_sources"] = ingest_sources
+            state["mining_dirty"] = True
+        invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+
+    return SapBulkProvisionResponse(
+        requested_users=body.count,
+        generated_users=len(generated_payloads),
+        groups_per_user=body.groups_per_user,
+        department=body.department,
+        business_role=body.business_role,
+        dry_run=False,
+        uploaded_users=int(upstream.get("success") or 0),
+        failed_users=int(upstream.get("failed") or 0),
+        uploaded_usernames=uploaded_usernames[:500],
+        failed_details=list(upstream.get("errors") or [])[:200],
+    )
 
 
 @app.get("/api/ad/extract/export-csv")
@@ -4364,6 +5838,7 @@ def list_users(q: str = "", type_q: str = "", limit: int = 100, offset: int = 0,
     if cached:
         return cached
 
+    backfill_datasource_in_state(persist=False)
     users = active_users(state["last_extract"]["users"] or [])
     
     # Text Filter
@@ -4404,6 +5879,7 @@ def list_users(q: str = "", type_q: str = "", limit: int = 100, offset: int = 0,
 
 @app.get("/api/users/{uname}")
 def get_user(uname: str, username: str = Depends(require_auth)):
+    backfill_datasource_in_state(persist=False)
     users = state.get("last_extract", {}).get("users") or []
     u = next((x for x in users if x.get("username") == uname), None)
     if not u:
