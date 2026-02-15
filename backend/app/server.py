@@ -1,0 +1,6383 @@
+import os
+import time
+import json
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+
+import jwt
+import numpy as np
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
+from sklearn.cluster import AgglomerativeClustering, MiniBatchKMeans
+from sklearn.decomposition import TruncatedSVD
+from fastapi import UploadFile, File, BackgroundTasks
+import csv, io, re, threading
+import urllib.request
+import urllib.parse
+import urllib.error
+import base64
+try:
+    from ldap3 import ALL, NTLM, SIMPLE, Connection, Server, Tls, NONE
+    import ssl
+except Exception:
+    Connection = None  # type: ignore
+
+
+APP_TITLE = "Role Mining API"
+import secrets
+# Use a persistent key for dev to avoid invalidating tokens on restart
+JWT_SECRET = os.getenv("JWT_SECRET") or "dev_secret_key_persistent_change_in_prod"
+APP_LOGIN_USER = os.getenv("APP_LOGIN_USER", "admin")
+APP_LOGIN_PASS = os.getenv("APP_LOGIN_PASS", "admin123")
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "240"))
+MOCK_AD = os.getenv("MOCK_AD", "0") == "1"
+LDAP_FETCH_ALL_ATTRIBUTES = os.getenv("LDAP_FETCH_ALL_ATTRIBUTES", "0") == "1"
+LDAP_PAGE_SIZE = max(100, int(os.getenv("LDAP_PAGE_SIZE", "1000")))
+LDAP_SEARCH_TIME_LIMIT = max(10, int(os.getenv("LDAP_SEARCH_TIME_LIMIT", "60")))
+LDAP_EXTRA_ATTRIBUTES = [
+    a.strip() for a in os.getenv("LDAP_EXTRA_ATTRIBUTES", "").split(",") if a.strip()
+]
+LDAP_BASE_ATTRIBUTES = [
+    "sAMAccountName",
+    "displayName",
+    "memberOf",
+    "department",
+    "lastLogonTimestamp",
+    "lastLogon",
+    "employeeType",
+    "distinguishedName",
+    "mail",
+    "userPrincipalName",
+]
+
+
+
+from openpyxl import load_workbook
+from collections import defaultdict, Counter
+
+# ML Engine import
+from ml_engine import get_ml_engine, ACCOUNT_TYPES
+ml_engine = get_ml_engine(data_dir="./ml_data")
+
+REBUILD_LOCK = threading.Lock()
+from app.core.cache import (
+    CACHE_TTL_KPI,
+    CACHE_TTL_MINING,
+    CACHE_TTL_ROLES,
+    CACHE_TTL_USERS,
+    RESPONSE_CACHE,
+    invalidate_hot_caches,
+)
+from app.services.identity_quality import (
+    is_valid_email_address as _is_valid_email_address,
+    is_valid_employee_id as _is_valid_employee_id,
+    is_valid_upn_value as _is_valid_upn_value,
+    norm_identity_text as _norm_identity_text,
+)
+from app.services.data_quality_helpers import (
+    allowed_identity_case_ids as _allowed_identity_case_ids,
+    build_cluster_quality_summary_cards as _build_cluster_quality_summary_cards,
+    dedupe_user_rows as _dedupe_user_rows,
+    duplicate_resolution_items_from_users as _duplicate_resolution_items_from_users,
+    effective_duplicate_displayname_count as _effective_duplicate_displayname_count,
+    users_missing_field as _users_missing_field,
+)
+from app.api.ai_lab_routes import register_ai_lab_routes
+from app.api.pattern_rules_routes import register_pattern_rules_routes
+
+BROAD_MARKERS = ['all','tutti','tutte','full','global','everyone','any','anyone','everybody']
+
+def _tokens(s: str) -> list[str]:
+    s = (s or '').lower()
+  # Treat underscore/dash like separators too, so VPN_ALL -> ["vpn","all"]
+    s = s.replace('_', ' ').replace('-', ' ')
+    s = re.sub(r'[^a-z0-9]', ' ', s)
+    return [t for t in s.split() if t]
+
+def _family_key(role_name: str) -> str:
+    toks = _tokens(role_name)
+    return toks[0] if toks else ""
+
+def _is_broad(role_name: str) -> bool:
+    toks = set(_tokens(role_name))
+    return any(m in toks for m in BROAD_MARKERS)
+
+def _matrix_user_roles(matrix: dict, username: str) -> set[str]:
+    row = (matrix or {}).get(username) or {}
+    return {r for r, v in row.items() if int(v) == 1}
+
+def build_overprivileged_items(matrix: dict, top_pct: float = 10.0) -> dict:
+    users = state.get("last_extract", {}).get("users") or []
+    br_by_user = {u.get("username"): u.get("businessRole", "Unassigned") for u in users if u.get("username")}
+    role_meta = state.get("role_meta", {}) or {}
+
+    items = []
+    for uname, row in (matrix or {}).items():
+        actual = sorted([r for r, v in (row or {}).items() if int(v) == 1])
+
+        br = br_by_user.get(uname, "Unassigned")
+        expected = set((role_meta.get(br, {}) or {}).get("groups", []) or [])
+
+        excess = sorted(set(actual) - expected)
+        if not excess:
+            continue  # SOLO over
+
+        items.append({
+        "username": uname,
+        "groups": actual,          # tutti
+        "overGroups": excess,      # solo eccesso
+        "groupCount": len(excess), # numero eccessid
+        
+        "isOverprivileged": True,
+        })
+    items.sort(key=lambda r: r["groupCount"], reverse=True)
+    return {"threshold": 1, "items": items}
+
+import random
+
+# In-memory cache for BRDB (not persisted to storage.json to keep it lean)
+BRDB_CACHE: Dict[str, Dict[str, Any]] = {}
+
+def generate_unique_color(existing_colors):
+    """Genera un colore RRGGBB univoco rispetto a quelli esistenti"""
+    existing = set(existing_colors)
+    attempts = 0
+    while attempts < 100:
+        r = random.randint(80, 255)   # evita colori troppo scuri
+        g = random.randint(80, 255)
+        b = random.randint(80, 255)
+        color = f"{r:02x}{g:02x}{b:02x}".upper()
+        if color not in existing:
+            return color
+        attempts += 1
+    return "6AA6FF"  # fallback
+
+# Lista colori predefiniti (per i primi 12 ruoli)
+PREDEFINED_COLORS = [
+    "00B4FF", "FF9F1C", "71FFB2", "FF6B6B", "9B59B6", "3498DB",
+    "F39C12", "1ABC9C", "E74C3C", "9B59B6", "3498DB", "F1C40F"
+]
+
+def predict_redundant(broad_role: str, specific_role: str, family: str, user_groups: set[str]) -> float:
+  bt = set(_tokens(broad_role))
+  st = set(_tokens(specific_role))
+  if not bt or not st:
+    return 0.0
+
+  # Similarità nome ruolo (Jaccard su token)
+  j_role = len(bt & st) / max(1, len(bt | st))
+
+  # Broadness
+  b_is_broad = 1.0 if _is_broad(broad_role) else 0.0
+
+  # Overlap token specific vs gruppi reali utente
+  st2 = [t for t in st if len(t) >= 3]
+  hits = 0
+  for g in user_groups:
+    gl = (g or "").lower()
+    if any(t in gl for t in st2):
+      hits += 1
+  g_overlap = hits / max(1, len(user_groups))
+
+  p = 0.55 * j_role + 0.30 * b_is_broad + 0.15 * g_overlap
+  return float(max(0.0, min(1.0, p)))
+
+
+
+def build_ai_detection_items(matrix: dict) -> list[dict]:
+    items = []
+    for uname, row in (matrix or {}).items():
+        roles = [r for r, v in (row or {}).items() if int(v) == 1]
+        user_groups = _matrix_user_roles(matrix, uname)
+
+        fam = defaultdict(list)
+        for r in roles:
+            k = _family_key(r)
+            if k:
+                fam[k].append(r)
+
+        for family, rs in fam.items():
+            broad = [r for r in rs if _is_broad(r)]
+            specific = [r for r in rs if not _is_broad(r)]
+            
+            if not broad or not specific:
+                continue
+
+            redundant = []
+            kept = set(specific)
+
+            for b in broad:
+                probs = [predict_redundant(b, s, family, user_groups) for s in specific]
+                p = max(probs) if probs else 0.0
+                if p >= 0.50:
+                    redundant.append(b)
+
+            # Fallback: se hai broad + specific ma l'algoritmo non è sicuro, 
+            # mostrali comunque come "sospetti" invece di nasconderli
+            if not redundant and broad:
+                 redundant = list(broad)
+            
+            if redundant:
+                items.append({
+                    "username": uname,
+                    "family": family,
+                    "redundantRoles": sorted(set(redundant)),
+                    "keptRoles": sorted(list(kept)),
+                    "redundantCount": len(set(redundant)),
+                })
+
+    # Ordina per chi ne ha di più
+    items.sort(key=lambda x: x["redundantCount"], reverse=True)
+    return items
+
+
+# ---------------------------------------------------------------------------
+# Smart AI Detection (On-Demand) – Peer / Department / AccountType analysis
+# ---------------------------------------------------------------------------
+ADMIN_MARKERS = {'admin', 'administrator', 'superuser', 'root', 'owner',
+                 'elevated', 'privileged', 'sudo', 'godmode'}
+SERVICE_ACCOUNT_MARKERS = {"svc", "service", "serviceaccount", "service-account"}
+RESTRICTED_ACCOUNT_TYPES = {
+    'BlueCollar':  ADMIN_MARKERS,
+    'External':    ADMIN_MARKERS | {'internal', 'staff', 'employee', 'hr',
+                                     'payroll', 'finance', 'accounting'},
+    'Contractor':  ADMIN_MARKERS | {'internal', 'staff'},
+    # LLM guardrail: service/svc accounts should not carry administrative access.
+    'Service':     ADMIN_MARKERS,
+}
+PEER_ANOMALY_THRESHOLD = 0.10   # flag if < 10% of peers have the group
+DEPT_ANOMALY_THRESHOLD = 0.05   # flag if < 5% of dept members have group
+
+
+def load_knowledge_base() -> dict:
+    """Load the synthetic knowledge base (LLM-instructed rules)."""
+    try:
+        import json
+        path = "backend/ml_data/knowledge_base.json"
+        if not os.path.exists(path):
+            return {}
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading KB: {e}")
+        return {}
+
+
+def _build_freq_tables(users: list) -> tuple:
+    """Pre-compute frequency tables in a SINGLE pass over the user list.
+    Returns (role_freq, dept_freq):
+      role_freq  = { businessRole: { group: ratio_0_to_1 } }
+      dept_freq  = { department:   { group: ratio_0_to_1 } }
+    """
+    from collections import Counter
+
+    role_counts: dict[str, Counter] = {}   # role -> Counter of groups
+    role_totals: dict[str, int] = {}       # role -> num users in role
+    dept_counts: dict[str, Counter] = {}
+    dept_totals: dict[str, int] = {}
+
+    for u in (users or []):
+        if u.get("excluded"):
+            continue
+        groups = u.get("groups") or []
+        br = (u.get("businessRole") or "Unassigned").strip()
+        dept = (u.get("department") or "Unknown").strip()
+
+        role_totals[br] = role_totals.get(br, 0) + 1
+        dept_totals[dept] = dept_totals.get(dept, 0) + 1
+
+        if br not in role_counts:
+            role_counts[br] = Counter()
+        if dept not in dept_counts:
+            dept_counts[dept] = Counter()
+
+        for g in groups:
+            role_counts[br][g] += 1
+            dept_counts[dept][g] += 1
+
+    # Convert counts to ratios
+    role_freq: dict[str, dict[str, float]] = {}
+    for br, ctr in role_counts.items():
+        total = max(1, role_totals.get(br, 1))
+        role_freq[br] = {g: cnt / total for g, cnt in ctr.items()}
+
+    dept_freq: dict[str, dict[str, float]] = {}
+    for dept, ctr in dept_counts.items():
+        total = max(1, dept_totals.get(dept, 1))
+        dept_freq[dept] = {g: cnt / total for g, cnt in ctr.items()}
+
+    return role_freq, dept_freq
+
+
+def _check_type_violation(group: str, account_type: str) -> str:
+    """Return violation reason or empty string. O(1) per group."""
+    if not account_type:
+        return ""
+    restricted = RESTRICTED_ACCOUNT_TYPES.get(account_type)
+    if not restricted:
+        return ""
+    toks = set(_tokens(group))
+    matched = toks & restricted
+    if matched:
+        return f"Policy: {account_type} should not have '{group}'"
+    return ""
+
+
+def _is_service_identity(u_data: dict) -> bool:
+    acct_type = str(u_data.get("accountType") or "").strip().lower()
+    if acct_type == "service":
+        return True
+    dn = str(u_data.get("displayName") or "").strip().lower()
+    uname = str(u_data.get("username") or "").strip().lower()
+    dn_toks = set(_tokens(dn))
+    un_toks = set(_tokens(uname))
+    if dn.startswith("svc") or uname.startswith("svc"):
+        return True
+    return bool((dn_toks | un_toks) & SERVICE_ACCOUNT_MARKERS)
+
+
+def _is_admin_group_name(group: str) -> bool:
+    toks = set(_tokens(group))
+    return bool(toks & ADMIN_MARKERS)
+
+
+def run_smart_ai_detection(users: list, matrix: dict) -> dict:
+    """On-demand smart redundancy detection.
+    Combines:
+    1. Statistical signal (Peer / Dept freq)
+    2. Knowledge Base rules (Redundancy, Policy, Norms)
+    """
+    role_freq, dept_freq = _build_freq_tables(users)
+    kb = load_knowledge_base()
+    
+    kb_redundancy = kb.get("redundancy_rules", {})
+    kb_policies = kb.get("account_type_policies", {})
+    kb_role_defs = kb.get("role_definitions", {})
+    kb_dept_norms = kb.get("department_norms", {})
+    # Inject LLM guardrail for Service/SVC accounts.
+    service_forbidden = set(kb_policies.get("Service", []) or [])
+    service_forbidden.update(list(ADMIN_MARKERS))
+    kb_policies["Service"] = sorted(service_forbidden)
+
+    # Index users by username for O(1) lookup
+    user_by_name: dict[str, dict] = {}
+    for u in (users or []):
+        if not u.get("excluded"):
+            uname = u.get("username")
+            if uname:
+                user_by_name[uname] = u
+
+    items: list[dict] = []
+    total_anomalies = 0
+    total_assignments = 0
+    users_with_anomaly = 0
+
+    for uname, row in (matrix or {}).items():
+        groups = [g for g, v in (row or {}).items() if int(v) == 1]
+        groups_set = set(groups)  # fast lookup
+        total_assignments += len(groups)
+
+        u_data = user_by_name.get(uname, {})
+        br = (u_data.get("businessRole") or "Unassigned").strip()
+        dept = (u_data.get("department") or "Unknown").strip()
+        acct_type = (u_data.get("accountType") or "").strip()
+        is_service_identity = _is_service_identity(u_data)
+
+        peer_freqs = role_freq.get(br, {})
+        dept_freqs = dept_freq.get(dept, {})
+
+        # KB Norms for this user
+        # Match "Engineer" in "Software Engineer III" etc.
+        kb_role_norm = next((norm for k, norm in kb_role_defs.items() if k in br), [])
+        kb_dept_norm = next((norm for k, norm in kb_dept_norms.items() if k in dept), [])
+
+        anomalies: list[dict] = []
+        for g in groups:
+            reasons: list[str] = []
+            confidence = 0.0
+
+            # --- 1. KNOWLEDGE BASE CHECKS (High Confidence) ---
+            
+            # A) Known Redundancy Rule (Explicit and Heuristic)
+            hierarchy_rules = kb.get("hierarchy_patterns", [])
+            
+            for other_g in groups:
+                if other_g == g: continue
+                
+                # A1) Explicit KB Rule
+                redundant_list = kb_redundancy.get(other_g, [])
+                if g in redundant_list:
+                    reasons.append(f"Redundant: Superceded by '{other_g}' (Explicit KB Rule)")
+                    confidence = 1.0
+                    break
+                
+                # A2) Heuristic Hierarchy Rule (Pattern-based)
+                # e.g. Azure_1 vs Azure_All, App_Read vs App_Admin
+                for pattern in hierarchy_rules:
+                    root = pattern.get("root", "")
+                    supersedes = pattern.get("supersedes", [])
+                    
+                    if root in other_g:
+                        # Find the base name without the root suffix
+                        base_other = other_g.replace(root, "")
+                        for s in supersedes:
+                            if s in g:
+                                base_g = g.replace(s, "")
+                                # If they share the same base name (e.g. "Azure"), it's likely a hierarchy violation
+                                if base_other == base_g or base_other in g:
+                                    reasons.append(f"Least Privilege: '{g}' is likely redundant given '{other_g}' ({root} hierarchy)")
+                                    confidence = 0.9
+                                    break
+                        if reasons: break
+                if reasons: break
+            
+            # B) Account Type Policy
+            # Check against KB policies + hardcoded fallback
+            forbidden = kb_policies.get(acct_type, [])
+            if any(token in g for token in forbidden):
+                 # re-check hardcoded function too just in case
+                 pass
+
+            # B2) Service/SVC + admin group guardrail (high confidence).
+            if is_service_identity and _is_admin_group_name(g):
+                reasons.append("LLM Policy: Service/SVC account with administrative group is high-risk")
+                confidence = max(confidence, 0.99)
+            
+            # (Merged policy check logic)
+            violation = _check_type_violation(g, acct_type)
+            if violation:
+                reasons.append(violation)
+                confidence = max(confidence, 0.95)
+            
+            # C) KB Role/Dept Norms (finding out-of-pattern items)
+            # If we generally know what this role has, and 'g' is NOT in it -> anomaly?
+            # Careful: KB is generic, don't be too strict.
+            # Only flag if it confirms a statistical anomaly.
+
+            # --- 2. STATISTICAL CHECKS (Medium/Low Confidence) ---
+
+            # Peer frequency check
+            pf = peer_freqs.get(g, 0.0)
+            is_stat_anomaly = False
+            
+            if pf < PEER_ANOMALY_THRESHOLD:
+                reasons.append(f"Peer: only {pf * 100:.0f}% of '{br}' have this")
+                confidence = max(confidence, 1.0 - pf)
+                is_stat_anomaly = True
+
+            # Department frequency check
+            df = dept_freqs.get(g, 0.0)
+            if df < DEPT_ANOMALY_THRESHOLD:
+                # If KB says this dept SHOULD have it, ignore the anomaly
+                if not any(k in g for k in kb_dept_norm):
+                    reasons.append(f"Dept: only {df * 100:.0f}% of '{dept}' have this")
+                    confidence = max(confidence, 1.0 - df)
+                    is_stat_anomaly = True
+
+            if reasons:
+                anomalies.append({
+                    "group": g,
+                    "reasons": reasons,
+                    "confidence": round(confidence, 2),
+                    "peerFreq": round(pf, 4),
+                    "deptFreq": round(df, 4),
+                })
+
+
+        if anomalies:
+            users_with_anomaly += 1
+            total_anomalies += len(anomalies)
+            anomalies.sort(key=lambda a: a["confidence"], reverse=True)
+            items.append({
+                "username": uname,
+                "displayName": u_data.get("displayName") or uname,
+                "businessRole": br,
+                "department": dept,
+                "accountType": acct_type,
+                "anomalyCount": len(anomalies),
+                "anomalies": anomalies,
+            })
+
+    items.sort(key=lambda x: x["anomalyCount"], reverse=True)
+
+    total_users = len(matrix or {})
+    pct = (users_with_anomaly / max(1, total_users)) * 100.0
+    print(f"[AI Detection] users_with_anomaly={users_with_anomaly}, total_users={total_users}, pct={pct:.2f}%", flush=True)
+
+    return {
+        "status": "ready",
+        "items": items,
+        "stats": {
+            "aiDetection": round(pct, 2),
+            "totalAnomalies": total_anomalies,
+            "totalAssignments": total_assignments,
+            "usersWithAnomaly": users_with_anomaly,
+            "totalUsersScanned": len(matrix or {}),
+        },
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def build_cluster_quality_items(clusters: list, matrix: dict) -> list[dict]:
+    """
+    Drilldown “Cluster Quality”: ordina gli elementi che peggiorano la qualità del cluster.
+    Assunzione minima: ogni cluster ha 'users' (lista username) e 'roleGroups' (lista gruppi del cluster).
+    """
+    out = []
+    for c_idx, c in enumerate(clusters or []):
+        users = c.get("users") or c.get("members") or []
+        role_groups = set(c.get("roleGroups") or [])
+        if not users or not role_groups:
+            continue
+
+        user_items = []
+        for u in users:
+            u_roles = _matrix_user_roles(matrix, u)
+            missing = sorted(list(role_groups - u_roles))
+            extra = sorted(list(u_roles - role_groups))
+            denom = max(1, len(role_groups) + len(u_roles))
+            distance = round((len(missing) + len(extra)) / denom, 4)  # più alto = più “sporco”
+
+            user_items.append({
+                "username": u,
+                "distance": distance,
+                "missingFromRole": missing,
+                "extraVsRole": extra,
+            })
+
+        user_items.sort(key=lambda r: r["distance"], reverse=True)
+        avg_distance = round(sum(x["distance"] for x in user_items) / max(1, len(user_items)), 4)
+
+        out.append({
+            "clusterIndex": c_idx,
+            "clusterName": c.get("name") or f"Cluster {c_idx}",
+            "avgDistance": avg_distance,
+            "worstUsers": user_items[:50],  # top 50 driver
+        })
+
+    out.sort(key=lambda r: r["avgDistance"], reverse=True)
+    return out
+
+
+
+
+# ----------------------------
+# Persistent Storage (replaces in-memory state)
+# ----------------------------
+from app.db.storage import get_store, init_default_state
+
+# Initialize persistent storage
+state = get_store()
+init_default_state()
+REQUIRED_DUPLICATE_ORDER = ["last_login", "groups_count", "dept_group_correlation", "has_department"]
+MODEL_QUALITY_PRESETS: Dict[str, Dict[str, float]] = {
+    "banking": {
+        "role_entropy": 0.06,
+        "template_coverage": 0.08,
+        "noise_ratio": 0.09,
+        "ambiguity": 0.07,
+        "temporal_drift": 0.06,
+        "matrix_density": 0.05,
+        "orphan_weighted": 0.10,
+        "overprivileged": 0.13,
+        "stale_access": 0.12,
+        "policy_violation": 0.14,
+        "manual_override": 0.04,
+        "generalization": 0.06,
+    },
+    "manufacturing": {
+        "role_entropy": 0.08,
+        "template_coverage": 0.11,
+        "noise_ratio": 0.10,
+        "ambiguity": 0.07,
+        "temporal_drift": 0.09,
+        "matrix_density": 0.06,
+        "orphan_weighted": 0.09,
+        "overprivileged": 0.10,
+        "stale_access": 0.09,
+        "policy_violation": 0.08,
+        "manual_override": 0.06,
+        "generalization": 0.07,
+    },
+    "retail": {
+        "role_entropy": 0.08,
+        "template_coverage": 0.10,
+        "noise_ratio": 0.10,
+        "ambiguity": 0.08,
+        "temporal_drift": 0.09,
+        "matrix_density": 0.07,
+        "orphan_weighted": 0.08,
+        "overprivileged": 0.10,
+        "stale_access": 0.10,
+        "policy_violation": 0.08,
+        "manual_override": 0.05,
+        "generalization": 0.07,
+    },
+}
+state.setdefault("dq_rules", {})
+state["dq_rules"]["duplicate_resolution_order"] = REQUIRED_DUPLICATE_ORDER.copy()
+state.setdefault("dq_model_preset", "manufacturing")
+state.setdefault("dq_model_weights", MODEL_QUALITY_PRESETS.get(state.get("dq_model_preset"), MODEL_QUALITY_PRESETS["manufacturing"]))
+
+
+def get_active_model_weights() -> Dict[str, float]:
+    preset = (state.get("dq_model_preset") or "manufacturing").strip().lower()
+    base = MODEL_QUALITY_PRESETS.get(preset) or MODEL_QUALITY_PRESETS["manufacturing"]
+    custom = state.get("dq_model_weights") or {}
+    out = dict(base)
+    for k, v in custom.items():
+        try:
+            out[str(k)] = float(v)
+        except Exception:
+            continue
+    return out
+
+
+def apply_business_roles(users: List[Dict[str, Any]]) -> None:
+    """Add businessRole field to each user based on state mapping.
+    
+    CRITICAL: Only assigns from mapping if:
+    1. User has no existing valid BR, OR
+    2. Mapping has a valid (non-Unassigned) value for this user
+    
+    This preserves CSV-assigned BRs while allowing department-based assignment.
+    """
+    m = state.get("user_business_role", {})
+    for u in users:
+        existing_br = (u.get("businessRole") or "").strip()
+        mapped_br = m.get(u.get("username"), "")
+        
+        # Priority: existing valid BR > mapped valid BR > "Unassigned"
+        if existing_br and existing_br != "Unassigned":
+            # Keep existing valid BR
+            pass
+        elif mapped_br and mapped_br != "Unassigned":
+            # Use mapped BR if valid
+            u["businessRole"] = mapped_br
+        else:
+            # No valid BR anywhere - mark as Unassigned
+            if not existing_br:
+                u["businessRole"] = "Unassigned"
+
+def sync_roles_from_users(users: List[Dict[str, Any]]) -> int:
+    """
+    Registra in role_meta/business_roles tutti i BR presenti sugli utenti.
+    Ritorna quanti BR nuovi sono stati creati.
+    """
+    role_meta = state.setdefault("role_meta", {})
+    business_roles = state.setdefault("business_roles", set())
+    created = 0
+
+    for u in users or []:
+        br = (u.get("businessRole") or "").strip()
+        if not br or br == "Unassigned":
+            continue
+        if br not in role_meta:
+            _ensure_role_registered(br)  # usa role_meta/business_roles
+            created += 1
+        business_roles.add(br)
+
+    return created
+
+
+# =============================================================================
+# BRDB (NO AI): learning DB + inference engine
+# =============================================================================
+# (imports already at top of file)
+
+BRDB_MIN_CONF = 0.70  # soglia per auto-assegnare
+
+BRDB_STOP_TOKENS = {
+    "grp", "group", "role", "access", "users", "user", "team", "dl",
+    "sec", "security", "global", "all", "everyone"
+}
+
+def brdb_norm_group(group: str) -> str:
+    """Standard normalization for group names."""
+    if not group: 
+        return ""
+    # Remove common prefix/suffix noise
+    g = group.strip()
+    return g
+
+def brdb_ensure_ready() -> None:
+    if not state.get("brdb_ready"):
+        brdb_rebuild()
+
+def brdb_infer_group(group: str) -> dict:
+    """Infer which role a group belongs to based on learned patterns."""
+    brdb_ensure_ready()
+    return ml_engine.brdb_infer_group(group)
+
+# (imports already at top of file)
+
+DEPT_MINCONF = 0.80
+DEPT_GROUP_SUPPORT = 0.60
+
+def ensure_role_registered(role: str) -> None:
+    _ensure_role_registered(role)
+
+DEPT_MERGE_JACCARD = 0.55  # soglia similarità gruppi dept vs BR template
+
+
+def classify_account(
+    display_name: str,
+    ou: str,
+    employee_type: str,
+    use_ml: bool = True,
+    attributes: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Classify account type using ML (if available) with rule-based fallback.
+    
+    Uses the ML engine for high-confidence predictions (>75%), otherwise
+    falls back to the extended 12-type rule-based classification.
+    """
+    # Try ML-based classification first
+    if use_ml:
+        try:
+            predicted_type, confidence, method = ml_engine.classify_account(
+                display_name, ou, employee_type, confidence_threshold=0.75, attributes=attributes
+            )
+            # Custom rules have top priority and must be applied immediately.
+            if method == "custom_rule":
+                return predicted_type
+            if method == "ml" and confidence >= 0.75:
+                return predicted_type
+        except Exception:
+            pass  # Fall through to rules
+    
+    # Use ML engine's rule-based classification (extended 12 types)
+    return ml_engine.classify_account_rules(display_name, ou, employee_type)
+
+
+# =============================================================================
+# BRDB Functions (Business Role Database) - Delegating to ML Engine
+# =============================================================================
+
+def brdb_rebuild():
+    """Rebuild the Business Role Database from current user assignments (Background)."""
+    def _worker():
+        with REBUILD_LOCK:
+            # Check again under lock to avoid redundant rebuilds
+            if state.get("brdb_ready"):
+                return
+                
+            users = state.get("last_extract", {}).get("users") or []
+            ml_engine.brdb_rebuild(users)
+            state["brdb_ready"] = True
+            log("INFO", f"Background BRDB rebuild finished ({len(users)} users)")
+            # Invalidate detail caches as roles might have changed
+            invalidate_hot_caches(roles=True)
+
+    # Start in background if not already running
+    if REBUILD_LOCK.locked():
+        return
+        
+    threading.Thread(target=_worker, daemon=True).start()
+    log("INFO", "Triggered background BRDB rebuild")
+
+def brdb_learn_assignment(role: str, groups: list, weight: float = 1.0):
+    """Record a confirmed role→groups assignment for learning."""
+    ml_engine.brdb_learn_assignment(role, groups, weight)
+    state["brdb_ready"] = False
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a and not b:
+        return 1.0
+    return len(a & b) / max(1, len(a | b))
+
+BR_ASSIGNMENT_RULE_WEIGHT = 7.5
+BR_FIELD_RULE_WEIGHT = 8.5
+
+
+def _br_assignment_rule_scores_for_user(user: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Score business-role boosts from regex rules applied on group names.
+    The higher the score, the stronger the influence in automatic assignment.
+    """
+    group_rules = list(state.get("br_assignment_pattern_rules") or [])
+    field_rules = list(state.get("br_pattern_rules") or [])
+    if not group_rules and not field_rules:
+        return {}
+
+    groups = [str(g).strip() for g in (user.get("groups") or []) if str(g).strip()]
+    if not groups:
+        return {}
+    groups_lower = {g.lower() for g in groups}
+
+    scores: Dict[str, float] = defaultdict(float)
+
+    # Form 3: regex on group names.
+    for rule in group_rules:
+        business_role = (rule.get("business_role") or "").strip()
+        regex = (rule.get("regex") or "").strip()
+        legacy_role = (rule.get("role") or "").strip()
+        if not business_role or not regex:
+            continue
+
+        # Backward compatibility: old rules might have an explicit group/role gate.
+        if legacy_role and legacy_role.lower() not in groups_lower:
+            continue
+
+        match_count = 0
+        try:
+            for g in groups:
+                if re.search(regex, g, re.IGNORECASE):
+                    match_count += 1
+        except re.error:
+            continue
+
+        if match_count <= 0:
+            continue
+
+        boost = BR_ASSIGNMENT_RULE_WEIGHT * (1.0 + 0.2 * (match_count - 1))
+        scores[business_role] += boost
+
+    # Form 2: business role + field + regex, evaluated on user field value.
+    for rule in field_rules:
+        business_role = (rule.get("business_role") or "").strip()
+        field = (rule.get("field") or "").strip()
+        regex = (rule.get("regex") or "").strip()
+        if not business_role or not field or not regex:
+            continue
+
+        raw_val = user.get(field)
+        if raw_val is None:
+            continue
+        if isinstance(raw_val, list):
+            value = " ".join([str(x) for x in raw_val])
+        else:
+            value = str(raw_val)
+        if not value.strip():
+            continue
+
+        try:
+            if re.search(regex, value, re.IGNORECASE):
+                scores[business_role] += BR_FIELD_RULE_WEIGHT
+        except re.error:
+            continue
+
+    return dict(scores)
+
+
+def apply_department_mapping(users: List[Dict[str, Any]], only_depts: Optional[set[str]] = None) -> None:
+    # Prepara strutture coerenti
+    state.setdefault("user_business_role", {})
+    state.setdefault("role_meta", {})
+    state.setdefault("business_roles", set())
+    state.setdefault("dept_to_role", {})          # dept -> canonical BR
+    state.setdefault("dept_role_analysis", {})    # dept -> evidence
+
+
+    # Global rebuild is still useful for stats, but we can do it conditionally?
+    # For now, keep it global as stats depend on all users.
+    # We could optimize brdb_rebuild() too if needed.
+    brdb_rebuild()
+
+    targets = only_depts
+
+
+    by_dept = defaultdict(list)
+    for u in users or []:
+        dept = (u.get("department") or "").strip()
+        if dept:
+            by_dept[dept].append(u)
+
+    role_meta = state["role_meta"]
+    user_br = state["user_business_role"]
+    dept_to_role = state["dept_to_role"]
+    dept_analysis = state["dept_role_analysis"]
+
+    for dept, members in by_dept.items():
+        if targets and dept not in targets:
+            continue
+
+        # 1) Baseline deterministica: BR = dept
+        _ensure_role_registered(dept)
+
+        # 2) Profilo gruppi frequenti del dipartimento
+        n = max(1, len(members))
+        cnt = defaultdict(int)
+        for u in members:
+            for g in (u.get("groups") or []):
+                cnt[g] += 1
+        dept_groups = {g for g, c in cnt.items() if (c / n) >= DEPT_GROUP_SUPPORT}
+
+        # 3) Analisi: “votazione” ruolo macro dai gruppi utenti (BRDB)
+        weights = defaultdict(float)
+        rules_boost = defaultdict(float)
+        for u in members:
+            s = brdb_infer_groupset(u.get("groups") or [])
+            r = (s.get("role") or "Unassigned").strip()
+            c = float(s.get("confidence") or 0.0)
+            if r and r != "Unassigned" and c > 0:
+                weights[r] += c
+            for rr, sc in _br_assignment_rule_scores_for_user(u).items():
+                weights[rr] += float(sc)
+                rules_boost[rr] += float(sc)
+
+        chosen_role = dept
+        evidence = {
+            "dept": dept,
+            "members": len(members),
+            "deptGroups": sorted(dept_groups),
+            "chosenRole": dept,
+            "reason": "baseline",
+        }
+
+        if weights:
+            best_role, best_w = max(weights.items(), key=lambda x: x[1])
+            total = sum(weights.values()) or 1.0
+            conf = best_w / total
+
+            role_groups = set((role_meta.get(best_role, {}) or {}).get("groups") or [])
+            sim = _jaccard(dept_groups, role_groups) if role_groups else 1.0  # se non ho template ancora, non blocco
+
+            evidence.update({
+                "bestRole": best_role,
+                "confidence": round(conf, 3),
+                "jaccard": round(sim, 3),
+                "weightsTop": sorted(weights.items(), key=lambda x: x[1], reverse=True)[:5],
+                "ruleBoostTop": sorted(rules_boost.items(), key=lambda x: x[1], reverse=True)[:5],
+            })
+
+            # Merge automatico (come mi hai chiesto), ma solo sopra soglie
+            if best_role != "Unassigned" and conf >= DEPT_MINCONF and sim >= DEPT_MERGE_JACCARD:
+                chosen_role = best_role
+                _ensure_role_registered(chosen_role)
+                evidence["chosenRole"] = chosen_role
+                evidence["reason"] = "merged_by_analysis"
+
+        # 4) Consolidamento template BR: aggiungo gruppi frequenti dept al ruolo scelto
+        existing = set((role_meta.get(chosen_role, {}) or {}).get("groups") or [])
+        role_meta[chosen_role]["groups"] = sorted(existing | dept_groups)
+
+        # 5) Salvo mapping dept->BR e assegno utenti
+        dept_to_role[dept] = chosen_role
+        dept_analysis[dept] = evidence
+
+        for u in members:
+            uname = u.get("username")
+            if uname:
+                existing_br = (u.get("businessRole") or "").strip()
+                # log("INFO", f"DEBUG_MAPPING: {uname} existing='{existing_br}' chosen='{chosen_role}'")
+
+                if existing_br and existing_br != "Unassigned":
+                    user_br[uname] = existing_br
+                else:
+                    user_rule_scores = _br_assignment_rule_scores_for_user(u)
+                    if user_rule_scores:
+                        boosted_role = max(user_rule_scores.items(), key=lambda x: x[1])[0]
+                        _ensure_role_registered(boosted_role)
+                        user_br[uname] = boosted_role
+                    else:
+                        user_br[uname] = chosen_role
+
+    # Apply BR assignment rules also to users without department mapping.
+    for u in (users or []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        existing_br = (u.get("businessRole") or "").strip()
+        mapped_br = (user_br.get(uname) or "").strip()
+        if (existing_br and existing_br != "Unassigned") or (mapped_br and mapped_br != "Unassigned"):
+            continue
+        rule_scores = _br_assignment_rule_scores_for_user(u)
+        if rule_scores:
+            forced_role = max(rule_scores.items(), key=lambda x: x[1])[0]
+            _ensure_role_registered(forced_role)
+            user_br[uname] = forced_role
+
+    # applica mapping sugli oggetti utente
+    apply_business_roles(users)
+
+def brdb_infer_groupset(groups: List[str]) -> Dict[str, Any]:
+    """
+    Predice BR per un insieme di gruppi (utente/riga CSV) aggregando le predizioni per gruppo.
+    """
+    groups = [brdb_norm_group(g) for g in (groups or []) if brdb_norm_group(g)]
+    if not groups:
+        return {"role": "Unassigned", "confidence": 0.0, "evidence": {"reason": "no_groups"}}
+
+    weights = defaultdict(float)
+    details = []
+    for g in groups[:50]:
+        s = brdb_infer_group(g)
+        details.append({"group": g, **s})
+        weights[s["role"]] += float(s.get("confidence", 0.0) or 0.0)
+
+    best_role, best_w = max(weights.items(), key=lambda x: x[1])
+    total = sum(weights.values()) or 1.0
+    conf = float(best_w / total)
+
+    return {
+        "role": best_role,
+        "confidence": round(conf, 3),
+        "evidence": {"weights": dict(weights), "details": details[:25]},
+    }
+
+def brdb_learn_assignment(br: str, groups: List[str], weight: int = 5) -> None:
+    """
+    Aggiorna incrementale il DB interno quando hai una assegnazione 'vera' (CSV con BR o assegnazione manuale).
+    """
+    brdb_ensure_ready()
+
+    br = (br or "").strip()
+    if not br:
+        return
+    for g in (groups or []):
+        g0 = brdb_norm_group(g)
+        brdb_inc_stat(state["brdb_group_stats"], g0, br, weight)
+        for t in brdb_tokens(g0):
+            brdb_inc_stat(state["brdb_token_stats"], t, br, max(1, weight // 2))
+
+    # invalida cache
+    state["brdb_cache"] = {}
+
+
+def _mk_candidate(
+    *,
+    source: str,
+    candidate_id: str,
+    display_name: str,
+    business_role: str,
+    roles: list[str],
+    raw: str,
+    department: str = "",
+    last_login: Any = None,
+) -> dict:
+    return {
+        "candidateId": candidate_id,
+        "source": source,
+        "displayName": (display_name or "").strip(),
+        "businessRole": (business_role or "").strip(),
+        "department": (department or "").strip(),
+        "lastLogin": last_login,
+        "roles": roles or [],
+        "rawLine": raw or "",
+    }
+
+def rebuild_ingest_candidates() -> None:
+    src = state.get("ingest_sources") or {}
+    flat = []
+    for _, items in src.items():
+        flat.extend(items or [])
+    state["ingest_candidates"] = flat
+
+def apply_duplicate_displayname_resolution() -> None:
+    """
+    Applica la scelta: per ogni displayName duplicato, rende 'attivo' solo il candidato scelto.
+    Effetto pratico: marca excluded=True sugli utenti non scelti (così spariscono da role mining e lista utenti).
+    """
+    choice = state.get("choice_by_displayName") or {}
+    candidates = state.get("ingest_candidates") or []
+
+    # build: displayName -> [candidate]
+    by_dn = defaultdict(list)
+    for c in candidates:
+        dn = (c.get("displayName") or "").strip()
+        if dn:
+            by_dn[dn].append(c)
+
+    # indicizza utenti attuali per displayName
+    users = state.get("last_extract", {}).get("users") or []
+    users_by_dn = defaultdict(list)
+    for u in users:
+        dn = (u.get("displayName") or "").strip()
+        if dn:
+            users_by_dn[dn].append(u)
+
+    # reset excluded
+    for u in users:
+        if "excluded" in u:
+            u["excluded"] = False
+
+    # applica scelta sui duplicati
+    for dn, rows in by_dn.items():
+        if len(rows) <= 1:
+            continue
+
+        chosen_id = choice.get(dn) or rows[0].get("candidateId")  # default: prima
+        chosen = next((r for r in rows if r.get("candidateId") == chosen_id), rows[0])
+
+        # qui assumiamo: gli utenti "a sistema" sono identificati dal displayName (come nella tua richiesta)
+        # => lasciamo attivo un solo user per quel displayName
+        same_dn_users = users_by_dn.get(dn) or []
+        if len(same_dn_users) <= 1:
+            # se esiste un solo user a sistema, facciamo override dei campi con quelli del candidato scelto
+            if same_dn_users:
+                u0 = same_dn_users[0]
+                u0["businessRole"] = chosen.get("businessRole") or u0.get("businessRole", "")
+                u0["groups"] = sorted(set(chosen.get("roles") or u0.get("groups") or []))
+            continue
+
+        # se ci sono più user a sistema con lo stesso displayName, ne lasciamo attivo solo 1
+        # (scelta semplice: il primo della lista resta attivo e viene “aggiornato” col candidato scelto)
+        keep = same_dn_users[0]
+        keep["businessRole"] = chosen.get("businessRole") or keep.get("businessRole", "")
+        keep["groups"] = sorted(set(chosen.get("roles") or keep.get("groups") or []))
+
+        for u in same_dn_users[1:]:
+            u["excluded"] = True
+
+    # aggiorna anche il mapping BR per coerenza UI
+    apply_business_roles(users)
+
+
+def _to_ts(v: Any) -> float:
+    if v is None:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip()
+    if not s:
+        return 0.0
+    try:
+        return float(s)
+    except Exception:
+        pass
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _normalize_last_login(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    if isinstance(v, list):
+        if not v:
+            return None
+        v = v[0]
+    s = str(v).strip()
+    if not s:
+        return None
+
+    # AD FILETIME (100ns intervals since 1601-01-01 UTC)
+    try:
+        iv = int(float(s))
+        if iv > 116444736000000000:
+            unix_ts = (iv - 116444736000000000) / 10000000.0
+            dt = datetime.fromtimestamp(unix_ts, tz=timezone.utc)
+            return dt.isoformat()
+    except Exception:
+        pass
+
+    # Unix timestamp
+    try:
+        fv = float(s)
+        if fv > 0 and fv < 4102444800:  # until year 2100
+            dt = datetime.fromtimestamp(fv, tz=timezone.utc)
+            return dt.isoformat()
+    except Exception:
+        pass
+
+    # ISO-like string
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
+    except Exception:
+        return s
+
+
+def _build_dept_group_profile(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    by_dept = defaultdict(lambda: defaultdict(int))
+    dept_counts = defaultdict(int)
+    for r in (rows or []):
+        dept = (r.get("department") or "").strip()
+        if not dept:
+            continue
+        dept_counts[dept] += 1
+        for g in set(r.get("groups") or []):
+            by_dept[dept][g] += 1
+
+    out: Dict[str, Dict[str, float]] = {}
+    for dept, gstats in by_dept.items():
+        den = max(1, dept_counts.get(dept, 1))
+        out[dept] = {g: (cnt / den) for g, cnt in gstats.items()}
+    return out
+
+
+def _score_duplicate_candidate(c: Dict[str, Any], dept_profile: Dict[str, Dict[str, float]]) -> Dict[str, Any]:
+    dept = (c.get("department") or "").strip()
+    groups = list(dict.fromkeys(c.get("groups") or []))
+    has_dept = 1 if dept else 0
+    groups_count = len(groups)
+    last_login_ts = _to_ts(c.get("lastLogin"))
+
+    corr = 0.0
+    if dept and groups:
+        probs = dept_profile.get(dept) or {}
+        corr = sum(float(probs.get(g, 0.0)) for g in groups) / max(1, len(groups))
+
+    order = REQUIRED_DUPLICATE_ORDER
+
+    values = {
+        "dept_group_correlation": round(corr, 6),
+        "has_department": has_dept,
+        "groups_count": groups_count,
+        "last_login": last_login_ts,
+    }
+    rank = tuple(values.get(k, 0.0) for k in order)
+    return {
+        "rank": rank,
+        "order": order,
+        "reason": {
+            "deptGroupCorrelation": round(corr, 4),
+            "hasDepartment": bool(has_dept),
+            "groupsCount": groups_count,
+            "lastLoginTs": last_login_ts,
+        },
+    }
+
+
+def _duplicate_resolution_items() -> List[Dict[str, Any]]:
+    candidates = state.get("ingest_candidates") or []
+    if not candidates:
+        return []
+
+    by_dn = defaultdict(list)
+    for c in candidates:
+        dn = (c.get("displayName") or "").strip()
+        if dn:
+            by_dn[dn.lower()].append(c)
+
+    choice_raw = state.get("choice_by_displayName") or {}
+    auto_raw = state.get("duplicate_autoselect") or {}
+    choice = {(str(k).strip().lower()): v for k, v in choice_raw.items() if str(k).strip()}
+    auto = {(str(k).strip().lower()): v for k, v in auto_raw.items() if str(k).strip()}
+    items = []
+    for dn_key, rows in by_dn.items():
+        if len(rows) <= 1:
+            continue
+        chosen_id = choice.get(dn_key) or rows[0].get("candidateId")
+        chosen = next((r for r in rows if r.get("candidateId") == chosen_id), rows[0])
+        auto_id = ((auto.get(dn_key) or {}).get("candidateId")) or chosen_id
+        display_name = (chosen.get("displayName") or rows[0].get("displayName") or "").strip()
+        alternatives = [r for r in rows if r.get("candidateId") != chosen.get("candidateId")]
+        items.append(
+            {
+                "displayName": display_name,
+                "chosenCandidateId": chosen.get("candidateId"),
+                "autoChosenCandidateId": auto_id,
+                "chosen": chosen,
+                "alternatives": alternatives,
+                "count": len(rows),
+                "autoReason": (auto.get(dn_key) or {}).get("reason"),
+            }
+        )
+
+    items.sort(key=lambda x: x.get("displayName") or "")
+    return items
+
+
+def _record_duplicate_feedback(display_name: str, chosen_candidate_id: str, actor: str = "system") -> None:
+    display_name = (display_name or "").strip()
+    chosen_candidate_id = (chosen_candidate_id or "").strip()
+    if not display_name or not chosen_candidate_id:
+        return
+
+    auto = state.get("duplicate_autoselect") or {}
+    auto_item = auto.get(display_name) or auto.get(display_name.lower()) or {}
+    auto_id = (auto_item.get("candidateId") or "").strip()
+    if not auto_id or auto_id == chosen_candidate_id:
+        return
+
+    by_id = {}
+    for c in (state.get("ingest_candidates") or []):
+        cid = str(c.get("candidateId") or "").strip()
+        if cid:
+            by_id[cid] = c
+
+    auto_c = by_id.get(auto_id) or {}
+    chosen_c = by_id.get(chosen_candidate_id) or {}
+
+    ev = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "displayName": display_name,
+        "actor": actor,
+        "autoCandidateId": auto_id,
+        "chosenCandidateId": chosen_candidate_id,
+        "auto": {
+            "department": auto_c.get("department"),
+            "groupsCount": len(auto_c.get("roles") or []),
+            "lastLogin": auto_c.get("lastLogin"),
+        },
+        "chosen": {
+            "department": chosen_c.get("department"),
+            "groupsCount": len(chosen_c.get("roles") or []),
+            "lastLogin": chosen_c.get("lastLogin"),
+        },
+    }
+
+    events = state.get("dq_feedback_events") or []
+    events.append(ev)
+    # keep recent history bounded
+    state["dq_feedback_events"] = events[-500:]
+
+
+def build_dq_rule_suggestions() -> List[Dict[str, Any]]:
+    suggestions: List[Dict[str, Any]] = []
+    rules = state.get("dq_rules") or {}
+    order = list(rules.get("duplicate_resolution_order") or [])
+    if not order:
+        order = ["dept_group_correlation", "has_department", "groups_count", "last_login"]
+    events = list(state.get("dq_feedback_events") or [])
+    ingest = state.get("last_ingest_stats") or {}
+
+    dep_better = 0
+    grp_better = 0
+    ll_better = 0
+    considered = 0
+    for ev in events:
+        auto = ev.get("auto") or {}
+        chosen = ev.get("chosen") or {}
+        considered += 1
+        if (not auto.get("department")) and (chosen.get("department")):
+            dep_better += 1
+        if int(chosen.get("groupsCount") or 0) > int(auto.get("groupsCount") or 0):
+            grp_better += 1
+        if _to_ts(chosen.get("lastLogin")) > _to_ts(auto.get("lastLogin")):
+            ll_better += 1
+
+    def _ratio(x: int, y: int) -> float:
+        return (float(x) / float(y)) if y > 0 else 0.0
+
+    def _idx(lst: List[str], key: str) -> int:
+        try:
+            return lst.index(key)
+        except ValueError:
+            return 999
+
+    if considered >= 3 and _ratio(ll_better, considered) >= 0.60 and _idx(order, "last_login") > 1:
+        new_order = [x for x in order if x != "last_login"]
+        new_order.insert(1, "last_login")
+        suggestions.append(
+            {
+                "ruleId": "dq-dup-priority-lastlogin",
+                "title": "Alza priorita LastLogin nella deduplica",
+                "description": "Gli override manuali scelgono spesso il candidato con ultimo accesso piu recente.",
+                "confidence": round(_ratio(ll_better, considered), 2),
+                "impact": {"manualOverridesAnalyzed": considered, "lastLoginPreferred": ll_better},
+                "preview": {"duplicate_resolution_order": new_order},
+                "current": {"duplicate_resolution_order": order},
+                "alreadyApplied": new_order == order,
+            }
+        )
+
+    if considered >= 3 and _ratio(grp_better, considered) >= 0.60 and _idx(order, "groups_count") > 1:
+        new_order = [x for x in order if x != "groups_count"]
+        new_order.insert(1, "groups_count")
+        suggestions.append(
+            {
+                "ruleId": "dq-dup-priority-groups",
+                "title": "Alza priorita numero gruppi nella deduplica",
+                "description": "Gli override manuali privilegiano il candidato con maggiore copertura gruppi.",
+                "confidence": round(_ratio(grp_better, considered), 2),
+                "impact": {"manualOverridesAnalyzed": considered, "groupsPreferred": grp_better},
+                "preview": {"duplicate_resolution_order": new_order},
+                "current": {"duplicate_resolution_order": order},
+                "alreadyApplied": new_order == order,
+            }
+        )
+
+    if int(ingest.get("missingRoles") or 0) > 0 and not bool(rules.get("reject_empty_groups")):
+        miss_roles = int(ingest.get("missingRoles") or 0)
+        total_rows = max(1, int(ingest.get("rowsTotal") or 0))
+        suggestions.append(
+            {
+                "ruleId": "dq-reject-empty-groups",
+                "title": "Blocca righe senza gruppi",
+                "description": "Scarta in import le righe con gruppi vuoti per ridurre utenti orfani e remediation manuale.",
+                "confidence": round(min(1.0, miss_roles / total_rows), 2),
+                "impact": {"missingRolesLastImport": miss_roles, "rowsTotal": total_rows},
+                "preview": {"reject_empty_groups": True},
+                "current": {"reject_empty_groups": bool(rules.get("reject_empty_groups"))},
+                "alreadyApplied": False,
+            }
+        )
+
+    suggestions.sort(key=lambda x: (x.get("alreadyApplied"), -(x.get("confidence") or 0)))
+    return suggestions
+
+
+def pick_best_user(cands: List[Dict[str, Any]]) -> Dict[str, Any]:
+    # Ranking policy: prefer most recent login, then profile completeness, then number of groups.
+    def score(u: Dict[str, Any]) -> tuple:
+        last = u.get("lastLogin") or u.get("last_login") or ""
+        has_dept = 1 if (u.get("department") or "").strip() else 0
+        has_br = 1 if (u.get("businessRole") or "").strip() else 0
+        ng = len(u.get("groups") or [])
+        return (last, has_dept + has_br, ng)
+    # `max` avoids sorting the full list and preserves behavior for tie cases.
+    return max(cands, key=score)
+
+def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
+    rejects = []
+    stats = state.setdefault("last_ingest_stats", {})
+    stats.update({
+        "source": source,
+        "rowsTotal": int(len(raw_users or [])),
+        "rowsKept": 0,
+        "duplicateDisplayName": 0,
+        "missingDepartment": 0,
+        "missingBusinessRole": 0,
+        "missingDisplayName": 0,
+        "missingUsername": 0,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+
+    by_dn = defaultdict(list)
+    for u in (raw_users or []):
+        if not (u.get("username") or "").strip():
+            stats["missingUsername"] += 1
+        dn = (u.get("displayName") or "").strip()
+        if dn:
+            by_dn[dn].append(u)
+        else:
+            stats["missingDisplayName"] += 1
+            rejects.append({"source": source, "reason": "Missing displayName", "user": u, "ts": stats["ts"]})
+
+    chosen = []
+    for dn, cands in by_dn.items():
+        u = pick_best_user(cands)
+
+        if len(cands) > 1:
+            stats["duplicateDisplayName"] += (len(cands) - 1)
+
+        # log degli altri duplicati
+        for other in cands:
+            if other is u:
+                continue
+            rejects.append({"source": source, "reason": f"Duplicate displayName '{dn}' (kept best)", "user": other, "ts": stats["ts"]})
+
+        dept = (u.get("department") or "").strip()
+        br = (u.get("businessRole") or "").strip()
+
+        if not dept:
+            stats["missingDepartment"] += 1
+            rejects.append({"source": source, "reason": "Missing department", "user": u, "ts": stats["ts"]})
+        count_missing_br = not str(source).lower().startswith("ad")
+
+        if count_missing_br and not br:
+            stats["missingBusinessRole"] += 1
+            rejects.append({
+                "source": source,
+                "reason": "Missing businessRole",
+                "user": u,
+                "ts": stats.get("ts"),
+            })
+
+        chosen.append(u)
+
+    stats["rowsKept"] = int(len(chosen))
+    state["last_rejects"] = rejects
+    return chosen
+
+
+# (datetime import already at top of file)
+
+def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
+    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
+    base_users = state["last_extract"]["users"]
+
+    by_username = {u.get("username"): u for u in base_users if u.get("username")}
+
+    for nu in (new_users or []):
+        uname = nu.get("username")
+        if not uname:
+            continue
+
+        if uname in by_username:
+            u = by_username[uname]
+            # aggiorna displayName (se presente) e fai merge gruppi
+            if nu.get("displayName"):
+                u["displayName"] = nu["displayName"]
+            if nu.get("department"):
+                u["department"] = nu["department"]
+            u["groups"] = sorted(set(nu.get("groups") or []))  # REPLACE da connettore
+
+        else:
+            base_users.append(nu)
+            by_username[uname] = nu
+
+    # riallinea campi derivati
+    apply_business_roles(base_users)
+    state["last_extract"]["ou"] = ou
+    state["last_extract"]["groups"] = recompute_groups_from_users(base_users)
+    state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
+
+
+def replace_from_connector_pool(new_users: List[Dict[str, Any]], ou: str, source: str) -> Dict[str, int]:
+    """
+    Replace current extract snapshot with a full connector pool.
+    Used by AD import to ensure all rules run on a complete fresh dataset.
+    """
+    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
+    previous_users = state["last_extract"].get("users") or []
+    previous_groups = set(state["last_extract"].get("groups") or [])
+
+    prev_by_username = {}
+    prev_by_displayname = {}
+    for u in previous_users:
+        uname = str(u.get("username") or "").strip()
+        if uname:
+            prev_by_username[uname] = u
+        dn = (u.get("displayName") or "").strip().lower()
+        if dn:
+            prev_by_displayname[dn] = u
+
+    previous_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in previous_users:
+        uname0 = str(u.get("username") or "").strip()
+        if not uname0:
+            continue
+        for g0 in (u.get("groups") or []):
+            gname = str(g0 or "").strip()
+            if gname:
+                previous_group_members[gname].add(uname0)
+
+    clean_users: List[Dict[str, Any]] = []
+    new_users_count = 0
+    updated_users_count = 0
+
+    for u in (new_users or []):
+        username = (u.get("username") or "").strip()
+        if not username:
+            continue
+
+        groups = sorted(set(u.get("groups") or []))
+        normalized = dict(u)
+        normalized["username"] = username
+        normalized["displayName"] = (u.get("displayName") or username).strip()
+        normalized["groups"] = groups
+        normalized["department"] = (u.get("department") or "").strip() or None
+        normalized["businessRole"] = (u.get("businessRole") or "").strip() or None
+        normalized["excluded"] = False
+        clean_users.append(normalized)
+
+        dn_key = normalized["displayName"].lower()
+        prev = prev_by_username.get(username) or prev_by_displayname.get(dn_key)
+        if not prev:
+            new_users_count += 1
+            continue
+
+        changed = (
+            str(prev.get("username") or "").strip() != normalized["username"]
+            or str(prev.get("displayName") or "").strip() != normalized["displayName"]
+            or sorted(set(prev.get("groups") or [])) != groups
+            or (prev.get("department") or None) != normalized["department"]
+            or (prev.get("businessRole") or None) != normalized["businessRole"]
+            or (prev.get("accountType") or None) != (normalized.get("accountType") or None)
+            or (prev.get("lastLogin") or None) != (normalized.get("lastLogin") or None)
+        )
+        if changed:
+            updated_users_count += 1
+
+    current_groups = recompute_groups_from_users(clean_users)
+
+    current_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in clean_users:
+        uname1 = str(u.get("username") or "").strip()
+        if not uname1:
+            continue
+        for g1 in (u.get("groups") or []):
+            gname = str(g1 or "").strip()
+            if gname:
+                current_group_members[gname].add(uname1)
+
+    common_groups = previous_groups & set(current_groups)
+    updated_groups_count = sum(
+        1 for g in common_groups
+        if previous_group_members.get(g, set()) != current_group_members.get(g, set())
+    )
+
+    state["last_extract"] = {
+        "ou": ou,
+        "users": clean_users,
+        "groups": current_groups,
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+    }
+    state["mining_dirty"] = True
+
+    return {
+        "new_users": int(new_users_count),
+        "updated_users": int(updated_users_count),
+        "updated_by_displayname": int(updated_users_count),
+        "new_groups": int(len(set(current_groups) - previous_groups)),
+        "updated_groups": int(updated_groups_count),
+    }
+
+
+def merge_from_connector_by_displayname(new_users: List[Dict[str, Any]], ou: str, source: str) -> Dict[str, int]:
+    """
+    Non-destructive merge:
+    - keep existing local users
+    - update only users with same displayName
+    - add AD users not found by displayName
+    """
+    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
+    base_users = state["last_extract"]["users"]
+    previous_groups = set(state["last_extract"].get("groups") or [])
+
+    previous_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in (base_users or []):
+        uname0 = str(u.get("username") or "").strip()
+        if not uname0:
+            continue
+        for g0 in (u.get("groups") or []):
+            gname = str(g0 or "").strip()
+            if gname:
+                previous_group_members[gname].add(uname0)
+
+    by_displayname: Dict[str, Dict[str, Any]] = {}
+    for u in base_users:
+        dn = (u.get("displayName") or "").strip().lower()
+        if dn and dn not in by_displayname:
+            by_displayname[dn] = u
+
+    new_users_count = 0
+    updated_users_count = 0
+
+    for u in (new_users or []):
+        username = (u.get("username") or "").strip()
+        display_name = (u.get("displayName") or username).strip()
+        if not username or not display_name:
+            continue
+
+        dn_key = display_name.lower()
+        existing_user = by_displayname.get(dn_key)
+        normalized_groups = sorted(set(u.get("groups") or []))
+
+        if existing_user:
+            prev_username = str(existing_user.get("username") or "").strip()
+            prev_display = str(existing_user.get("displayName") or "").strip()
+            prev_department = str(existing_user.get("department") or "").strip()
+            prev_business_role = str(existing_user.get("businessRole") or "").strip()
+            prev_groups = sorted(set(existing_user.get("groups") or []))
+            prev_account_type = existing_user.get("accountType")
+            prev_last_login = existing_user.get("lastLogin")
+
+            existing_user["username"] = username
+            existing_user["displayName"] = display_name
+            existing_user["groups"] = normalized_groups
+            existing_user["department"] = (u.get("department") or "").strip() or None
+            if (u.get("businessRole") or "").strip():
+                existing_user["businessRole"] = (u.get("businessRole") or "").strip()
+            if u.get("accountType") is not None:
+                existing_user["accountType"] = u.get("accountType")
+            if u.get("lastLogin") is not None:
+                existing_user["lastLogin"] = u.get("lastLogin")
+            for k in ("email", "upn", "employeeId", "manager", "statusAd", "statusHr", "attributes"):
+                if u.get(k) is not None:
+                    existing_user[k] = u.get(k)
+            existing_user["excluded"] = False
+
+            changed = (
+                prev_username != str(existing_user.get("username") or "").strip()
+                or prev_display != str(existing_user.get("displayName") or "").strip()
+                or prev_department != str(existing_user.get("department") or "").strip()
+                or prev_business_role != str(existing_user.get("businessRole") or "").strip()
+                or prev_groups != sorted(set(existing_user.get("groups") or []))
+                or prev_account_type != existing_user.get("accountType")
+                or prev_last_login != existing_user.get("lastLogin")
+            )
+            if changed:
+                updated_users_count += 1
+            continue
+
+        new_user = {
+            "username": username,
+            "displayName": display_name,
+            "groups": normalized_groups,
+            "department": (u.get("department") or "").strip() or None,
+            "businessRole": (u.get("businessRole") or "").strip() or None,
+            "excluded": False,
+            "lastLogin": u.get("lastLogin"),
+            "accountType": u.get("accountType"),
+            "email": u.get("email"),
+            "upn": u.get("upn"),
+            "employeeId": u.get("employeeId"),
+            "manager": u.get("manager"),
+            "statusAd": u.get("statusAd"),
+            "statusHr": u.get("statusHr"),
+            "attributes": u.get("attributes"),
+        }
+        base_users.append(new_user)
+        by_displayname[dn_key] = new_user
+        new_users_count += 1
+
+    current_groups = recompute_groups_from_users(base_users)
+    state["last_extract"]["groups"] = current_groups
+    state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
+    state["last_extract"]["source"] = source
+    if ou:
+        state["last_extract"]["ou"] = ou
+    state["mining_dirty"] = True
+
+    current_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in (base_users or []):
+        uname1 = str(u.get("username") or "").strip()
+        if not uname1:
+            continue
+        for g1 in (u.get("groups") or []):
+            gname = str(g1 or "").strip()
+            if gname:
+                current_group_members[gname].add(uname1)
+
+    common_groups = previous_groups & set(current_groups)
+    updated_groups_count = sum(
+        1 for g in common_groups
+        if previous_group_members.get(g, set()) != current_group_members.get(g, set())
+    )
+
+    return {
+        "new_users": int(new_users_count),
+        "updated_users": int(updated_users_count),
+        "new_groups": int(len(set(current_groups) - previous_groups)),
+        "updated_groups": int(updated_groups_count),
+    }
+
+
+def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) -> Dict[str, int]:
+    """
+    Merge new users from connector (AD/LDAP) into existing state.
+    Matches by BOTH displayName AND username - if either matches, updates existing user.
+    """
+    # Ensure baseline exists (if first run)
+    state.setdefault("last_extract", {"ou": "", "users": [], "groups": [], "ts": None})
+    base_users = state["last_extract"]["users"]
+    log("INFO", f"Merge start. Existing users in state: {len(base_users)}")
+
+    # Build dual indexes for matching by BOTH username AND displayName
+    by_username = {}
+    by_displayname = {}
+    for u in base_users:
+        uname = u.get("username")
+        if uname:
+            by_username[uname] = u
+        dn = (u.get("displayName") or "").strip().lower()
+        if dn:
+            by_displayname[dn] = u
+    
+    previous_groups = set(state["last_extract"].get("groups") or [])
+    previous_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in (base_users or []):
+        uname0 = str(u.get("username") or "").strip()
+        if not uname0:
+            continue
+        for g0 in (u.get("groups") or []):
+            gname = str(g0 or "").strip()
+            if gname:
+                previous_group_members[gname].add(uname0)
+
+    clean_new_users: List[Dict[str, Any]] = []
+    updated_count = 0
+    added_count = 0
+    updated_groups_count = 0
+    
+    # Pre-clean new users 
+    for u in (new_users or []):
+        username = (u.get("username") or "").strip()
+        if not username:
+            continue
+        clean_new_users.append({
+            "username": username,
+            "displayName": (u.get("displayName") or username).strip(),
+            "groups": sorted(set(u.get("groups") or [])),
+            "department": (u.get("department") or "").strip() or None,
+            "businessRole": (u.get("businessRole") or "").strip() or None,
+            "excluded": False,
+        })
+
+    for nu in clean_new_users:
+        uname = nu["username"]
+        dn_key = (nu.get("displayName") or "").strip().lower()
+        
+        # Merge policy:
+        # 1) Match by username
+        # 2) If not found, match by displayName and update existing record
+        #    (required for connector updates with renamed/changed usernames)
+        existing_user = by_username.get(uname)
+        if existing_user is None:
+            existing_user = by_displayname.get(dn_key)
+        
+        if existing_user:
+            # REPLACE existing user with new data from import
+            prev_username_for_user = str(existing_user.get("username") or "").strip()
+            prev_display_for_user = str(existing_user.get("displayName") or "").strip()
+            prev_department_for_user = str(existing_user.get("department") or "").strip()
+            prev_business_role_for_user = str(existing_user.get("businessRole") or "").strip()
+            prev_groups_for_user = sorted(set(existing_user.get("groups") or []))
+            existing_user["displayName"] = nu["displayName"]
+            existing_user["department"] = nu["department"]
+            # REPLACE groups (not merge)
+            existing_user["groups"] = nu.get("groups") or []
+            if nu.get("businessRole"):
+                existing_user["businessRole"] = nu["businessRole"]
+            # Update username if it changed (displayName matched but username different)
+            if existing_user.get("username") != uname:
+                old_uname = existing_user.get("username")
+                existing_user["username"] = uname
+                # Update index
+                if old_uname in by_username:
+                    del by_username[old_uname]
+                by_username[uname] = existing_user
+
+            changed = (
+                prev_username_for_user != str(existing_user.get("username") or "").strip()
+                or prev_display_for_user != str(existing_user.get("displayName") or "").strip()
+                or prev_department_for_user != str(existing_user.get("department") or "").strip()
+                or prev_business_role_for_user != str(existing_user.get("businessRole") or "").strip()
+                or prev_groups_for_user != sorted(set(existing_user.get("groups") or []))
+            )
+            if changed:
+                updated_count += 1
+        else:
+            # New user - add to base
+            base_users.append(nu)
+            by_username[uname] = nu
+            if dn_key:
+                by_displayname[dn_key] = nu
+            added_count += 1
+
+    # Update metadata
+    state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
+    state["last_extract"]["source"] = source
+    if ou:
+        state["last_extract"]["ou"] = ou
+
+    # Recompute global groups list
+    current_groups = recompute_groups_from_users(base_users)
+    state["last_extract"]["groups"] = current_groups
+
+    current_group_members: Dict[str, set[str]] = defaultdict(set)
+    for u in (base_users or []):
+        uname1 = str(u.get("username") or "").strip()
+        if not uname1:
+            continue
+        for g1 in (u.get("groups") or []):
+            gname = str(g1 or "").strip()
+            if gname:
+                current_group_members[gname].add(uname1)
+
+    common_groups = previous_groups & set(current_groups)
+    updated_groups_count = sum(
+        1 for g in common_groups
+        if previous_group_members.get(g, set()) != current_group_members.get(g, set())
+    )
+
+    state["mining_dirty"] = True
+    log("INFO", f"Merge complete. Updated: {updated_count}, Added: {added_count}, Total: {len(base_users)}")
+    return {
+        "new_users": int(added_count),
+        "updated_users": int(updated_count),
+        "new_groups": int(len(set(current_groups) - previous_groups)),
+        "updated_groups": int(updated_groups_count),
+    }
+
+def rerun_auto_business_roles_after_connector(
+    users: List[Dict[str, Any]],
+    only_depts: Optional[set[str]] = None,
+    preserve_existing_brs: bool = True,
+) -> None:
+    preserved_brs = {}
+    if preserve_existing_brs:
+        # Preserve existing valid Business Roles from user objects BEFORE resetting mapping
+        # Useful for CSV imports where BR is explicitly curated.
+        for u in (users or []):
+            uname = u.get("username")
+            br = (u.get("businessRole") or "").strip()
+            if uname and br and br != "Unassigned":
+                preserved_brs[uname] = br
+
+    # Reset mapping (partial or full)
+    if not only_depts:
+        # Full rebuild. For AD import we can start clean and let department/rules reassign.
+        state["user_business_role"] = preserved_brs.copy() if preserve_existing_brs else {}
+        state["brdb_ready"] = False
+    else:
+        # Partial update: merge preserved into existing
+        state.setdefault("user_business_role", {})
+        if preserve_existing_brs:
+            state["user_business_role"].update(preserved_brs)
+
+    
+    # Do NOT wipe existing business roles on the user objects themselves,
+    # otherwise we lose the value we just imported from CSV/Connector.
+    # for u in (users or []):
+    #     u["businessRole"] = None
+
+
+    # ricostruisci mapping usando dept + analisi merge
+    apply_department_mapping(users, only_depts=only_depts)
+
+
+    state["mining_dirty"] = True
+
+# (numpy and typing imports already at top of file)
+
+def compute_over_threshold(matrix: Dict[str, Dict[str, int]], pct: float = 0.10) -> Optional[int]:
+    if not matrix:
+        return None
+
+    row_counts = np.array([int(sum(row.values())) for row in matrix.values()], dtype=np.int32)
+    if row_counts.size == 0:
+        return None
+
+    k_top = int(np.ceil(pct * row_counts.size))
+    k_top = max(1, k_top)
+
+    thr = int(np.partition(row_counts, -k_top)[-k_top])
+    return thr
+
+def build_over_rows_only(matrix: Dict[str, Dict[str, int]], threshold: Optional[int]) -> List[Dict[str, Any]]:
+    if not matrix or threshold is None:
+        return []
+
+    rows: List[Dict[str, Any]] = []
+    for user, grants in matrix.items():
+        groups = [g for g, v in (grants or {}).items() if int(v) == 1]
+        n_groups = len(groups)
+
+        if n_groups >= threshold:
+            rows.append({
+                "user": user,
+                "nGroups": n_groups,
+                "over": True,
+                "groupsText": ", ".join(groups),
+            })
+
+    # default sort utile (visto che "over" è sempre True qui)
+    rows.sort(key=lambda r: (-r["nGroups"], r["user"]))
+    return rows
+
+
+def log(level: str, message: str) -> None:
+    state["logs"].insert(0, {"ts": datetime.now(timezone.utc).isoformat(), "level": level, "message": message})
+    state["logs"] = state["logs"][:500]
+
+def _json_safe_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            key = k.decode("utf-8", errors="replace") if isinstance(k, bytes) else str(k)
+            out[key] = _json_safe_value(v)
+        return out
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_value(v) for v in value]
+    return str(value)
+
+
+def record_manual_user_change(
+    *,
+    actor: str,
+    username: str,
+    display_name: Optional[str],
+    action: str,
+    source: str,
+    details: Optional[Dict[str, Any]] = None,
+    persist: bool = True,
+) -> None:
+    events = state.setdefault("manual_user_changes", [])
+    item = {
+        "id": f"muc-{int(time.time()*1000)}-{len(events)+1}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "actor": actor,
+        "username": username,
+        "displayName": display_name or username,
+        "action": action,
+        "source": source,
+        "details": details or {},
+    }
+    events.append(item)
+    trimmed = events[-2000:]
+    if persist:
+        state["manual_user_changes"] = trimmed
+    else:
+        events[:] = trimmed
+    return item
+
+
+def record_llm_learning_event(
+    *,
+    actor: str,
+    source: str,
+    signal_type: str,
+    entity: str = "",
+    details: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    events = state.setdefault("llm_learning_history", [])
+    item = {
+        "id": f"lle-{int(time.time()*1000)}-{len(events)+1}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "actor": actor,
+        "source": source,
+        "signalType": signal_type,
+        "entity": entity,
+        "details": details or {},
+    }
+    events.append(item)
+    state["llm_learning_history"] = events[-3000:]
+    return item
+
+
+def recalculate_assignments_background(trigger: str, actor: str) -> None:
+    """
+    Recompute BR assignments asynchronously after rule changes.
+    Runs in background to keep API latency low.
+    """
+    try:
+        users = state.get("last_extract", {}).get("users") or []
+        if not users:
+            return
+        # Recompute account types so newly added pattern rules are applied to existing users.
+        for u in users:
+            dn = str(u.get("displayName") or u.get("username") or "")
+            dept = str(u.get("department") or "")
+            employee_type = str(u.get("employeeType") or u.get("employee_type") or "")
+            try:
+                new_type = classify_account(dn, dept, employee_type, use_ml=True, attributes=u)
+                if new_type:
+                    u["accountType"] = new_type
+            except Exception:
+                continue
+        rerun_auto_business_roles_after_connector(users, only_depts=None)
+        sync_roles_from_users(users)
+        state["mining_dirty"] = True
+        RESPONSE_CACHE.invalidate("businessroles")
+        invalidate_hot_caches(kpi=True)
+        state.save()
+        log("INFO", f"Background assignment recalculation completed (trigger={trigger}, by={actor})")
+    except Exception as exc:
+        log("ERROR", f"Background assignment recalculation failed (trigger={trigger}, by={actor}): {exc}")
+
+
+def refresh_ai_detection_background(trigger: str, actor: str) -> None:
+    """
+    Recompute mining (if dirty) and AI detection in background after imports.
+    """
+    try:
+        ensure_last_mining(None)  # sync mining inside this background worker
+        last = state.get("last_mining") or {}
+        matrix = last.get("matrix") or {}
+        if not matrix:
+            return
+        users = active_users(state.get("last_extract", {}).get("users") or [])
+        result = run_smart_ai_detection(users, matrix)
+        state["last_ai_detection"] = result
+        invalidate_hot_caches(kpi=True)
+        state.save()
+        log("INFO", f"Background AI detection refresh completed (trigger={trigger}, by={actor})")
+    except Exception as exc:
+        log("ERROR", f"Background AI detection refresh failed (trigger={trigger}, by={actor}): {exc}")
+
+
+def run_post_snapshot_logic_background(snapshot_ts: str, actor: str) -> None:
+    """
+    Run heavy post-import business logic after AD snapshot has been saved.
+    If a newer snapshot exists, skip to avoid stale background work.
+    """
+    try:
+        current_ts = str((state.get("last_extract") or {}).get("ts") or "")
+        if not snapshot_ts or current_ts != str(snapshot_ts):
+            log("INFO", f"Skip post-snapshot logic: stale snapshot (expected={snapshot_ts}, current={current_ts})")
+            return
+
+        users = (state.get("last_extract") or {}).get("users") or []
+        rerun_auto_business_roles_after_connector(users, preserve_existing_brs=False)
+        sync_roles_from_users(users)
+
+        rebuild_ingest_candidates()
+        apply_duplicate_displayname_resolution()
+        invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+
+        refresh_ai_detection_background("ad-import-post-snapshot", actor)
+        log("INFO", f"Post-snapshot logic completed (snapshot_ts={snapshot_ts}, by={actor})")
+    except Exception as exc:
+        log("ERROR", f"Post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
+
+
+def run_post_csv_snapshot_logic_background(snapshot_ts: str, actor: str, touched_depts: List[str]) -> None:
+    """
+    Run heavy post-import business logic after CSV snapshot has been saved.
+    If a newer snapshot exists, skip to avoid stale background work.
+    """
+    try:
+        current_ts = str((state.get("last_extract") or {}).get("ts") or "")
+        if not snapshot_ts or current_ts != str(snapshot_ts):
+            log("INFO", f"Skip CSV post-snapshot logic: stale snapshot (expected={snapshot_ts}, current={current_ts})")
+            return
+
+        users = (state.get("last_extract") or {}).get("users") or []
+        only_depts = {d for d in (touched_depts or []) if d}
+        rerun_auto_business_roles_after_connector(
+            users,
+            only_depts=only_depts if only_depts else None,
+            preserve_existing_brs=True,
+        )
+        sync_roles_from_users(users)
+
+        rebuild_ingest_candidates()
+        apply_duplicate_displayname_resolution()
+        invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+
+        refresh_ai_detection_background("csv-import-post-snapshot", actor)
+        log("INFO", f"CSV post-snapshot logic completed (snapshot_ts={snapshot_ts}, by={actor})")
+    except Exception as exc:
+        log("ERROR", f"CSV post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
+
+def active_users(users: list[dict]) -> list[dict]:
+    return [u for u in (users or []) if not u.get("excluded")]
+
+def recompute_groups_from_users(users: list[dict]) -> list[str]:
+    return sorted({g for u in active_users(users) for g in (u.get("groups") or [])})
+
+# (_mk_candidate already defined at line 643)
+
+
+
+def apply_choice_for_displayname(display_name: str,
+                                 chosen_business_role: Optional[str],
+                                 chosen_roles: Optional[List[str]]) -> None:
+    users = state.get("last_extract", {}).get("users") or []
+
+    same = [u for u in users if (u.get("displayName") or "").strip() == (display_name or "").strip()]
+    if not same:
+        return
+
+    keep = same[0]
+    keep["excluded"] = False
+
+    if chosen_business_role:
+        keep["businessRole"] = chosen_business_role
+        state.setdefault("user_business_role", {})
+        state["user_business_role"][keep["username"]] = chosen_business_role
+
+    if chosen_roles is not None:
+        keep["groups"] = sorted(set(chosen_roles))
+
+    for u in same[1:]:
+        u["excluded"] = True
+        m = state.get("user_business_role") or {}
+        if u.get("username") in m:
+            del m[u["username"]]
+
+    # state["last_extract"]["groups"] = recompute_groups_from_users(users)
+
+
+# ----------------------------
+# Models
+# ----------------------------
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    username: str
+
+
+class ConnectorConfig(BaseModel):
+    server: str = Field(..., description="LDAP host/ip o 'mock'")
+    bind_user: str = Field("", description="Utente bind (es: user@domain o DOMAIN\\user)")
+    bind_password: str = Field("", description="Password bind")
+    base_dn: str = Field("", description="Base DN (es: DC=example,DC=local)")
+    auth: str = Field("SIMPLE", description="SIMPLE oppure NTLM")
+    port: int = Field(389, description="LDAP Port")
+    use_ssl: bool = Field(False, description="Use SSL/LDAPS")
+    sap_base_url: str = Field("", description="SAP API base URL (es: https://sap.company.local)")
+    sap_auth_mode: str = Field("AUTO", description="AUTO, APIKEY, BASIC, OAUTH2")
+    sap_client: str = Field("", description="SAP client (es: 100)")
+    sap_system: str = Field("", description="SAP system id (es: ECC/4HANA)")
+    sap_username: str = Field("", description="SAP username")
+    sap_password: str = Field("", description="SAP password")
+    sap_api_key: str = Field("", description="SAP API key (Business Accelerator Hub sandbox)")
+    sap_token_url: str = Field("", description="OAuth2 token endpoint (es: https://<host>/oauth/token)")
+    sap_client_id: str = Field("", description="OAuth2 client id")
+    sap_client_secret: str = Field("", description="OAuth2 client secret")
+    sap_oauth_scope: str = Field("", description="OAuth2 scope (opzionale)")
+    sap_company_id: str = Field("", description="SuccessFactors company id (opzionale)")
+    sap_users_path: str = Field("/sap/opu/odata/sap/ZROLE_MINING_SRV/Users", description="SAP users endpoint path")
+    azure_base_url: str = Field("https://graph.microsoft.com", description="Azure Graph base URL")
+    azure_tenant_id: str = Field("", description="Azure tenant id")
+    azure_client_id: str = Field("", description="Azure app client id")
+    azure_client_secret: str = Field("", description="Azure app client secret")
+    azure_users_path: str = Field("/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled", description="Azure users endpoint/query")
+    one_identity_base_url: str = Field("https://<host>/AppServer", description="One Identity base URL")
+    one_identity_token_url: str = Field("", description="One Identity token URL")
+    one_identity_client_id: str = Field("", description="One Identity client id")
+    one_identity_client_secret: str = Field("", description="One Identity client secret")
+    one_identity_username: str = Field("", description="One Identity username (optional)")
+    one_identity_password: str = Field("", description="One Identity password (optional)")
+    one_identity_users_path: str = Field("/api/entities/person?limit=100", description="One Identity users path")
+    sailpoint_base_url: str = Field("https://<tenant>.api.identitynow.com/v3", description="SailPoint base URL")
+    sailpoint_token_url: str = Field("", description="SailPoint token URL")
+    sailpoint_client_id: str = Field("", description="SailPoint client id")
+    sailpoint_client_secret: str = Field("", description="SailPoint client secret")
+    sailpoint_users_path: str = Field("/accounts", description="SailPoint users path")
+    saviynt_base_url: str = Field("", description="Saviynt base URL")
+    saviynt_token_url: str = Field("", description="Saviynt token URL")
+    saviynt_client_id: str = Field("", description="Saviynt client id")
+    saviynt_client_secret: str = Field("", description="Saviynt client secret")
+    saviynt_username: str = Field("", description="Saviynt service username")
+    saviynt_password: str = Field("", description="Saviynt service password")
+    saviynt_users_path: str = Field("", description="Saviynt users path (tenant-specific)")
+    servicenow_base_url: str = Field("", description="ServiceNow instance URL")
+    servicenow_username: str = Field("", description="ServiceNow username")
+    servicenow_password: str = Field("", description="ServiceNow password")
+    servicenow_users_path: str = Field("/api/now/table/sys_user?sysparm_fields=sys_id,user_name,name,email,department,active", description="ServiceNow users API path")
+    salesforce_base_url: str = Field("", description="Salesforce instance URL")
+    salesforce_token_url: str = Field("https://login.salesforce.com/services/oauth2/token", description="Salesforce OAuth token URL")
+    salesforce_client_id: str = Field("", description="Salesforce client id")
+    salesforce_client_secret: str = Field("", description="Salesforce client secret")
+    salesforce_users_path: str = Field("/services/data/v60.0/query?q=SELECT+Id,Name,Username,Email,Department,IsActive+FROM+User", description="Salesforce users query path")
+    m365_base_url: str = Field("https://graph.microsoft.com", description="Microsoft 365 Graph base URL")
+    m365_tenant_id: str = Field("", description="Microsoft 365 tenant id")
+    m365_client_id: str = Field("", description="Microsoft 365 client id")
+    m365_client_secret: str = Field("", description="Microsoft 365 client secret")
+    m365_users_path: str = Field("/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled", description="Microsoft 365 users query path")
+    discovery_schedules: Dict[str, Any] = Field(default_factory=dict, description="Discovery schedule by connector target")
+    discovery_results: Dict[str, Any] = Field(default_factory=dict, description="Last discovery result by connector target")
+
+
+class ExtractRequest(BaseModel):
+    ou: str = Field("", description="OU DN (opzionale: fallback a base_dn connettore)")
+
+
+class ExtractResponse(BaseModel):
+    ou: str
+    total_users: int
+    total_groups: int
+    snapshot_ready: bool = True
+    processing_in_background: bool = False
+    new_users: int = 0
+    updated_users: int = 0
+    updated_by_displayname: int = 0
+    new_groups: int = 0
+    updated_groups: int = 0
+    users: List[Dict[str, Any]]
+    groups: List[str]
+
+
+class RoleMiningRequest(BaseModel):
+    n_clusters: Optional[int] = Field(None, description="Se None, calcolato automaticamente")
+    role_support: float = Field(0.5, ge=0.1, le=1.0, description="Soglia (0..1) per includere un gruppo nel ruolo del cluster")
+
+
+class RoleMiningResponse(BaseModel):
+    total_users: int
+    total_groups: int
+    n_clusters: int
+    clusters: List[Dict[str, Any]]
+    kpi: Dict[str, Any]
+
+
+security = HTTPBearer(auto_error=False)
+
+
+def create_access_token(username: str) -> str:
+    exp = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
+    payload = {"sub": username, "exp": exp}
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+def require_auth(creds: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    if creds is None or not creds.credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
+    try:
+        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=["HS256"])
+        return payload["sub"]
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
+# ----------------------------
+# LDAP / Mock AD
+# ----------------------------
+def mock_users() -> List[Dict[str, Any]]:
+    return [
+        {"username": "alice", "displayName": "Alice Rossi", "groups": ["HR", "AllEmployees", "Confluence"]},
+        {"username": "bob", "displayName": "Bob Bianchi", "groups": ["HR", "AllEmployees", "Payroll"]},
+        {"username": "carol", "displayName": "Carol Verdi", "groups": ["IT", "AllEmployees", "Azure", "GitLab"]},
+        {"username": "dave", "displayName": "Dave Neri", "groups": ["IT", "AllEmployees", "Azuure"]},
+        {"username": "erin", "displayName": "Erin Gialli", "groups": ["Sales", "AllEmployees", "CRM"]},
+        {"username": "frank", "displayName": "Frank Blu", "groups": ["Sales", "AllEmployees", "CRM", "DiscountApproval"]},
+    ]
+
+
+def mock_sap_users() -> List[Dict[str, Any]]:
+    return [
+        {
+            "username": "sap.mrossi",
+            "displayName": "Mario Rossi",
+            "department": "Finance",
+            "businessRole": "Accountant",
+            "groups": ["SAP_FI_DISPLAY", "SAP_CO_DISPLAY", "SAP_PORTAL_USER"],
+        },
+        {
+            "username": "sap.lbianchi",
+            "displayName": "Laura Bianchi",
+            "department": "Procurement",
+            "businessRole": "Buyer",
+            "groups": ["SAP_MM_DISPLAY", "SAP_MM_BUYER", "SAP_PORTAL_USER"],
+        },
+        {
+            "username": "sap.gverdi",
+            "displayName": "Giulia Verdi",
+            "department": "Warehouse",
+            "businessRole": "Warehouse Operator",
+            "groups": ["SAP_MM_DISPLAY", "SAP_MM_WM_WRITE", "SAP_PORTAL_USER"],
+        },
+    ]
+
+
+def _sap_pick(entry: Dict[str, Any], keys: List[str], default: Any = "") -> Any:
+    for key in keys:
+        if key in entry and entry.get(key) not in (None, ""):
+            return entry.get(key)
+        for k2, v2 in entry.items():
+            if str(k2).lower() == key.lower() and v2 not in (None, ""):
+                return v2
+    return default
+
+
+def _sap_parse_groups(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        out = [str(x).strip() for x in raw if str(x).strip()]
+        return sorted(set(out))
+    txt = str(raw).strip()
+    if not txt:
+        return []
+    parts = [p.strip() for p in re.split(r"[;,|]", txt) if p.strip()]
+    return sorted(set(parts))
+
+
+def _sap_normalize_users(payload: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]]
+    if isinstance(payload, list):
+        rows = payload
+    elif isinstance(payload, dict):
+        if isinstance(payload.get("value"), list):  # OData v4
+            rows = payload.get("value") or []
+        elif isinstance(payload.get("d"), dict) and isinstance((payload.get("d") or {}).get("results"), list):  # OData v2
+            rows = (payload.get("d") or {}).get("results") or []
+        else:
+            rows = payload.get("users") if isinstance(payload.get("users"), list) else []
+    else:
+        rows = []
+
+    users: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        username = str(_sap_pick(row, ["username", "UserName", "Bname", "user_id", "userid", "BusinessPartner", "businessPartner", "id", "ID"], "")).strip()
+        if not username:
+            continue
+        display_name = str(_sap_pick(row, ["displayName", "DisplayName", "fullName", "BusinessPartnerFullName", "OrganizationBPName1", "name", "uname"], username)).strip()
+        department = str(_sap_pick(row, ["department", "Department", "orgUnit", "OrgUnit"], "")).strip()
+        business_role = str(_sap_pick(row, ["businessRole", "BusinessRole", "jobRole", "RoleName"], "Unassigned")).strip()
+        account_type = str(_sap_pick(row, ["accountType", "AccountType", "userType"], "")).strip()
+        last_login = str(_sap_pick(row, ["lastLogin", "LastLogin", "last_logon", "lastLogon"], "")).strip()
+        groups = _sap_parse_groups(_sap_pick(row, ["groups", "Groups", "roles", "Roles", "authorizations", "Authorizations"], []))
+        users.append(
+            {
+                "username": username,
+                "displayName": display_name or username,
+                "department": department or "Unknown",
+                "businessRole": business_role or "Unassigned",
+                "accountType": account_type,
+                "lastLogin": last_login,
+                "groups": groups,
+            }
+        )
+    return users
+
+
+def _sap_fetch_oauth_token(cfg: Dict[str, Any]) -> str:
+    token_url = str(cfg.get("sap_token_url") or "").strip()
+    client_id = str(cfg.get("sap_client_id") or "").strip()
+    client_secret = str(cfg.get("sap_client_secret") or "").strip()
+    oauth_scope = str(cfg.get("sap_oauth_scope") or "").strip()
+    company_id = str(cfg.get("sap_company_id") or "").strip()
+
+    if not token_url:
+        raise HTTPException(status_code=400, detail="Configura sap_token_url per OAuth2")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=400, detail="Configura sap_client_id/sap_client_secret per OAuth2")
+
+    body = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
+    if oauth_scope:
+        body["scope"] = oauth_scope
+    if company_id:
+        body["company_id"] = company_id
+
+    data = urllib.parse.urlencode(body).encode("utf-8")
+    basic_blob = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        token_url,
+        headers={
+            "Authorization": f"Basic {basic_blob}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "RoleMining/1.0",
+        },
+        data=data,
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")[:500]
+        raise HTTPException(status_code=502, detail=f"SAP OAuth token HTTP {e.code}: {detail or 'errore upstream'}")
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=503, detail=f"SAP OAuth token endpoint non raggiungibile: {e.reason}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore OAuth token SAP: {e}")
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Risposta OAuth token non in formato JSON")
+
+    token = str(payload.get("access_token") or "").strip()
+    if not token:
+        raise HTTPException(status_code=502, detail="OAuth token mancante nella risposta SAP")
+    return token
+
+
+def extract_from_sap(scope: str) -> List[Dict[str, Any]]:
+    cfg = state.get("connector", {}) or {}
+    sap_base_url = str(cfg.get("sap_base_url") or "").strip()
+    sap_auth_mode = str(cfg.get("sap_auth_mode") or "AUTO").strip().upper()
+    sap_username = str(cfg.get("sap_username") or "").strip()
+    sap_password = str(cfg.get("sap_password") or "").strip()
+    sap_api_key = str(cfg.get("sap_api_key") or "").strip()
+    sap_client = str(cfg.get("sap_client") or "").strip()
+    sap_system = str(cfg.get("sap_system") or "").strip()
+    sap_users_path = str(cfg.get("sap_users_path") or "/sap/opu/odata/sap/ZROLE_MINING_SRV/Users").strip()
+
+    sap_has_oauth = bool(str(cfg.get("sap_token_url") or "").strip() and str(cfg.get("sap_client_id") or "").strip() and str(cfg.get("sap_client_secret") or "").strip())
+
+    if not sap_base_url and not sap_username and not sap_password and not sap_api_key and not sap_has_oauth:
+        raise HTTPException(
+            status_code=400,
+            detail="Connettore SAP non configurato: imposta SAP Base URL e credenziali reali in Connettori",
+        )
+
+    if not sap_base_url:
+        raise HTTPException(status_code=400, detail="Configura sap_base_url in Connettori")
+
+    base = sap_base_url.rstrip("/")
+    path = sap_users_path if sap_users_path.startswith("/") else f"/{sap_users_path}"
+    query: Dict[str, str] = {}
+    if sap_client:
+        query["sap-client"] = sap_client
+    query["$format"] = "json"
+    qs = urllib.parse.urlencode(query)
+    url = f"{base}{path}"
+    if qs:
+        url = f"{url}?{qs}"
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "RoleMining/1.0",
+    }
+    if sap_auth_mode == "APIKEY":
+        if not sap_api_key:
+            raise HTTPException(status_code=400, detail="Auth mode APIKEY selezionato ma sap_api_key non configurata")
+        headers["APIKey"] = sap_api_key
+        headers["apikey"] = sap_api_key
+    elif sap_auth_mode == "BASIC":
+        if not sap_username or not sap_password:
+            raise HTTPException(status_code=400, detail="Auth mode BASIC selezionato ma sap_username/sap_password non configurati")
+        auth_blob = base64.b64encode(f"{sap_username}:{sap_password}".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {auth_blob}"
+    elif sap_auth_mode == "OAUTH2":
+        token = _sap_fetch_oauth_token(cfg)
+        headers["Authorization"] = f"Bearer {token}"
+    else:
+        # AUTO mode preference: API key -> OAuth2 -> Basic
+        if sap_api_key:
+            headers["APIKey"] = sap_api_key
+            headers["apikey"] = sap_api_key
+        elif sap_has_oauth:
+            token = _sap_fetch_oauth_token(cfg)
+            headers["Authorization"] = f"Bearer {token}"
+        elif sap_username and sap_password:
+            auth_blob = base64.b64encode(f"{sap_username}:{sap_password}".encode("utf-8")).decode("ascii")
+            headers["Authorization"] = f"Basic {auth_blob}"
+        else:
+            raise HTTPException(status_code=400, detail="Configura credenziali SAP (API key, OAuth2 o Basic)")
+    req = urllib.request.Request(
+        url,
+        headers=headers,
+        method="GET",
+    )
+
+    log("INFO", f"SAP extract call system={sap_system or 'N/A'} client={sap_client or 'N/A'} scope={scope or 'N/A'} endpoint={path}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")[:500]
+        raise HTTPException(status_code=502, detail=f"SAP API HTTP {e.code}: {detail or 'errore upstream'}")
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=503, detail=f"SAP API non raggiungibile: {e.reason}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore SAP extract: {e}")
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Risposta SAP non in formato JSON")
+
+    users = _sap_normalize_users(payload)
+    if not users:
+        raise HTTPException(status_code=502, detail="SAP API raggiunta ma nessun utente valido trovato")
+    return users
+def _mk_ldap_server(cfg: Dict[str, Any]):
+    raw = (cfg.get("server") or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Configura server LDAP")
+
+    if Connection is None:
+        raise HTTPException(status_code=500, detail="ldap3 non disponibile")
+
+    raw_lower = raw.lower()
+    scheme_ssl = raw_lower.startswith("ldaps://")
+    host_port = raw.replace("ldaps://", "").replace("ldap://", "")
+    host = host_port.split(":")[0].strip()
+    server_port = None
+    if ":" in host_port:
+        try:
+            server_port = int(host_port.rsplit(":", 1)[1].strip())
+        except Exception:
+            server_port = None
+
+    cfg_use_ssl = cfg.get("use_ssl")
+    use_ssl = bool(cfg_use_ssl) if cfg_use_ssl is not None else scheme_ssl
+
+    cfg_port = cfg.get("port")
+    port = None
+    try:
+        port = int(cfg_port) if cfg_port is not None else None
+    except Exception:
+        port = None
+    if port is None:
+        port = server_port
+    if port is None:
+        port = 636 if use_ssl else 389
+
+    return {
+        "server": Server(host, port=port, use_ssl=use_ssl, get_info=NONE, connect_timeout=15),
+        "host": host,
+        "port": port,
+        "use_ssl": use_ssl,
+    }
+
+
+def _ldap_search_attrs() -> List[str]:
+    if LDAP_FETCH_ALL_ATTRIBUTES:
+        return ["*"]
+    out = list(dict.fromkeys(LDAP_BASE_ATTRIBUTES + LDAP_EXTRA_ATTRIBUTES))
+    return out or ["*"]
+
+
+def _extract_group_cn(raw_dn: Any) -> str:
+    dn_str = str(raw_dn or "").strip()
+    if not dn_str:
+        return ""
+    for part in dn_str.split(","):
+        p = part.strip()
+        if p.upper().startswith("CN="):
+            return p[3:]
+    return dn_str
+
+
+
+
+
+def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
+    if MOCK_AD or state.get("connector", {}).get("server") == "mock":
+        # Ignora OU, ritorna dataset di test
+        log("INFO", "Using MOCK AD extract")
+        return mock_users()
+
+    if Connection is None:
+        raise HTTPException(status_code=500, detail="ldap3 library not installed or failed to import")
+
+    cfg = state.get("connector", {})
+    if not cfg.get("server") or not cfg.get("bind_user") or not cfg.get("bind_password"):
+        raise HTTPException(status_code=400, detail="Configura server/bind_user/bind_password in Connettori")
+
+    log("INFO", f"Connecting to LDAP server: {cfg['server']} as {cfg['bind_user']}")
+    
+    conn = None
+    try:
+        resolved = _mk_ldap_server(cfg)
+        server = resolved["server"]
+        host = resolved["host"]
+        port = resolved["port"]
+        use_ssl = resolved["use_ssl"]
+        log("INFO", f"LDAP target resolved to {host}:{port} (use_ssl={use_ssl})")
+        auth_mode = cfg.get("auth", "SIMPLE").upper()
+        
+        try:
+            if auth_mode == "NTLM":
+                conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=NTLM, auto_bind=True)
+            else:
+                conn = Connection(server, user=cfg["bind_user"], password=cfg["bind_password"], authentication=SIMPLE, auto_bind=True)
+        except Exception as e:
+            error_msg = str(e)
+            log("ERROR", f"LDAP Connection failed: {error_msg}")
+            if "timeout" in error_msg.lower():
+                 raise HTTPException(status_code=504, detail=f"Timeout connettendosi al server LDAP {host}:{port} (use_ssl={use_ssl})")
+            raise HTTPException(status_code=503, detail=f"Impossibile connettersi al server LDAP {host}:{port} (use_ssl={use_ssl}) - {error_msg}")
+
+        # objectClass=user può includere account tecnici: in produzione aggiungere filtri più stretti
+        search_filter = "(&(objectClass=user)(sAMAccountName=*))"
+        attrs = _ldap_search_attrs()
+        log(
+            "INFO",
+            f"Searching LDAP base='{ou_dn}' filter='{search_filter}' attrs={len(attrs)} page_size={LDAP_PAGE_SIZE}",
+        )
+
+        users: List[Dict[str, Any]] = []
+
+        # Collect all available field names for UI
+        available_fields = set()
+        parsed_entries = 0
+
+        if LDAP_PAGE_SIZE > 0:
+            entries_iter = conn.extend.standard.paged_search(
+                search_base=ou_dn,
+                search_filter=search_filter,
+                attributes=attrs,
+                paged_size=LDAP_PAGE_SIZE,
+                generator=True,
+                time_limit=LDAP_SEARCH_TIME_LIMIT,
+            )
+        else:
+            if not conn.search(
+                search_base=ou_dn,
+                search_filter=search_filter,
+                attributes=attrs,
+                time_limit=LDAP_SEARCH_TIME_LIMIT,
+            ):
+                result = conn.result or {}
+                log("ERROR", f"LDAP search returned False. Result: {result}")
+                result_desc = str(result.get("description") or "").lower()
+                diagnostic = {
+                    "message": f"LDAP search failed on base '{ou_dn}'",
+                    "result": result,
+                    "hints": [
+                        "Verifica OU DN: deve esistere nel dominio LDAP (es. OU=Users,DC=example,DC=internal).",
+                        f"Controlla coerenza con base_dn configurato: '{cfg.get('base_dn') or ''}'.",
+                    ],
+                }
+                if "no such object" in result_desc or "nosuchobject" in result_desc:
+                    raise HTTPException(status_code=400, detail=diagnostic)
+                if "invalid dn syntax" in result_desc or "invaliddnsyntax" in result_desc:
+                    raise HTTPException(status_code=400, detail=diagnostic)
+                raise HTTPException(status_code=500, detail=diagnostic)
+            entries_iter = (
+                {"type": "searchResEntry", "attributes": e.entry_attributes_as_dict}
+                for e in conn.entries
+            )
+
+        for entry in entries_iter:
+            if entry.get("type") != "searchResEntry":
+                continue
+            parsed_entries += 1
+            try:
+                d = entry.get("attributes") or {}
+                
+                # Update available fields
+                for k in d.keys():
+                    available_fields.add(k)
+
+                # Safe attribute extraction
+                sAM = d.get("sAMAccountName") or []
+                username = str(sAM[0]).strip() if sAM else ""
+                
+                disp = d.get("displayName") or []
+                display = str(disp[0]).strip() if disp else ""
+                
+                member_of = d.get("memberOf") or []
+                groups = []
+                for dn in member_of:
+                    cn = _extract_group_cn(dn)
+                    if cn:
+                        groups.append(cn)
+                
+                dept = d.get("department") or []
+                department = str(dept[0]).strip() if dept else None
+                
+                llt = d.get("lastLogonTimestamp")
+                ll = d.get("lastLogon")
+                candidates = []
+                n1 = _normalize_last_login(llt)
+                n2 = _normalize_last_login(ll)
+                if n1:
+                    candidates.append(n1)
+                if n2:
+                    candidates.append(n2)
+                if candidates:
+                    last_login = max(candidates, key=_to_ts)
+                else:
+                    last_login = None
+
+                et = d.get("employeeType")
+                etype = str(et[0]).strip() if et else ""
+                
+                dn_full = d.get("distinguishedName")
+                dn_str_val = str(dn_full[0]).strip() if dn_full else ""
+                
+                # Use department or parse OU from DN as fallback for classification
+                ou_for_class = department or dn_str_val
+
+                # Pass sanitized attributes to avoid bytes serialization errors in API responses.
+                safe_attrs = _json_safe_value(d)
+                account_type = classify_account(display or username, ou_for_class, etype, attributes=safe_attrs)
+
+                if username:
+                    users.append({
+                        "username": username,
+                        "displayName": display or username,
+                        "groups": sorted(set(groups)),
+                        "department": department,
+                        "lastLogin": last_login,
+                        "accountType": account_type,
+                        "attributes": safe_attrs
+                    })
+            except Exception as entry_ex:
+                # Log but continue processing other users
+                log("WARNING", f"Error parsing LDAP entry: {entry_ex}. Entry: {str(entry)[:100]}...")
+                continue
+        
+        # Update state with available fields
+        state["ad_available_fields"] = sorted(list(available_fields))
+        log("INFO", f"Updated available AD fields: {len(available_fields)} found.")
+
+                
+        log("INFO", f"LDAP extraction complete. Parsed entries={parsed_entries}, users={len(users)}.")
+        return users
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log("ERROR", f"Unexpected error in extract_from_ldap: {e}")
+        # traceback would be good here but keeping it simple
+        raise HTTPException(status_code=500, detail=f"Errore interno durante estrazione LDAP: {str(e)}")
+    finally:
+        if conn:
+            try:
+                conn.unbind()
+            except:
+                pass
+
+
+# ----------------------------
+# Role Mining
+# ----------------------------
+def build_matrix(users: List[Dict[str, Any]]) -> Tuple[List[str], List[str], np.ndarray]:
+    usernames = [u["username"] for u in users]
+    all_groups = sorted({g for u in users for g in u["groups"]})
+    g_index = {g: i for i, g in enumerate(all_groups)}
+
+    X = np.zeros((len(users), len(all_groups)), dtype=np.int8)
+    for i, u in enumerate(users):
+        for g in u["groups"]:
+            if g in g_index:
+                X[i, g_index[g]] = 1
+    return usernames, all_groups, X
+
+
+def jaccard_distance_matrix(X: np.ndarray) -> np.ndarray:
+    # D[i,j] = 1 - |A∩B|/|A∪B|
+    n = X.shape[0]
+    D = np.zeros((n, n), dtype=np.float32)
+    for i in range(n):
+        Ai = X[i]
+        for j in range(i + 1, n):
+            Aj = X[j]
+            inter = int(np.logical_and(Ai, Aj).sum())
+            union = int(np.logical_or(Ai, Aj).sum())
+            dist = 0.0 if union == 0 else 1.0 - (inter / union)
+            D[i, j] = dist
+            D[j, i] = dist
+    return D
+
+
+def compute_purity(cluster_members_idx: List[int], X: np.ndarray) -> float:
+    # Purity “semplice”: media della massima frequenza (per attributo) nel cluster
+    if not cluster_members_idx:
+        return 0.0
+    sub = X[cluster_members_idx, :]
+    # frequenza per colonna
+    freq = sub.mean(axis=0)  # 0..1
+    return float(freq.max())  # quanto un "gruppo dominante" spiega il cluster
+
+# (_tokens, _family_key, _is_broad already defined at lines 96-109)
+# (BROAD_MARKERS defined at line 94)
+
+def compute_ai_detection(matrix: dict, users: list = None) -> dict:
+    if users:
+        # Use SMART logic (KB + Stats)
+        res = run_smart_ai_detection(users, matrix)
+        stats = res.get("stats", {})
+        return {
+            "aiDetection": stats.get("aiDetection", 0),
+            "redundantAssignments": stats.get("totalAnomalies", 0),
+            "totalAssignments": stats.get("totalAssignments", 0),
+            "usersWithRedundancy": stats.get("usersWithAnomaly", 0),
+            "redundantUsers": [], # Not needed for KPI summary
+        }
+
+    # --- Legacy Logic (Matrix only) ---
+    total_assignments = 0
+    redundant_assignments = 0
+
+    users_with_redundancy = 0
+    redundant_users = []
+
+    for uname, row in (matrix or {}).items():
+        roles = [r for r, v in (row or {}).items() if int(v) == 1]
+        user_groups = _matrix_user_roles(matrix, uname)
+
+        total_assignments += len(roles)
+
+        fam = defaultdict(list)
+        for r in roles:
+            k = _family_key(r)
+            if k:
+                fam[k].append(r)
+
+        has_redundancy = False
+
+        for rs in fam.values():
+            broad = [r for r in rs if _is_broad(r)]
+            specific = [r for r in rs if not _is_broad(r)]
+            if not broad or not specific:
+                continue
+
+            red = 0
+            for b in broad:
+                probs = [predict_redundant(b, s, _family_key(b), user_groups) for s in specific]
+                p = max(probs) if probs else 0.0
+                if p >= 0.50:
+                    red += 1
+
+            if red > 0:
+                redundant_assignments += red
+                has_redundancy = True
+
+        if has_redundancy:
+            users_with_redundancy += 1
+            redundant_users.append(uname)
+
+    total_users = len(matrix or {})
+    pct = (users_with_redundancy / max(1, total_users) * 100.0)
+
+    return {
+        "aiDetection": round(pct, 2),
+        "redundantAssignments": redundant_assignments,
+        "totalAssignments": total_assignments,
+        "usersWithRedundancy": users_with_redundancy,
+        "redundantUsers": redundant_users,
+    }
+
+
+def compute_kpis(
+    users: List[Dict[str, Any]],
+    clusters: List[Dict[str, Any]],
+    matrix: Dict[str, Dict[str, int]],
+) -> Dict[str, Any]:
+    import numpy as np
+
+    total_users = len(users)
+    if total_users == 0:
+        return {
+            "totalUsers": 0,
+            "overprivilegedPct": 0,
+            "clusterQuality": 0,
+            "clusteringQuality": 0,
+            "roleCoverage": 0,
+            "aiDetection": 0,
+            "redundantAssignments": 0,
+            "totalAssignments": 0,
+            "usersWithRedundancy": 0,
+        }
+
+    # --- Overprivileged: top 10% per numero gruppi calcolato dalla matrix ---
+    row_counts = np.array(
+        [int(sum((row or {}).values())) for row in (matrix or {}).values()],
+        dtype=np.int32
+    )
+    if row_counts.size == 0:
+        return {
+            "totalUsers": total_users,
+            "overprivilegedPct": 0,
+            "clusterQuality": 0,
+            "clusteringQuality": 0,
+            "roleCoverage": 0,
+            "aiDetection": 0,
+            "redundantAssignments": 0,
+            "totalAssignments": 0,
+            "usersWithRedundancy": 0,
+        }
+
+    k_top = int(np.ceil(0.1 * row_counts.size))
+    k_top = max(1, k_top)
+
+    thr = int(np.partition(row_counts, -k_top)[-k_top])
+
+    overpriv = float((row_counts >= thr).mean() * 100.0)
+
+    # --- AI detection (redundant broad roles) ---
+    ai = compute_ai_detection(matrix, users=users)
+
+    # --- RoleCoverage: roleGroups copre i gruppi reali (da matrix) dei membri ---
+    cov_vals: list[float] = []
+    for c in (clusters or []):
+        role_groups = set(c.get("roleGroups") or [])
+        members = c.get("members") or []
+        for uname in members:
+            row = matrix.get(uname) or {}
+            denom = int(sum((row or {}).values()))
+            if denom <= 0:
+                cov_vals.append(0.0)
+            else:
+                covered = sum(int(row.get(g, 0)) for g in role_groups)
+                cov_vals.append(covered / denom)
+
+    role_coverage = float((np.mean(cov_vals) if cov_vals else 0.0) * 100.0)
+
+    # --- clusterQuality = data-quality score (ingest) ---
+    ingest = state.get("last_ingest_stats") or {}
+    total = int(ingest.get("rowsTotal") or 0)
+    src = str(ingest.get("source") or "").lower()
+
+    if total > 0:
+        dup = int(ingest.get("duplicateDisplayName") or 0)
+        miss_dept = int(ingest.get("missingDepartment") or 0)
+        miss_br = int(ingest.get("missingBusinessRole") or 0)
+        miss_dn = int(ingest.get("missingDisplayName") or 0)
+        miss_user = int(ingest.get("missingUsername") or 0)
+
+        if src.startswith("ad"):
+            miss_br = 0
+            dup = 0
+
+        penalty = (
+            1.00 * (dup / total) +
+            0.70 * (miss_dept / total) +
+            0.70 * (miss_br / total) +
+            0.40 * (miss_dn / total) +
+            0.40 * (miss_user / total)
+        )
+        penalty = min(1.0, penalty)
+        cluster_quality = 100.0 * (1.0 - penalty)
+    else:
+        cluster_quality = 100.0
+
+    # --- clusteringQuality = qualità clustering (purity media pesata) ---
+    if clusters:
+        total_sz = sum(int(c.get("size") or len(c.get("members") or [])) for c in clusters) or 1
+        weighted = 0.0
+        for c in clusters:
+            sz = int(c.get("size") or len(c.get("members") or []))
+            weighted += float(c.get("purity") or 0.0) * sz
+        clustering_quality = (weighted / total_sz) * 100.0
+    else:
+        clustering_quality = 0.0
+
+    # --- Model Quality (Enhanced Option B) ---
+    groups_list = (state.get("last_extract") or {}).get("groups") or []
+    if not groups_list and matrix:
+        # Fallback to matrix keys if last_extract is empty
+        all_groups = set()
+        for row in matrix.values():
+            if isinstance(row, list):
+                all_groups.update(row)
+            else:
+                all_groups.update((row or {}).keys())
+        groups_list = list(all_groups)
+    
+    mq = compute_model_quality(users, matrix, groups_list)
+
+    # Ensure last_kpis is updated in state for drilldown fallback
+    last_kpis = {
+        "clusterQuality": round(cluster_quality, 2),
+        "clusteringQuality": round(clustering_quality, 2),
+        "modelQuality": mq.get("modelQuality", 0),
+        "aiDetection": ai.get("score", 0),
+        "roleCoverage": round(role_coverage, 2),
+        "staleAccounts": mq.get("staleUsers", 0)
+    }
+    state["last_kpis"] = last_kpis
+
+    return {
+        "totalUsers": total_users,
+        # "overprivilegedPct": round(overpriv, 2), # Removed/Deprecated
+        "modelQuality": mq.get("modelQuality", 0),
+        "orphanRolesCount": mq.get("orphanRoles", mq.get("orphanGroups", 0)),
+        "orphanGroupsCount": mq.get("orphanGroups", 0),
+        "overprivilegedCount": mq.get("overprivilegedUsers", 0),
+        "zeroGroupCount": mq.get("zeroGroupUsers", 0),
+        "staleAccountCount": mq.get("staleUsers", 0),
+
+        "clusterQuality": round(float(cluster_quality), 2),
+        "clusteringQuality": round(float(clustering_quality), 2),
+        "aiDetection": ai.get("aiDetection", 0),
+        "redundantAssignments": ai.get("redundantAssignments", 0),
+        "totalAssignments": ai.get("totalAssignments", 0),
+        "usersWithRedundancy": ai.get("usersWithRedundancy", 0),
+        "roleCoverage": round(float(role_coverage), 2),
+    }
+
+
+def compute_cluster_quality_live() -> float:
+    """
+    Compute Cluster Quality from the currently loaded dataset, not only from the
+    last ingest counters. This keeps /api/kpi aligned with cluster-quality drilldown.
+    """
+    cache_key = "kpi_cluster_quality_live"
+    cached_score = RESPONSE_CACHE.get(cache_key)
+    if cached_score is not None:
+        return float(cached_score)
+
+    ingest = state.get("last_ingest_stats") or {}
+    last_extract = state.get("last_extract") or {}
+    users = last_extract.get("users") or []
+
+    total_ingest = int(ingest.get("rowsTotal") or 0)
+    total_users = len(users)
+    total = max(total_ingest, total_users)
+    if total <= 0:
+        return 0.0
+
+    missing_department = sum(1 for u in users if not str(u.get("department") or "").strip())
+    missing_business_role = sum(1 for u in users if not str(u.get("businessRole") or "").strip())
+    missing_display_name = sum(
+        1 for u in users if not str((u.get("displayName") or u.get("display_name") or "")).strip()
+    )
+    missing_username = sum(1 for u in users if not str(u.get("username") or "").strip())
+
+    duplicate_items = _duplicate_resolution_items()
+    duplicates = _effective_duplicate_displayname_count(
+        ingest=ingest,
+        duplicate_items=duplicate_items,
+        rejects=state.get("last_rejects") or [],
+    )
+
+    src = str(ingest.get("source") or "").lower()
+    if src.startswith("ad"):
+        missing_business_role = 0
+        duplicates = 0
+
+    penalty = (
+        1.00 * (duplicates / total) +
+        0.70 * (missing_department / total) +
+        0.70 * (missing_business_role / total) +
+        0.40 * (missing_display_name / total) +
+        0.40 * (missing_username / total)
+    )
+    penalty = min(1.0, penalty)
+    score = round(max(0.0, 100.0 * (1.0 - penalty)), 2)
+    RESPONSE_CACHE.set(cache_key, score, CACHE_TTL_KPI)
+    return score
+
+
+def _effective_connector_type() -> str:
+    """
+    Resolve active connector family for Data Quality rendering.
+    Values: ad | sap | csv | generic
+    """
+    last_extract = state.get("last_extract") or {}
+    ingest = state.get("last_ingest_stats") or {}
+    connector = state.get("connector") or {}
+
+    src = str(last_extract.get("source") or ingest.get("source") or "").strip().lower()
+    if src.startswith("sap"):
+        return "sap"
+    if src.startswith("ad") or src.startswith("ldap"):
+        return "ad"
+    if src.startswith("csv"):
+        return "csv"
+
+    if str(connector.get("sap_base_url") or "").strip():
+        return "sap"
+    if str(connector.get("server") or "").strip():
+        return "ad"
+    return "generic"
+
+
+def _csv_connector_peer_quality(users: List[Dict[str, Any]], ingest: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    CSV-specific, column-aware peer quality checks.
+    - Detects available columns from CSV headers + effective data coverage.
+    - Chooses the best peer model automatically.
+    - Flags dirty values as peer outliers or suspicious missing values.
+    """
+    users = users or []
+    if not users:
+        return {
+            "presentColumns": [],
+            "peerModel": "none",
+            "signals": [],
+            "cases": [],
+        }
+
+    headers = {str(h or "").strip().lower() for h in (ingest.get("csvHeadersNorm") or [])}
+
+    def _val(u: Dict[str, Any], field: str) -> str:
+        if field == "emailDomain":
+            email = str(u.get("email") or "").strip().lower()
+            return email.split("@", 1)[1] if ("@" in email and len(email.split("@", 1)[1]) > 0) else ""
+        if field == "upnDomain":
+            upn = str(u.get("upn") or "").strip().lower()
+            return upn.split("@", 1)[1] if ("@" in upn and len(upn.split("@", 1)[1]) > 0) else ""
+        return str(u.get(field) or "").strip()
+
+    canonical = {
+        "department": {"department", "dept", "dipartimento", "area", "funzione"},
+        "businessRole": {"businessrole", "business role", "br", "ruolo business", "ruolo_business"},
+        "accountType": {"accounttype", "account type", "tipo utente", "tipo_utente", "type"},
+        "manager": {"manager", "owner", "responsabile"},
+        "emailDomain": {"email", "mail", "emailaddress", "posta"},
+        "upnDomain": {"upn", "user principal name", "userprincipalname"},
+        "statusAd": {"statusad", "adstatus", "accountstatusad", "statoad"},
+        "statusHr": {"statushr", "hrstatus", "accountstatushr", "statohr"},
+    }
+
+    present_columns: set[str] = set()
+    field_stats: Dict[str, Dict[str, Any]] = {}
+    for field, aliases in canonical.items():
+        from_header = bool(headers.intersection(aliases))
+        vals = [_val(u, field) for u in users]
+        non_empty_vals = [v for v in vals if v]
+        coverage = (len(non_empty_vals) / max(1, len(users)))
+        distinct = len(set(v.lower() for v in non_empty_vals))
+        if from_header or coverage >= 0.08:
+            present_columns.add(field)
+        field_stats[field] = {
+            "coverage": round(coverage, 4),
+            "distinct": distinct,
+            "fromHeader": from_header,
+        }
+
+    def _usable_for_peer(field: str) -> bool:
+        st = field_stats.get(field) or {}
+        return (field in present_columns) and (st.get("coverage", 0) >= 0.55) and (st.get("distinct", 0) >= 2)
+
+    peer_candidates = [
+        ("businessRole", "accountType"),
+        ("businessRole",),
+        ("department", "accountType"),
+        ("department",),
+        ("accountType",),
+    ]
+    peer_fields: Tuple[str, ...] = tuple()
+    for cand in peer_candidates:
+        if all(_usable_for_peer(x) for x in cand):
+            peer_fields = cand
+            break
+    if not peer_fields:
+        peer_fields = tuple()
+
+    groups: Dict[Tuple[str, ...], List[Dict[str, Any]]] = defaultdict(list)
+    for u in users:
+        if peer_fields:
+            key = tuple((_val(u, f) or "__missing__").lower() for f in peer_fields)
+        else:
+            key = ("__all__",)
+        groups[key].append(u)
+    peer_groups = {k: v for k, v in groups.items() if len(v) >= 5}
+
+    signal_fields = [f for f in ["manager", "emailDomain", "upnDomain", "statusAd", "statusHr", "department", "businessRole", "accountType"] if f in present_columns]
+
+    outlier_users: Dict[str, Dict[str, Any]] = {}
+    missing_users: Dict[str, Dict[str, Any]] = {}
+
+    def _row_ref(u: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "username": str(u.get("username") or "").strip(),
+            "displayName": str(u.get("displayName") or u.get("username") or "").strip(),
+        }
+
+    for _, members in peer_groups.items():
+        group_size = len(members)
+        for field in signal_fields:
+            if field in peer_fields:
+                continue
+            vals_raw = [_val(u, field).strip() for u in members]
+            vals = [v.lower() for v in vals_raw if v]
+            non_empty = len(vals)
+            if non_empty < 5:
+                continue
+            counts = Counter(vals)
+            completeness = non_empty / max(1, group_size)
+
+            for u in members:
+                base = _row_ref(u)
+                key = base["username"] or base["displayName"]
+                uv = _val(u, field).strip().lower()
+                if not uv:
+                    if completeness >= 0.90:
+                        rec = missing_users.setdefault(key, {"username": base["username"], "displayName": base["displayName"], "fields": set()})
+                        rec["fields"].add(field)
+                    continue
+                freq = counts.get(uv, 0) / max(1, non_empty)
+                if non_empty >= 8 and freq < 0.08:
+                    rec = outlier_users.setdefault(key, {"username": base["username"], "displayName": base["displayName"], "fields": set()})
+                    rec["fields"].add(field)
+
+    def _materialize_rows(src: Dict[str, Dict[str, Any]], label_prefix: str) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for rec in src.values():
+            rows.append(
+                {
+                    "username": rec.get("username"),
+                    "displayName": rec.get("displayName"),
+                    "reason": f"{label_prefix}: {', '.join(sorted(rec.get('fields') or []))}",
+                }
+            )
+        rows.sort(key=lambda r: (str(r.get("displayName") or "").lower(), str(r.get("username") or "").lower()))
+        return rows
+
+    outlier_rows = _materialize_rows(outlier_users, "Peer outlier fields")
+    missing_rows = _materialize_rows(missing_users, "Missing vs peer baseline")
+    cases = [
+        {
+            "id": "csv_peer_value_outlier",
+            "label": "CSV peer value outliers",
+            "count": len(outlier_rows),
+            "users": outlier_rows,
+        },
+        {
+            "id": "csv_peer_missing_critical",
+            "label": "CSV peer critical missing values",
+            "count": len(missing_rows),
+            "users": missing_rows,
+        },
+    ]
+
+    return {
+        "presentColumns": sorted(list(present_columns)),
+        "peerModel": "+".join(peer_fields) if peer_fields else "global",
+        "signals": signal_fields,
+        "cases": cases,
+    }
+
+
+def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[str, int]], groups: List[str]) -> Dict[str, Any]:
+    import numpy as np
+    from datetime import datetime, timezone
+    import math
+
+    total_users = len(users)
+    total_groups = len(groups)
+
+    if total_users == 0 or total_groups == 0:
+        return {
+            "modelQuality": 0,
+            "orphanRoles": 0,
+            "orphanGroups": 0,
+            "overprivilegedUsers": 0,
+            "zeroGroupUsers": 0,
+            "staleUsers": 0,
+            "orphanRolesList": [],
+            "orphansList": [],
+            "indicators": [],
+            "policyViolations": [],
+            "ambiguousUsers": [],
+            "manualOverrideEvents": 0,
+            "density": 0.0,
+            "avgGeneralizationConfidence": 0.0,
+        }
+
+    def _active_groups(row: Any) -> set[str]:
+        if row is None:
+            return set()
+        if isinstance(row, list):
+            return {str(g) for g in row if str(g)}
+        return {str(g) for g, val in (row or {}).items() if int(val) == 1}
+
+    user_by_username = {str(u.get("username")): u for u in (users or []) if u.get("username")}
+    user_groups_map: Dict[str, set[str]] = {}
+    for uname in user_by_username.keys():
+        user_groups_map[uname] = _active_groups(matrix.get(uname))
+    for uname, row in (matrix or {}).items():
+        if uname not in user_groups_map:
+            user_groups_map[uname] = _active_groups(row)
+
+    # 1) Orphan groups (weighted)
+    group_counts = {g: 0 for g in groups}
+    for active in user_groups_map.values():
+        for g in active:
+            if g in group_counts:
+                group_counts[g] += 1
+    orphans_list = [g for g, count in group_counts.items() if count == 0]
+    n_orphans = len(orphans_list)
+    critical_markers = ("admin", "all", "write", "prod", "root")
+    weighted_orphans = 0.0
+    for g in orphans_list:
+        gl = str(g).lower()
+        w = 2.0 if any(m in gl for m in critical_markers) else 1.0
+        weighted_orphans += w
+    orphan_weighted_pct = (weighted_orphans / max(1.0, total_groups * 2.0)) * 100.0
+
+    # 2) Overprivileged concentration
+    row_counts = np.array([len(gs) for gs in user_groups_map.values()], dtype=np.int32)
+    if row_counts.size > 0:
+        k_top = max(1, int(np.ceil(0.1 * row_counts.size)))
+        thr = int(np.partition(row_counts, -k_top)[-k_top])
+        n_over = int((row_counts >= thr).sum())
+        over_pct = (n_over / total_users) * 100.0
+    else:
+        n_over, over_pct = 0, 0
+
+    # 3) Users with Zero Groups
+    n_zero = sum(1 for _, gs in user_groups_map.items() if len(gs) == 0)
+    zero_pct = (n_zero / total_users) * 100.0 if total_users > 0 else 0
+
+    # 4) Stale access quality (> 1 year)
+    stale_count = 0
+    now = datetime.now(timezone.utc)
+    stale_list = []
+    for u in (users or []):
+        ll = u.get("lastLogin")
+        if ll:
+            try:
+                clean_ll = str(ll).replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean_ll)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if (now - dt).days > 365:
+                    stale_count += 1
+                    stale_list.append({"username": u.get("username"), "displayName": u.get("displayName"), "lastLogon": ll})
+            except Exception:
+                pass
+    stale_pct = (stale_count / total_users) * 100.0 if total_users > 0 else 0
+
+    # 5) Role entropy per ruolo (eterogeneita interna)
+    role_meta = state.get("role_meta") or {}
+    user_br = state.get("user_business_role") or {}
+    members_by_role = defaultdict(list)
+    for u in (users or []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        br = (u.get("businessRole") or user_br.get(uname) or "Unassigned").strip()
+        members_by_role[br].append(uname)
+
+    role_entropy_vals = []
+    for _, members in members_by_role.items():
+        n = len(members)
+        if n <= 1:
+            continue
+        ent_vals = []
+        for g in groups:
+            present = sum(1 for uname in members if g in (user_groups_map.get(uname) or set()))
+            p = present / max(1, n)
+            if p <= 0.0 or p >= 1.0:
+                continue
+            h = -(p * math.log2(p) + (1 - p) * math.log2(1 - p))  # 0..1
+            ent_vals.append(h)
+        if ent_vals:
+            role_entropy_vals.append(float(np.mean(ent_vals)))
+    role_entropy_pct = float(np.mean(role_entropy_vals) * 100.0) if role_entropy_vals else 0.0
+
+    # 6) Template coverage & 7) Noise ratio
+    miss_template_ratios = []
+    noise_ratios = []
+    for u in (users or []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        gs = user_groups_map.get(uname) or set()
+        br = (u.get("businessRole") or user_br.get(uname) or "Unassigned").strip()
+        tmpl = set((role_meta.get(br, {}) or {}).get("groups") or [])
+        if tmpl:
+            cov = len(gs & tmpl) / max(1, len(tmpl))
+            miss_template_ratios.append(1.0 - cov)
+        if gs:
+            noise = len([g for g in gs if g not in tmpl]) / max(1, len(gs))
+            noise_ratios.append(noise)
+    template_coverage_penalty_pct = float(np.mean(miss_template_ratios) * 100.0) if miss_template_ratios else 0.0
+    noise_ratio_pct = float(np.mean(noise_ratios) * 100.0) if noise_ratios else 0.0
+
+    # 8) Ambiguita assegnazione ruolo (bassa confidence BRDB)
+    ambiguous_users = []
+    for u in (users or [])[:20000]:
+        uname = u.get("username")
+        if not uname:
+            continue
+        gs = list(user_groups_map.get(uname) or [])
+        if not gs:
+            continue
+        s = brdb_infer_groupset(gs)
+        conf = float(s.get("confidence") or 0.0)
+        if conf < 0.55:
+            ambiguous_users.append({"username": uname, "displayName": u.get("displayName"), "confidence": round(conf, 3)})
+    ambiguity_pct = (len(ambiguous_users) / max(1, total_users)) * 100.0
+
+    # 9) Drift temporale (utenti recenti ma bassa compatibilita template)
+    drift_users = 0
+    recent_users = 0
+    for u in (users or []):
+        uname = u.get("username")
+        ll = u.get("lastLogin")
+        if not uname or not ll:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(ll).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if (now - dt).days <= 90:
+            recent_users += 1
+            gs = user_groups_map.get(uname) or set()
+            br = (u.get("businessRole") or user_br.get(uname) or "Unassigned").strip()
+            tmpl = set((role_meta.get(br, {}) or {}).get("groups") or [])
+            if gs and tmpl:
+                fit = len(gs & tmpl) / max(1, len(gs | tmpl))
+                if fit < 0.35:
+                    drift_users += 1
+    drift_pct = (drift_users / max(1, recent_users)) * 100.0 if recent_users else 0.0
+
+    # 10) Matrix sparsity/overdensity
+    total_assignments = int(sum(len(gs) for gs in user_groups_map.values()))
+    density = total_assignments / max(1, total_users * total_groups)
+    if density < 0.02:
+        density_penalty_pct = min(100.0, ((0.02 - density) / 0.02) * 100.0)
+    elif density > 0.35:
+        density_penalty_pct = min(100.0, ((density - 0.35) / 0.35) * 100.0)
+    else:
+        density_penalty_pct = 0.0
+
+    # 11) Policy violation rate (SoD-like)
+    policy_violations = []
+    for uname, gs in user_groups_map.items():
+        by_prefix = defaultdict(set)
+        for g in gs:
+            parts = str(g).split("_")
+            if len(parts) >= 3:
+                pref = "_".join(parts[:2])
+                by_prefix[pref].add(parts[-1].upper())
+        bad = []
+        for pref, suff in by_prefix.items():
+            if "ALL" in suff and ("WRITE" in suff or "ADMIN" in suff):
+                bad.append(pref)
+        if bad:
+            policy_violations.append({"username": uname, "conflicts": sorted(bad)})
+    policy_violation_pct = (len(policy_violations) / max(1, total_users)) * 100.0
+
+    # 12) Manual override dependency
+    feedback_events = list(state.get("dq_feedback_events") or [])
+    auto_resolved = int((state.get("last_ingest_stats") or {}).get("autoResolvedDuplicateUsers") or 0)
+    manual_override_pct = min(100.0, (len(feedback_events) / max(1, auto_resolved)) * 100.0) if auto_resolved else 0.0
+
+    # 13) Generalization score (BRDB confidence medio)
+    confs = []
+    for uname, gs in user_groups_map.items():
+        if not gs:
+            continue
+        s = brdb_infer_groupset(list(gs))
+        confs.append(float(s.get("confidence") or 0.0))
+    avg_conf = float(np.mean(confs)) if confs else 0.0
+    generalization_penalty_pct = (1.0 - avg_conf) * 100.0
+    weights = get_active_model_weights()
+    preset = (state.get("dq_model_preset") or "manufacturing").strip().lower()
+
+    indicators = [
+        {"id": "role_entropy", "label": "Role Entropy", "value": round(role_entropy_pct, 2), "penalty": round(role_entropy_pct, 2), "weight": float(weights.get("role_entropy", 0.08))},
+        {"id": "template_coverage", "label": "Template Coverage Gap", "value": round(template_coverage_penalty_pct, 2), "penalty": round(template_coverage_penalty_pct, 2), "weight": float(weights.get("template_coverage", 0.10))},
+        {"id": "noise_ratio", "label": "Noise Ratio", "value": round(noise_ratio_pct, 2), "penalty": round(noise_ratio_pct, 2), "weight": float(weights.get("noise_ratio", 0.10))},
+        {"id": "ambiguity", "label": "Assignment Ambiguity", "value": round(ambiguity_pct, 2), "penalty": round(ambiguity_pct, 2), "weight": float(weights.get("ambiguity", 0.08))},
+        {"id": "temporal_drift", "label": "Temporal Drift", "value": round(drift_pct, 2), "penalty": round(drift_pct, 2), "weight": float(weights.get("temporal_drift", 0.07))},
+        {"id": "matrix_density", "label": "Matrix Density Risk", "value": round(density_penalty_pct, 2), "penalty": round(density_penalty_pct, 2), "weight": float(weights.get("matrix_density", 0.07))},
+        {"id": "orphan_weighted", "label": "Weighted Orphan Roles", "value": round(orphan_weighted_pct, 2), "penalty": round(orphan_weighted_pct, 2), "weight": float(weights.get("orphan_weighted", 0.09))},
+        {"id": "overprivileged", "label": "Overprivileged Concentration", "value": round(over_pct, 2), "penalty": round(over_pct, 2), "weight": float(weights.get("overprivileged", 0.10))},
+        {"id": "stale_access", "label": "Stale Access Quality", "value": round(stale_pct, 2), "penalty": round(stale_pct, 2), "weight": float(weights.get("stale_access", 0.10))},
+        {"id": "policy_violation", "label": "Policy Violation Rate", "value": round(policy_violation_pct, 2), "penalty": round(policy_violation_pct, 2), "weight": float(weights.get("policy_violation", 0.08))},
+        {"id": "manual_override", "label": "Manual Override Dependency", "value": round(manual_override_pct, 2), "penalty": round(manual_override_pct, 2), "weight": float(weights.get("manual_override", 0.07))},
+        {"id": "generalization", "label": "Generalization Gap", "value": round(generalization_penalty_pct, 2), "penalty": round(generalization_penalty_pct, 2), "weight": float(weights.get("generalization", 0.07))},
+    ]
+
+    penalty = 0.0
+    for i in indicators:
+        contrib = float(i["weight"]) * float(i["penalty"])
+        i["contribution"] = round(contrib, 2)
+        penalty += contrib
+    quality = max(0.0, 100.0 - penalty)
+
+    return {
+        "modelQuality": round(quality, 2),
+        "orphanRoles": n_orphans,
+        "orphanGroups": n_orphans,
+        "overprivilegedUsers": n_over,
+        "zeroGroupUsers": n_zero,
+        "staleUsers": stale_count,
+        "orphanRolesList": orphans_list,
+        "orphansList": orphans_list,
+        "staleList": stale_list,
+        "zeroList": [{"username": uname, "displayName": (user_by_username.get(uname) or {}).get("displayName"), "groupCount": 0} for uname, gs in user_groups_map.items() if len(gs) == 0],
+        "overprivilegedList": [{"username": uname, "groupCount": len(gs)} for uname, gs in user_groups_map.items() if len(gs) >= (thr if row_counts.size > 0 else 999999)],
+        "policyViolations": policy_violations,
+        "ambiguousUsers": ambiguous_users,
+        "manualOverrideEvents": len(feedback_events),
+        "indicators": indicators,
+        "density": round(density, 4),
+        "avgGeneralizationConfidence": round(avg_conf, 3),
+        "modelPreset": preset,
+    }
+
+
+
+def run_role_mining(
+    users: List[Dict[str, Any]],
+    n_clusters: Optional[int],
+    role_support: float
+) -> Dict[str, Any]:
+    # usa solo utenti attivi
+    users = [u for u in (users or []) if not u.get("excluded")]
+
+    usernames, groups, X = build_matrix(users)
+
+    # Colonne UI = gruppi snapshot (ultima estrazione) → NON dipendono dalle assegnazioni correnti
+    snapshot_groups = ((state.get("last_extract") or {}).get("groups") or []).copy()
+    snapshot_groups = [g for g in snapshot_groups if g]  # safety
+
+    # Se lo snapshot è vuoto (es. mai estratto), fallback ai gruppi del build_matrix
+    all_groups_ui = snapshot_groups if snapshot_groups else groups
+
+    # dataset troppo piccolo
+    if len(usernames) < 2 or len(groups) == 0:
+        return {
+            "clusters": [],
+            "matrix": {},
+            "kpi": compute_kpis(users, [], {}),
+            "groups": all_groups_ui,
+        }
+
+    # scegli k
+    auto_k = max(2, int(round(np.sqrt(len(usernames)))))
+    if n_clusters:
+        # Safety: never ask KMeans for more clusters than available samples
+        k = max(2, min(int(n_clusters), len(usernames)))
+    else:
+        k = min(8, auto_k, len(usernames))
+
+    # clustering su SVD + MiniBatchKMeans (O(N) complexity)
+    # SVD reduction
+    n_components = min(50, X.shape[1] - 1)
+    if n_components > 1:
+        svd = TruncatedSVD(n_components=n_components, random_state=42)
+        X_reduced = svd.fit_transform(X)
+    else:
+        X_reduced = X
+
+    # MiniBatchKMeans
+    model = MiniBatchKMeans(n_clusters=k, random_state=42, batch_size=256, n_init="auto")
+    labels = model.fit_predict(X_reduced)
+
+    # clusters -> members/roleGroups/purity
+    clusters: List[Dict[str, Any]] = []
+    for cid in sorted(set(labels.tolist())):
+        idx = [i for i, lab in enumerate(labels) if lab == cid]
+        members = [usernames[i] for i in idx]
+
+        sub = X[idx, :]
+        freq = sub.mean(axis=0)  # 0..1
+        role_groups = [groups[j] for j in range(len(groups)) if float(freq[j]) >= role_support]
+
+        purity = compute_purity(idx, X)
+
+        clusters.append({
+            "clusterId": int(cid),
+            "members": members,
+            "roleGroups": role_groups,
+            "purity": round(float(purity), 4),
+            "size": len(members),
+        })
+
+    # matrix for UI (DEVE avere tutte le colonne di all_groups_ui)
+    # mapping per i gruppi presenti in X
+    gindex = {g: j for j, g in enumerate(groups)}
+
+    matrix: Dict[str, Dict[str, int]] = {}
+    for i, uname in enumerate(usernames):
+        row: Dict[str, int] = {}
+        for g in all_groups_ui:
+            j = gindex.get(g)
+            row[g] = int(X[i, j]) if j is not None else 0
+        matrix[uname] = row
+
+    kpi = compute_kpis(users, clusters, matrix)
+
+    return {
+        "clusters": clusters,
+        "matrix": matrix,
+        "kpi": kpi,
+        "groups": all_groups_ui,
+    }
+
+
+def _mining_worker(n_clusters, role_support):
+    ok = False
+    try:
+        users = active_users(state.get("last_extract", {}).get("users") or [])
+        res = run_role_mining(users, n_clusters=n_clusters, role_support=role_support)
+
+        # Build displayNames map (username -> displayName) for frontend optimization
+        display_names = {}
+        for u in users:
+            uname = u.get("username")
+            if uname:
+                display_names[uname] = u.get("displayName") or uname
+
+        state.update({
+            "last_mining": {
+                "clusters": res.get("clusters", []),
+                "matrix": res.get("matrix", {}),
+                "kpi": res.get("kpi", {}),
+                "groups": res.get("groups", []),
+                "displayNames": display_names,
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "status": "ready"
+            },
+            "mining_dirty": False
+        })
+        ok = True
+    except Exception as e:
+        print(f"[Mining Worker] Error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        state["mining_processing"] = False
+        state["mining_status"] = "ready" if ok else "idle"
+
+def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
+    """
+    Ricalcola il clustering in background se dirty.
+    """
+    last_extract = state.get("last_extract") or {}
+    last_mining = state.get("last_mining") or {}
+
+    extract_ts = last_extract.get("ts")
+    mining_ts = last_mining.get("ts")
+    matrix = last_mining.get("matrix") or {}
+    users = active_users(last_extract.get("users") or [])
+
+    # No data loaded: do not trigger mining/polling loops.
+    if not users:
+        state["mining_processing"] = False
+        state["mining_status"] = "idle"
+        return
+
+    stale = bool(extract_ts and (not mining_ts or str(extract_ts) > str(mining_ts)))
+
+    # Recovery for stale persisted lock (e.g. crash/restart while mining_processing=True)
+    if state.get("mining_processing"):
+        started_at = state.get("mining_started_at")
+        lock_stale = False
+        if started_at:
+            try:
+                started_dt = datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
+                if started_dt.tzinfo is None:
+                    started_dt = started_dt.replace(tzinfo=timezone.utc)
+                lock_stale = (datetime.now(timezone.utc) - started_dt).total_seconds() > 300
+            except Exception:
+                # Unknown timestamp format -> treat as stale to unblock system.
+                lock_stale = True
+        else:
+            # No timestamp and no matrix means lock is likely stale
+            lock_stale = not bool(matrix)
+
+        if not lock_stale:
+            return  # Already running
+
+        state["mining_processing"] = False
+        state["mining_status"] = "idle"
+
+    if not state.get("mining_dirty") and matrix and not stale:
+        return
+
+    # Trigger background
+    state["mining_processing"] = True
+    state["mining_status"] = "running"
+    state["mining_started_at"] = datetime.now(timezone.utc).isoformat()
+    params = state.get("last_mining_params") or {}
+    n_clusters = params.get("n_clusters", None)
+    role_support = params.get("role_support", 0.6)
+    
+    if background_tasks:
+        background_tasks.add_task(_mining_worker, n_clusters, role_support)
+    else:
+        # Fallback sync if no background_tasks provided (should verify calls)
+        _mining_worker(n_clusters, role_support)
+
+
+
+# ----------------------------
+# FastAPI app
+# ----------------------------
+app = FastAPI(title=APP_TITLE)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5174",  # dev
+        "http://127.0.0.1:5173",
+        "*",  # ← PER TEST (rimuovi in PROD)
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+@app.get("/api/kpi/drilldown")
+def kpidrilldown_q(metric: str): #, username: str = Depends(require_auth)):
+    # Passing None for background_tasks to avoid AttributeError on string
+    return kpi_drilldown(metric, None)
+
+
+
+@app.get("/api/health")
+def health():
+    ensure_discovery_scheduler_started()
+    return {"ok": True, "ts": int(time.time())}
+
+
+DISCOVERY_SCHEDULER_STOP = threading.Event()
+DISCOVERY_SCHEDULER_THREAD: Optional[threading.Thread] = None
+
+
+def _run_background_tasks_sync(background_tasks: BackgroundTasks) -> None:
+    for t in list(getattr(background_tasks, "tasks", []) or []):
+        try:
+            t.func(*t.args, **t.kwargs)
+        except Exception as e:
+            log("ERROR", f"Discovery scheduler background task failed: {e}")
+
+
+def _schedule_due(schedule: Dict[str, Any], now_local: datetime) -> Tuple[bool, str]:
+    if not schedule or schedule.get("enabled") is False:
+        return False, ""
+    time_raw = str(schedule.get("time") or "09:00")
+    hh_raw, _, mm_raw = time_raw.partition(":")
+    try:
+        hh = int(hh_raw)
+        mm = int(mm_raw)
+    except Exception:
+        return False, ""
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        return False, ""
+
+    y = now_local.year
+    m = f"{now_local.month:02d}"
+    d = f"{now_local.day:02d}"
+    h = f"{now_local.hour:02d}"
+    minute = f"{mm:02d}"
+    freq = str(schedule.get("frequency") or "DAILY").upper()
+
+    if freq == "HOURLY":
+        due = now_local.minute == mm
+        return due, f"{y}-{m}-{d}T{h}:{minute}"
+    if freq == "WEEKLY":
+        dow_map = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6}
+        wanted = dow_map.get(str(schedule.get("day") or "MON").upper(), 0)
+        due = now_local.weekday() == wanted and now_local.hour == hh and now_local.minute == mm
+        week_num = int((now_local.timetuple().tm_yday - 1) // 7)
+        return due, f"{y}-W{week_num:02d}-{wanted}-{hh:02d}:{mm:02d}"
+    due = now_local.hour == hh and now_local.minute == mm
+    return due, f"{y}-{m}-{d}"
+
+
+def _run_discovery_target(target: str) -> Dict[str, Any]:
+    target = str(target or "").strip().lower()
+    bg = BackgroundTasks()
+    if target == "sap":
+        scope = str((state.get("connector") or {}).get("sap_system") or "").strip() or "SAP"
+        res = extract_sap(ExtractRequest(ou=scope), bg, username="scheduler")
+        _run_background_tasks_sync(bg)
+        summary = {
+            "users": int(getattr(res, "total_users", 0) or 0),
+            "groups": int(getattr(res, "total_groups", 0) or 0),
+            "new_users": int(getattr(res, "new_users", 0) or 0),
+            "updated_users": int(getattr(res, "updated_users", 0) or 0),
+            "updated_by_displayname": int(getattr(res, "updated_by_displayname", 0) or 0),
+            "new_groups": int(getattr(res, "new_groups", 0) or 0),
+            "updated_groups": int(getattr(res, "updated_groups", 0) or 0),
+        }
+        return {
+            "status": "ok",
+            "message": f"SAP discovery completed. Users:{summary['users']} Groups:{summary['groups']}",
+            "summary": summary,
+            "csv_available": True,
+        }
+    if target == "ad":
+        connector_cfg = state.get("connector") or {}
+        ou_dn = str(connector_cfg.get("base_dn") or "").strip()
+        if not ou_dn:
+            raise HTTPException(status_code=400, detail="base_dn non valorizzato per discovery schedulata AD")
+        res = extract(ExtractRequest(ou=ou_dn), bg, username="scheduler")
+        _run_background_tasks_sync(bg)
+        summary = {
+            "users": int(getattr(res, "total_users", 0) or 0),
+            "groups": int(getattr(res, "total_groups", 0) or 0),
+            "new_users": int(getattr(res, "new_users", 0) or 0),
+            "updated_users": int(getattr(res, "updated_users", 0) or 0),
+            "updated_by_displayname": int(getattr(res, "updated_by_displayname", 0) or 0),
+            "new_groups": int(getattr(res, "new_groups", 0) or 0),
+            "updated_groups": int(getattr(res, "updated_groups", 0) or 0),
+        }
+        return {
+            "status": "ok",
+            "message": f"AD discovery completed. Users:{summary['users']} Groups:{summary['groups']}",
+            "summary": summary,
+            "csv_available": True,
+        }
+    if target == "csv":
+        raise HTTPException(status_code=400, detail="Discovery schedulata CSV non supportata (richiede file input)")
+    raise HTTPException(status_code=400, detail=f"Discovery schedulata non supportata per target '{target}'")
+
+
+def run_discovery_scheduler_once() -> None:
+    connector = dict(state.get("connector") or {})
+    schedules = dict(connector.get("discovery_schedules") or {})
+    discovery_results = dict(connector.get("discovery_results") or {})
+    if not schedules:
+        return
+    now = datetime.now()
+    for target, schedule in schedules.items():
+        sched = dict(schedule or {})
+        due, period = _schedule_due(sched, now)
+        if not due:
+            continue
+        if str(sched.get("last_run_period") or "") == str(period):
+            continue
+        log(
+            "INFO",
+            f"Scheduled discovery started target={target} period={period} freq={sched.get('frequency')} time={sched.get('time')}",
+        )
+        try:
+            payload = _run_discovery_target(target)
+            status_msg = str(payload.get("message") or "Discovery completed")
+            sched["last_status"] = "ok"
+            sched["last_message"] = status_msg
+            discovery_results[target] = {
+                **payload,
+                "status": "ok",
+                "message": status_msg,
+                "last_run_at": datetime.now(timezone.utc).isoformat(),
+                "source": "schedule",
+            }
+            log("INFO", f"Scheduled discovery completed target={target} period={period} status=ok")
+        except Exception as e:
+            sched["last_status"] = "error"
+            sched["last_message"] = str(e)
+            discovery_results[target] = {
+                "status": "error",
+                "message": str(e),
+                "last_run_at": datetime.now(timezone.utc).isoformat(),
+                "source": "schedule",
+            }
+            log("ERROR", f"Scheduled discovery failed for target={target}: {e}")
+        sched["last_run_period"] = period
+        sched["last_run_at"] = datetime.now(timezone.utc).isoformat()
+        schedules[target] = sched
+        connector["discovery_schedules"] = schedules
+        connector["discovery_results"] = discovery_results
+        state["connector"] = connector
+        break
+
+
+def _discovery_scheduler_loop() -> None:
+    while not DISCOVERY_SCHEDULER_STOP.is_set():
+        try:
+            run_discovery_scheduler_once()
+        except Exception as e:
+            log("ERROR", f"Discovery scheduler loop error: {e}")
+        DISCOVERY_SCHEDULER_STOP.wait(30)
+
+
+def ensure_discovery_scheduler_started() -> None:
+    global DISCOVERY_SCHEDULER_THREAD
+    if DISCOVERY_SCHEDULER_THREAD and DISCOVERY_SCHEDULER_THREAD.is_alive():
+        return
+    DISCOVERY_SCHEDULER_STOP.clear()
+    DISCOVERY_SCHEDULER_THREAD = threading.Thread(target=_discovery_scheduler_loop, daemon=True)
+    DISCOVERY_SCHEDULER_THREAD.start()
+
+
+ensure_discovery_scheduler_started()
+
+
+class ToggleUserGroupRequest(BaseModel):
+    username: str
+    group: str
+    enabled: bool  # True=assegna, False=rimuovi
+
+
+@app.post("/api/users/groups/toggle")
+def toggle_user_group(body: ToggleUserGroupRequest, username: str = Depends(require_auth)):
+    # 1) trova utente nello stato
+    users = (state.get("last_extract") or {}).get("users") or []
+    uobj = next((u for u in users if u.get("username") == body.username), None)
+    if not uobj:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 2) valida gruppo (e impedisci di “resuscitare” gruppi non più nello snapshot AD/CSV)
+    g = (body.group or "").strip()
+    if not g:
+        raise HTTPException(status_code=400, detail="Group empty")
+
+    snapshot_groups = set(((state.get("last_extract") or {}).get("groups") or []))
+    if snapshot_groups and g not in snapshot_groups:
+        raise HTTPException(status_code=400, detail="Group not in last extract snapshot")
+
+    # 3) toggle
+    current = set(uobj.get("groups") or [])
+    if body.enabled:
+        current.add(g)
+    else:
+        current.discard(g)
+
+    uobj["groups"] = sorted(current)
+    record_manual_user_change(
+        actor=username,
+        username=body.username,
+        display_name=uobj.get("displayName"),
+        action="toggle-group",
+        source="matrix",
+        details={"group": g, "enabled": bool(body.enabled), "groupsCount": len(uobj.get("groups") or [])},
+    )
+
+    # IMPORTANTISSIMO: NON aggiornare state["last_extract"]["groups"] qui
+    state["mining_dirty"] = True
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    return {"ok": True, "username": body.username, "group": g, "enabled": body.enabled}
+
+
+@app.post("/api/auth/login", response_model=TokenResponse)
+def login(body: LoginRequest):
+    if body.username != APP_LOGIN_USER or body.password != APP_LOGIN_PASS:
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
+    token = create_access_token(body.username)
+    log("INFO", f"Login OK {body.username}")
+    return TokenResponse(access_token=token, username=body.username)
+
+
+@app.get("/api/me")
+def me(username: str = Depends(require_auth)):
+    return {"username": username}
+
+
+@app.get("/api/config/connector", response_model=ConnectorConfig)
+def get_connector(username: str = Depends(require_auth)):
+    ensure_discovery_scheduler_started()
+    return ConnectorConfig(**state["connector"])
+
+
+@app.post("/api/config/connector", response_model=ConnectorConfig)
+def set_connector(cfg: ConnectorConfig, username: str = Depends(require_auth)):
+    ensure_discovery_scheduler_started()
+    state["connector"] = cfg.model_dump()
+    log("INFO", f"Connector config updated by {username} (server={cfg.server}, auth={cfg.auth})")
+    return cfg
+
+
+@app.post("/api/ad/extract", response_model=ExtractResponse)
+def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    connector_cfg = state.get("connector") or {}
+    ou_dn = (req.ou or "").strip() or (connector_cfg.get("base_dn") or "").strip()
+    if not ou_dn:
+        raise HTTPException(status_code=400, detail="OU/base_dn non valorizzato: imposta base_dn in Connettori o passa OU nella richiesta")
+
+    users = extract_from_ldap(ou_dn)
+
+    # 1) Costruisci candidati AD
+    ad_candidates = []
+    for u in users:
+        ad_candidates.append(
+            _mk_candidate(
+                source="ad",
+                candidate_id=f"ad:{u['username']}",
+                display_name=u.get("displayName", ""),
+                business_role=u.get("businessRole", ""),
+                roles=(u.get("groups") or []),
+                raw=f"AD:{u.get('username')}|{u.get('displayName')}|{','.join(u.get('groups') or [])}",
+                department=u.get("department") or "",
+                last_login=u.get("lastLogin"),
+            )
+        )
+
+    # 2) Build full AD pool first, then merge into local DB:
+    #    update only by same displayName; keep all other local users.
+    with state.batch():
+        users = filter_and_dedupe_connector_users(users, source="ad")
+        merge_stats = merge_from_connector_by_displayname(users, ou=ou_dn, source="ad")
+
+        # 3) Batch updates to state to minimize disk I/O
+        updates = {
+            "ingest_sources": {**state.get("ingest_sources", {}), "ad": ad_candidates},
+            "mining_dirty": True
+        }
+        state.update(updates)
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
+    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username)
+
+    return ExtractResponse(
+        ou=state["last_extract"]["ou"],
+        total_users=len(state["last_extract"]["users"]),
+        total_groups=len(state["last_extract"]["groups"]),
+        snapshot_ready=True,
+        processing_in_background=True,
+        new_users=merge_stats.get("new_users", 0),
+        updated_users=merge_stats.get("updated_users", 0),
+        updated_by_displayname=merge_stats.get("updated_by_displayname", 0),
+        new_groups=merge_stats.get("new_groups", 0),
+        updated_groups=merge_stats.get("updated_groups", 0),
+        users=state["last_extract"]["users"],
+        groups=state["last_extract"]["groups"],
+    )
+
+
+@app.post("/api/sap/extract", response_model=ExtractResponse)
+def extract_sap(req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    scope = (req.ou or "").strip() or "SAP"
+    users = extract_from_sap(scope)
+
+    sap_candidates = []
+    for u in users:
+        sap_candidates.append(
+            _mk_candidate(
+                source="sap",
+                candidate_id=f"sap:{u.get('username', '')}",
+                display_name=u.get("displayName", ""),
+                business_role=u.get("businessRole", ""),
+                roles=(u.get("groups") or []),
+                raw=f"SAP:{u.get('username')}|{u.get('displayName')}|{','.join(u.get('groups') or [])}",
+                department=u.get("department") or "",
+                last_login=u.get("lastLogin"),
+            )
+        )
+
+    with state.batch():
+        users = filter_and_dedupe_connector_users(users, source="sap")
+        merge_stats = merge_from_connector_by_displayname(users, ou=scope, source="sap")
+        updates = {
+            "ingest_sources": {**state.get("ingest_sources", {}), "sap": sap_candidates},
+            "mining_dirty": True,
+        }
+        state.update(updates)
+
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
+    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username)
+
+    return ExtractResponse(
+        ou=state["last_extract"]["ou"],
+        total_users=len(state["last_extract"]["users"]),
+        total_groups=len(state["last_extract"]["groups"]),
+        snapshot_ready=True,
+        processing_in_background=True,
+        new_users=merge_stats.get("new_users", 0),
+        updated_users=merge_stats.get("updated_users", 0),
+        updated_by_displayname=merge_stats.get("updated_by_displayname", 0),
+        new_groups=merge_stats.get("new_groups", 0),
+        updated_groups=merge_stats.get("updated_groups", 0),
+        users=state["last_extract"]["users"],
+        groups=state["last_extract"]["groups"],
+    )
+
+
+@app.get("/api/ad/extract/export-csv")
+def export_last_extract_csv(username: str = Depends(require_auth)):
+    users = (state.get("last_extract") or {}).get("users") or []
+    if not users:
+        raise HTTPException(status_code=400, detail="Nessuna estrazione disponibile")
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "DisplayName",
+        "Username",
+        "Department",
+        "BusinessRole",
+        "Ruoli",
+        "AccountType",
+        "LastLogin",
+        "Email",
+        "UPN",
+        "EmployeeId",
+        "Manager",
+        "StatusAD",
+        "StatusHR",
+    ])
+
+    for u in users:
+        writer.writerow([
+            u.get("displayName") or "",
+            u.get("username") or "",
+            u.get("department") or "",
+            u.get("businessRole") or "",
+            ",".join(u.get("groups") or []),
+            u.get("accountType") or "",
+            u.get("lastLogin") or "",
+            u.get("email") or "",
+            u.get("upn") or "",
+            u.get("employeeId") or "",
+            u.get("manager") or "",
+            u.get("statusAd") or "",
+            u.get("statusHr") or "",
+        ])
+
+    output.seek(0)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"ad_extract_snapshot_{ts}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(output, media_type="text/csv; charset=utf-8", headers=headers)
+
+
+@app.get("/api/users")
+def list_users(q: str = "", type_q: str = "", limit: int = 100, offset: int = 0, sort_by: str = "", order: str = "asc", username: str = Depends(require_auth)):
+    cache_key = f"users_{q}|{type_q}|{limit}|{offset}|{sort_by}|{order}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    users = active_users(state["last_extract"]["users"] or [])
+    
+    # Text Filter
+    if q:
+        ql = q.lower()
+        users = [
+            u for u in users
+            if ql in (u.get("username") or "").lower()
+            or ql in (u.get("displayName") or "").lower()
+        ]
+        
+    # Type Filter
+    if type_q:
+        tql = type_q.lower()
+        users = [
+            u for u in users
+            if tql in (u.get("accountType") or u.get("account_type") or "internal").lower()
+        ]
+    
+    # Sorting support
+    if sort_by:
+        reverse = order.lower() == "desc"
+        
+        def get_sort_key(u):
+            val = u.get(sort_by)
+            # Fallback for accountType nuances
+            if val is None and sort_by == "accountType":
+                val = u.get("account_type")
+            return (val or "").lower()
+            
+        users = sorted(users, key=get_sort_key, reverse=reverse)
+    
+    total = len(users)
+    sliced = users[offset : offset + limit]
+    result = {"total": total, "items": sliced, "limit": limit, "offset": offset}
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_USERS)
+    return result
+
+@app.get("/api/users/{uname}")
+def get_user(uname: str, username: str = Depends(require_auth)):
+    users = state.get("last_extract", {}).get("users") or []
+    u = next((x for x in users if x.get("username") == uname), None)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    apply_business_roles(users)  # riallinea businessRole
+    return {"user": u, "allGroups": recompute_groups_from_users(users)}
+
+
+class UserUpdateRequest(BaseModel):
+    groups: List[str] = []
+    businessRole: Optional[str] = None
+    accountType: Optional[str] = None
+
+@app.post("/api/users/{uname}/update")
+def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(require_auth)):
+    users = state.get("last_extract", {}).get("users") or []
+    u = next((x for x in users if x.get("username") == uname), None)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    prev_groups = sorted(set(u.get("groups") or []))
+    prev_br = u.get("businessRole")
+    prev_type = u.get("accountType")
+    # Replace groups
+    u["groups"] = sorted({g.strip() for g in (body.groups or []) if g and g.strip()})
+
+    # (Opzionale) cambia anche BR qui, oppure continua a usare /api/businessroles/{role}/add
+    if body.businessRole is not None:
+        br = body.businessRole.strip()
+        u["businessRole"] = br
+        state.setdefault("user_business_role", {})
+        if br and br != "Unassigned":
+            state["user_business_role"][uname] = br
+        else:
+            # rimuovi mapping => torna Unassigned
+            if uname in state["user_business_role"]:
+                del state["user_business_role"][uname]
+
+        # training “forte” come fai già in businessroles/roleadd
+        try:
+            brdb_learn_assignment(br, u.get("groups") or [], weight=10)
+            record_llm_learning_event(
+                actor=username,
+                source="user-update",
+                signal_type="brdb-assignment",
+                entity=uname,
+                details={"businessRole": br, "groupsCount": len(u.get("groups") or []), "weight": 10},
+            )
+        except Exception:
+            pass
+
+    if body.accountType:
+        u["accountType"] = body.accountType.strip()
+
+    # riallinea derivati
+    apply_business_roles(users)
+    # state["last_extract"]["groups"] = recompute_groups_from_users(users)
+    state["mining_dirty"] = True
+    record_manual_user_change(
+        actor=username,
+        username=uname,
+        display_name=u.get("displayName"),
+        action="update-user",
+        source="user-detail",
+        details={
+            "groupsBefore": prev_groups,
+            "groupsAfter": u.get("groups") or [],
+            "businessRoleBefore": prev_br,
+            "businessRoleAfter": u.get("businessRole"),
+            "accountTypeBefore": prev_type,
+            "accountTypeAfter": u.get("accountType"),
+        },
+    )
+
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    return {"ok": True, "user": u}
+
+
+@app.get("/api/users/{uname}/peer-analysis")
+def get_peer_analysis(uname: str, username: str = Depends(require_auth)):
+    users = state.get("last_extract", {}).get("users") or []
+    target = next((x for x in users if x.get("username") == uname), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    br = target.get("businessRole")
+    at = target.get("accountType") or "Internal"
+    
+    if not br or br == "Unassigned":
+         return {"peersCount": 0, "anomalies": [], "suggestedGroups": []}
+
+    # Find peers: same BR + same AccountType
+    peers = [u for u in users if u.get("businessRole") == br and (u.get("accountType") or "Internal") == at]
+    peers_count = len(peers)
+    
+    if peers_count < 2:
+        return {"peersCount": peers_count, "anomalies": [], "suggestedGroups": []}
+        
+    # Calculate group frequencies
+    grp_counts = defaultdict(int)
+    for p in peers:
+        for g in (p.get("groups") or []):
+            grp_counts[g] += 1
+            
+    # Check target user's groups
+    target_groups = set(target.get("groups") or [])
+    anomalies = []
+    
+    # Build full frequency map for ALL of the user's assigned groups
+    group_frequencies = {}
+    for g in target_groups:
+        freq = grp_counts[g] / peers_count
+        group_frequencies[g] = round(freq, 4)
+        if freq < 0.15:  # Threshold for anomaly (e.g., < 15% of peers have this group)
+            anomalies.append({
+                "group": g,
+                "frequency": round(freq, 2),
+                "count": grp_counts[g],
+                "peers": peers_count
+            })
+    
+    # Suggested groups: present in >=50% of peers but MISSING from this user
+    suggested_groups = []
+    for g, cnt in grp_counts.items():
+        freq = cnt / peers_count
+        if freq >= 0.50 and g not in target_groups:
+            suggested_groups.append({
+                "group": g,
+                "frequency": round(freq, 2),
+                "count": cnt,
+                "peers": peers_count
+            })
+    suggested_groups.sort(key=lambda x: x["frequency"], reverse=True)
+            
+    return {
+        "peersCount": peers_count,
+        "anomalies": sorted(anomalies, key=lambda x: x["frequency"]),
+        "suggestedGroups": suggested_groups,
+        "groupFrequencies": group_frequencies,
+    }
+
+
+@app.post("/api/rolemining/run")
+def rolemining_run(req: RoleMiningRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    users = active_users(state["last_extract"]["users"] or [])
+    if not users:
+        raise HTTPException(status_code=400, detail="Esegui prima AD Extract")
+
+    state["last_mining_params"] = {"n_clusters": req.n_clusters, "role_support": req.role_support}
+    state["mining_dirty"] = True
+    
+    # Avvia mining in background
+    ensure_last_mining(background_tasks)
+
+    return {"status": "started"}
+
+
+@app.get("/api/rolemining/last")
+def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    ensure_last_mining(background_tasks)
+    
+    # Check cache first
+    status = state.get("mining_status", "idle")
+    cache_key = f"rolemining_last_{status}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+    
+    last = state.get("last_mining") or {}
+    
+    # Optimize payload: Convert dense matrix to sparse (list of active groups)
+    # This significantly reduces JSON size for large datasets (e.g. 5000 users)
+    matrix_dense = last.get("matrix") or {}
+    matrix_sparse = {}
+    for u, row in matrix_dense.items():
+        # Only include groups with value 1 (or truthy)
+        matrix_sparse[u] = [g for g, v in row.items() if v]
+    
+    result = {
+        **last,
+        "matrix": matrix_sparse,
+        "status": status
+    }
+    
+    # Cache also while running, but with very short TTL to reduce repeated sparse transforms.
+    ttl = 1.0 if status == "running" else CACHE_TTL_MINING
+    RESPONSE_CACHE.set(cache_key, result, ttl)
+    
+    return result
+
+
+@app.get("/api/kpi")
+def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    # Check cache first
+    cache_key = "kpi"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+    
+    ensure_last_mining(background_tasks)
+    last = state.get("last_mining") or {}
+    kpi_data = last.get("kpi") or {}
+
+    # Backward/forward compatibility for historical snapshots:
+    # some runs may expose only one of clusterQuality/clusteringQuality.
+    if kpi_data.get("clusterQuality") is None and kpi_data.get("clusteringQuality") is not None:
+        kpi_data["clusterQuality"] = kpi_data.get("clusteringQuality")
+    if kpi_data.get("clusteringQuality") is None and kpi_data.get("clusterQuality") is not None:
+        kpi_data["clusteringQuality"] = kpi_data.get("clusterQuality")
+
+    # If core KPI fields are missing from stored KPI (e.g. from older runs), recompute.
+    needs_recompute = (
+        ("modelQuality" not in kpi_data or kpi_data.get("modelQuality") is None) or
+        ("clusterQuality" not in kpi_data or kpi_data.get("clusterQuality") is None)
+    )
+    if needs_recompute and last.get("matrix"):
+        kpi_data = compute_kpis(last.get("users", []), last.get("clusters", []), last.get("matrix", {}))
+        last["kpi"] = kpi_data
+
+    # Keep clusterQuality aligned with current dataset quality (same basis as drilldown).
+    kpi_data["clusterQuality"] = compute_cluster_quality_live()
+
+    # Overlay latest Smart AI Detection stats if available (aligns KPI with internal page)
+    last_ai = state.get("last_ai_detection") or {}
+    stats = last_ai.get("stats")
+    if stats and "aiDetection" in stats:
+        # Use copy to avoid mutating persistent state unexpectedly, or modify if intended.
+        # Safe to modify for display.
+        kpi_data["aiDetection"] = stats["aiDetection"]
+        kpi_data["redundantAssignments"] = stats.get("totalAnomalies", 0)
+        kpi_data["totalAssignments"] = stats.get("totalAssignments", 0)
+        kpi_data["usersWithRedundancy"] = stats.get("usersWithAnomaly", 0)
+
+    if not kpi_data:
+        # Frontend-safe fallback: return empty KPI instead of 400.
+        # This prevents dashboard hard-fail when dataset is not loaded yet.
+        kpi_data = {
+            "totalUsers": 0,
+            "modelQuality": 0,
+            "orphanRolesCount": 0,
+            "orphanGroupsCount": 0,
+            "overprivilegedCount": 0,
+            "zeroGroupCount": 0,
+            "staleAccountCount": 0,
+            "clusterQuality": 0,
+            "clusteringQuality": 0,
+            "aiDetection": 0,
+            "redundantAssignments": 0,
+            "totalAssignments": 0,
+            "usersWithRedundancy": 0,
+            "roleCoverage": 0,
+        }
+    
+    # Cache KPI data
+    RESPONSE_CACHE.set(cache_key, kpi_data, CACHE_TTL_KPI)
+    return kpi_data
+
+@app.post("/api/kpi/clear-cache")
+def clear_kpi_cache():
+    invalidate_hot_caches(kpi=True)
+    return {"status": "ok"}
+
+
+@app.get("/api/cache/stats")
+def cache_stats(username: str = Depends(require_auth)):
+    """Return cache statistics for monitoring."""
+    return RESPONSE_CACHE.stats()
+
+
+@app.post("/api/ai-detection/run")
+def ai_detection_run(background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    """On-demand smart AI detection. Computes peer/dept/type anomalies and caches the result."""
+    ensure_last_mining(background_tasks)
+    last = state.get("last_mining") or {}
+    matrix = last.get("matrix") or {}
+    if not matrix:
+        raise HTTPException(status_code=400, detail="No mining data. Run role mining first.")
+
+    users = active_users(state.get("last_extract", {}).get("users") or [])
+    result = run_smart_ai_detection(users, matrix)
+    state["last_ai_detection"] = result
+
+    # Invalidate KPI and KPI drilldown caches so dashboard and drilldowns stay aligned.
+    invalidate_hot_caches(kpi=True)
+
+    return result
+
+
+@app.get("/api/ai-detection/last")
+def ai_detection_last(username: str = Depends(require_auth)):
+    """Return last cached AI detection results (fast read)."""
+    cached = state.get("last_ai_detection")
+    if not cached:
+        return {"status": "not_run", "items": [], "stats": {}}
+    return cached
+
+
+@app.get("/api/kpi/drilldown/{metric}")
+def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: str = Depends(require_auth)):
+    ensure_last_mining(background_tasks)
+    last = state.get("last_mining") or {}
+    matrix = last.get("matrix") or {}
+    clusters = last.get("clusters") or []
+
+    if not matrix:
+        raise HTTPException(status_code=400, detail="Nessun risultato: dataset vuoto o role mining non eseguibile")
+
+    if metric == "overprivileged":
+        cache_key = "kpi_drilldown_overprivileged"
+        cached = RESPONSE_CACHE.get(cache_key)
+        if cached:
+            return cached
+        payload = build_overprivileged_items(matrix, top_pct=10.0)
+        out = {"metric": metric, **payload}
+        RESPONSE_CACHE.set(cache_key, out, CACHE_TTL_KPI)
+        return out
+
+    if metric == "ai-detection":
+        cache_key = "kpi_drilldown_ai-detection"
+        cached_out = RESPONSE_CACHE.get(cache_key)
+        if cached_out:
+            return cached_out
+        # Always use smart detection logic
+        cached = state.get("last_ai_detection")
+        if not cached or cached.get("status") != "ready":
+             # If not cached or ready, compute it on the fly (ensure consistency)
+             users = active_users(state.get("last_extract", {}).get("users") or [])
+             cached = run_smart_ai_detection(users, matrix)
+             state["last_ai_detection"] = cached
+             # Also update stats in main KPI if needed, but for now just return consistent data
+
+        out = {"metric": metric, "items": cached.get("items", []), "stats": cached.get("stats", {})}
+        RESPONSE_CACHE.set(cache_key, out, CACHE_TTL_KPI)
+        return out
+
+    if metric == "cluster-quality":
+        cache_key = "kpi_drilldown_cluster-quality"
+        cached_out = RESPONSE_CACHE.get(cache_key)
+        if cached_out:
+            return cached_out
+
+        # Cluster Quality in dashboard is Data/Ingest Quality. 
+        ingest = state.get("last_ingest_stats") or {}
+        last_extract = state.get("last_extract") or {}
+        users = last_extract.get("users") or []
+        connector_type = _effective_connector_type()
+        
+        # Fallback if state is empty (for consistency)
+        if not ingest and not users:
+             ingest = {"rowsTotal": 0, "duplicateDisplayName": 0, "missingDepartment": 0}
+
+        # Missing fields detection (kept explicit for drilldown payload parity).
+        missing_dept = _users_missing_field(users, "department")
+        missing_br = _users_missing_field(users, "businessRole")
+        
+        duplicate_items = _duplicate_resolution_items()
+        if not duplicate_items:
+            duplicate_items = _duplicate_resolution_items_from_users(users)
+        # Copy to decouple cache payload from mutable global state list.
+        rejects = list(state.get("last_rejects") or [])
+
+        # Identity integrity metrics (focused on source/identity data quality)
+        now_utc = datetime.now(timezone.utc)
+        known_usernames = {str(u.get("username") or "").strip().lower() for u in users if u.get("username")}
+        known_emails = {str(u.get("email") or "").strip().lower() for u in users if u.get("email")}
+        known_upns = {str(u.get("upn") or "").strip().lower() for u in users if u.get("upn")}
+
+        invalid_identity_users = []
+        invalid_lastlogon_users = []
+        orphan_ref_users = []
+        inactive_mismatch_users = []
+
+        by_email = defaultdict(list)
+        by_upn = defaultdict(list)
+        by_empid = defaultdict(list)
+        dept_variants = defaultdict(set)
+        role_variants = defaultdict(set)
+        dept_users_by_variant = defaultdict(list)
+        role_users_by_variant = defaultdict(list)
+
+        inactive_markers = {"inactive", "disabled", "terminated", "offboarded", "left"}
+        active_markers = {"active", "enabled"}
+
+        for u in users:
+            uname = str(u.get("username") or "").strip()
+            disp = str(u.get("displayName") or uname).strip()
+            dept = str(u.get("department") or "").strip()
+            br = str(u.get("businessRole") or "").strip()
+            email = str(u.get("email") or "").strip().lower()
+            upn = str(u.get("upn") or "").strip().lower()
+            empid = str(u.get("employeeId") or "").strip()
+            manager = str(u.get("manager") or "").strip()
+            last_login = str(u.get("lastLogin") or "").strip()
+            status_ad = str(u.get("statusAd") or "").strip().lower()
+            status_hr = str(u.get("statusHr") or "").strip().lower()
+
+            row_user = {"username": uname, "displayName": disp}
+
+            if email:
+                by_email[email].append(row_user)
+            if upn:
+                by_upn[upn].append(row_user)
+            if empid:
+                by_empid[empid].append(row_user)
+
+            if dept:
+                dnorm = _norm_identity_text(dept)
+                if dnorm:
+                    dept_variants[dnorm].add(dept)
+                    dept_users_by_variant[(dnorm, dept)].append(row_user)
+            if br:
+                rnorm = _norm_identity_text(br)
+                if rnorm:
+                    role_variants[rnorm].add(br)
+                    role_users_by_variant[(rnorm, br)].append(row_user)
+
+            invalid_identity = False
+            if email and not _is_valid_email_address(email):
+                invalid_identity = True
+            if upn and not _is_valid_upn_value(upn):
+                invalid_identity = True
+            if empid and not _is_valid_employee_id(empid):
+                invalid_identity = True
+            if invalid_identity:
+                invalid_identity_users.append(row_user)
+
+            if last_login:
+                try:
+                    dt = datetime.fromisoformat(last_login.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt > now_utc + timedelta(days=1):
+                        invalid_lastlogon_users.append(row_user)
+                except Exception:
+                    invalid_lastlogon_users.append(row_user)
+
+            if manager:
+                m = manager.lower()
+                if (m not in known_usernames) and (m not in known_emails) and (m not in known_upns):
+                    orphan_ref_users.append(row_user)
+
+            if status_ad and status_hr:
+                ad_inactive = any(k in status_ad for k in inactive_markers)
+                hr_inactive = any(k in status_hr for k in inactive_markers)
+                ad_active = any(k in status_ad for k in active_markers)
+                hr_active = any(k in status_hr for k in active_markers)
+                mismatch = (ad_inactive and hr_active) or (hr_inactive and ad_active)
+                if mismatch:
+                    inactive_mismatch_users.append(row_user)
+
+        collision_users = []
+        for bucket in (by_email, by_upn, by_empid):
+            for _, vals in bucket.items():
+                if len(vals) > 1:
+                    collision_users.extend(vals)
+
+        dept_drift_users = []
+        for norm_k, variants in dept_variants.items():
+            if len(variants) > 1:
+                for v in variants:
+                    dept_drift_users.extend(dept_users_by_variant.get((norm_k, v), []))
+
+        role_drift_users = []
+        for norm_k, variants in role_variants.items():
+            if len(variants) > 1:
+                for v in variants:
+                    role_drift_users.extend(role_users_by_variant.get((norm_k, v), []))
+
+        invalid_identity_users = _dedupe_user_rows(invalid_identity_users)
+        invalid_lastlogon_users = _dedupe_user_rows(invalid_lastlogon_users)
+        orphan_ref_users = _dedupe_user_rows(orphan_ref_users)
+        inactive_mismatch_users = _dedupe_user_rows(inactive_mismatch_users)
+        collision_users = _dedupe_user_rows(collision_users)
+        dept_drift_users = _dedupe_user_rows(dept_drift_users)
+        role_drift_users = _dedupe_user_rows(role_drift_users)
+
+        ingest_rejects = len(state.get("last_rejects") or [])
+        import_reject_events = max(
+            ingest_rejects,
+            int(ingest.get("missingDisplayName") or 0)
+            + int(ingest.get("missingRoles") or 0)
+            + int(ingest.get("missingDepartment") or 0)
+            + int(ingest.get("missingBusinessRole") or 0),
+        )
+        import_reject_rate = round((import_reject_events / max(1, len(users))) * 100.0, 2)
+
+        identity_cases_all = [
+            {"id": "invalid_identity_keys", "label": "Chiavi identita non valide", "count": len(invalid_identity_users), "users": invalid_identity_users},
+            {"id": "identity_collisions", "label": "Collisioni identita", "count": len(collision_users), "users": collision_users},
+            {"id": "invalid_lastlogon", "label": "LastLogon non valido", "count": len(invalid_lastlogon_users), "users": invalid_lastlogon_users},
+            {"id": "department_vocab_drift", "label": "Deriva vocabolario dipartimento", "count": len(dept_drift_users), "users": dept_drift_users},
+            {"id": "businessrole_vocab_drift", "label": "Deriva vocabolario business role", "count": len(role_drift_users), "users": role_drift_users},
+            {"id": "orphan_references", "label": "Riferimenti orfani", "count": len(orphan_ref_users), "users": orphan_ref_users},
+            {"id": "inactive_source_mismatch", "label": "Mismatch stato AD/HR", "count": len(inactive_mismatch_users), "users": inactive_mismatch_users},
+            {"id": "import_reject_rate", "label": "Import reject rate", "count": import_reject_events, "rate": import_reject_rate, "users": []},
+        ]
+        csv_peer_info = None
+        if connector_type == "csv":
+            csv_peer_info = _csv_connector_peer_quality(users, ingest)
+            identity_cases_all.extend(csv_peer_info.get("cases") or [])
+        identity_allowed = _allowed_identity_case_ids(connector_type, identity_cases_all)
+
+        identity_cases = [c for c in identity_cases_all if c.get("id") in identity_allowed]
+        identity_total = sum(int(c.get("count") or 0) for c in identity_cases)
+
+        # Merging stats to reflect calculation on the actual displayed data
+        stats = ingest.copy()
+        stats["rowsTotal"] = len(users)
+        # Keep ingest duplicate metric semantics (extra duplicate rows), but never hide detected duplicates.
+        stats["duplicateDisplayName"] = _effective_duplicate_displayname_count(
+            ingest=ingest,
+            duplicate_items=duplicate_items,
+            rejects=rejects,
+        )
+        stats["missingDepartment"] = len(missing_dept)
+        stats["missingBusinessRole"] = len(missing_br)
+        stats["identityIntegrityIssues"] = identity_total
+        if csv_peer_info:
+            stats["csvPresentColumns"] = csv_peer_info.get("presentColumns") or []
+            stats["csvPeerModel"] = csv_peer_info.get("peerModel") or "global"
+            stats["csvPeerSignals"] = csv_peer_info.get("signals") or []
+
+        items = [
+            {"type": "Duplicates", "label": "Duplicates", "count": len(duplicate_items), "users": duplicate_items},
+            {"type": "Missing Department", "label": "Missing Department", "count": len(missing_dept), "users": missing_dept},
+            {"type": "Missing Business Role", "label": "Missing Business Role", "count": len(missing_br), "users": missing_br},
+            {"type": "Identity Integrity", "label": "Identity Integrity", "count": identity_total, "cases": identity_cases, "users": []},
+        ]
+        visible_types, summary_cards = _build_cluster_quality_summary_cards(
+            connector_type=connector_type,
+            stats=stats,
+            identity_cases=identity_cases,
+        )
+
+        items = [x for x in items if x.get("type") in visible_types]
+
+        out = {
+            "metric": "cluster-quality",
+            "connectorType": connector_type,
+            "stats": stats,
+            "summaryCards": summary_cards,
+            "items": items,
+            "rejects": rejects,
+        }
+        RESPONSE_CACHE.set(cache_key, out, CACHE_TTL_KPI)
+        return out
+
+    if metric == "model-quality":
+        users = active_users(state.get("last_extract", {}).get("users") or [])
+        last_mining = state.get("last_mining") or {}
+        matrix = last_mining.get("matrix") or {}
+        # Get all unique groups from source of truth
+        groups_list = (state.get("last_extract") or {}).get("groups") or []
+        if not groups_list and matrix:
+            first = next(iter(matrix.values()))
+            groups_list = list(first if isinstance(first, list) else first.keys())
+
+        mq = compute_model_quality(users, matrix, groups_list)
+
+        orphan_roles = [
+            {"roleName": g, "groupName": g, "userCount": 0}
+            for g in (mq.get("orphanRolesList") or mq.get("orphansList") or [])
+        ]
+
+        return {
+            "metric": metric,
+            "modelQuality": mq.get("modelQuality", 0),
+            "roleIssues": orphan_roles,
+            "groupsIssues": orphan_roles,
+            "staleAccounts": mq.get("staleList", []),
+            "zeroGroupsUsers": mq.get("zeroList", []),
+            "overprivilegedUsers": mq.get("overprivilegedList", []),
+            "policyViolations": mq.get("policyViolations", []),
+            "ambiguousUsers": mq.get("ambiguousUsers", []),
+            "qualityIndicators": mq.get("indicators", []),
+            "density": mq.get("density", 0),
+            "avgGeneralizationConfidence": mq.get("avgGeneralizationConfidence", 0),
+            "manualOverrideEvents": mq.get("manualOverrideEvents", 0),
+            "modelPreset": mq.get("modelPreset", state.get("dq_model_preset") or "manufacturing"),
+            "availableModelPresets": sorted(MODEL_QUALITY_PRESETS.keys()),
+        }
+    
+    raise HTTPException(status_code=404, detail="Unknown metric")
+
+
+# (FastAPI and typing imports already at top of file)
+
+# helper: costruisce righe per UI (tutti gli utenti)
+def build_overprivileged_rows(matrix: Dict[str, Dict[str, int]], threshold: Optional[int]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for user, grants in (matrix or {}).items():
+        groups = [g for g, v in (grants or {}).items() if int(v) == 1]
+        n_groups = len(groups)
+        over = bool(threshold is not None and n_groups >= int(threshold))
+        rows.append({
+            "user": user,
+            "nGroups": n_groups,
+            "over": over,
+            "groups": groups,              # lista (meglio della stringa)
+            "groupsText": ", ".join(groups) # comodo se vuoi visualizzarla subito
+        })
+
+    # ordinamento default lato backend (opzionale): Over desc, poi #Gruppi desc, poi user asc
+    rows.sort(key=lambda r: (not r["over"], -r["nGroups"], r["user"]))
+    return rows
+
+@app.get("/api/drilldown/overprivileged")
+def drilldown_overprivileged(nclusters: int = 8, rolesupport: float = 0.1):
+    last = state.get("last_mining") or {}
+    matrix = last.get("matrix") or {}
+    # Use existing kpi if available, don't re-run full mining on every drilldown hit
+    kpi = last.get("kpi") or {}
+
+    thr = compute_over_threshold(matrix, pct=0.10)     # calcolata su TUTTI gli utenti
+    rows = build_over_rows_only(matrix, thr)           # ma ritorni SOLO gli over
+
+    return {
+        "rows": rows,
+        # opzionale: la soglia non la mostri in UI, ma può tornare utile per debug
+        "threshold": thr,
+        "totalUsers": len(matrix or {}),
+        "overUsers": len(rows),
+    }
+
+
+
+@app.get("/api/logs")
+def logs(username: str = Depends(require_auth)):
+    return {"total": len(state["logs"]), "items": state["logs"]}
+
+
+class RoleAssignRequest(BaseModel):
+    username: str
+
+
+@app.get("/api/businessroles")
+def businessroles(username: str = Depends(require_auth)):
+    # Check cache first
+    cache_key = "businessroles"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+    
+    users = active_users(state["last_extract"]["users"] or [])
+
+    apply_business_roles(users)
+    roles = sorted({u.get("businessRole", "Unassigned") for u in users})
+    extra = state.get("business_roles", set())
+    roles = sorted(set(roles).union(set(extra)))
+    roles_info = []
+    for r in roles:
+        members = [u for u in users if u.get("businessRole") == r]
+        # Optimization: include meta (color, groups) directly
+        meta = state.get("role_meta", {}).get(r, {})
+        roles_info.append({
+            "role": r,
+            "count": len(members),
+            "color": meta.get("color", "#6aa6ff"),
+            "groups": meta.get("groups", [])
+        })
+    result = {
+        "roles": roles_info,
+        "assignments": {u["username"]: u.get("businessRole", "Unassigned") for u in users},
+    }
+    
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_ROLES)
+    return result
+
+class RoleCreateRequest(BaseModel):
+    role: str
+
+# role -> meta (color + groups)
+state.setdefault("role_meta", {
+    "IT": {"color": "#00B4FF", "groups": ["Azure", "GitLab"]},
+    "HR": {"color": "#FF9F1C", "groups": ["HR", "Payroll"]},
+})
+state.setdefault("business_roles", set(["IT", "HR"]))
+
+
+
+class RoleColorRequest(BaseModel):
+    color: str  # "#RRGGBB"
+
+class RoleGroupRequest(BaseModel):
+    group: str
+
+@app.get("/api/ad/groups")
+def ad_groups(username: str = Depends(require_auth)):
+    cache_key = "ad_groups"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    users = state["last_extract"].get("users") or []
+    groups = recompute_groups_from_users(users)
+    result = {"groups": groups}
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_USERS)
+    return result
+
+
+@app.get("/api/stats/group-counts")
+def get_group_counts(username: str = Depends(require_auth)):
+    cache_key = "group_counts"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    users = active_users(state["last_extract"].get("users") or [])
+    counts = defaultdict(int)
+    for u in users:
+        for g in (u.get("groups") or []):
+            counts[g] += 1
+
+    result = {"counts": dict(counts)}
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_USERS)
+    return result
+
+
+@app.get("/api/businessroles/{role}/meta")
+def businessrole_meta(role: str, username: str = Depends(require_auth)):
+    # Check cache first
+    cache_key = f"role_meta_{role}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+    
+    meta = state.get("role_meta", {}).get(role, {"color": "#ffffff", "groups": []})
+    result = {"role": role, "color": meta.get("color", "#ffffff"), "groups": meta.get("groups", [])}
+    
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_ROLES)
+    return result
+
+@app.post("/api/businessroles/{role}/color")
+def businessrole_set_color(role: str, body: RoleColorRequest, username: str = Depends(require_auth)):
+    state.setdefault("role_meta", {})
+    state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
+    state["role_meta"][role]["color"] = body.color
+    state.setdefault("business_roles", set()).add(role)
+    log("INFO", f"Role color set: {role} -> {body.color} by {username}")
+    invalidate_hot_caches(roles=True)
+    return {"ok": True}
+
+@app.post("/api/businessroles/{role}/groups/add")
+def businessrole_add_group(role: str, body: RoleGroupRequest, username: str = Depends(require_auth)):
+    state.setdefault("role_meta", {})
+    state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
+    gs = set(state["role_meta"][role].get("groups", []))
+    gs.add(body.group)
+    state["role_meta"][role]["groups"] = sorted(gs)
+    state.setdefault("business_roles", set()).add(role)
+    state["brdb_ready"] = False
+    log("INFO", f"Role group add: {role} + {body.group} by {username}")
+    invalidate_hot_caches(roles=True, kpi=True, mining=True)
+    return {"ok": True}
+
+# ----------------------------
+# BRDB Suggestions for UI
+# ----------------------------
+class SuggestionPickRequest(BaseModel):
+    group: str
+
+def brdb_suggest_groups_for_role(role: str, *, limit: int = 50, min_conf: float = 0.60) -> List[Dict[str, Any]]:
+    """
+    Ritorna gruppi suggeriti da assegnare al Business Role (escludendo quelli già presenti in role_meta[role].groups).
+    """
+    role = (role or "").strip()
+    if not role:
+        return []
+
+    cache_key = f"suggestions_{role}_{min_conf}_{limit}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
+
+    # Suggestions must be computed only after explicit recalc from Business Roles page.
+    # Avoid implicit heavy rebuilds on page open.
+    if not state.get("brdb_ready"):
+        return []
+    meta = (state.get("role_meta") or {}).get(role) or {}
+    already = set(meta.get("groups") or [])
+
+    # Use optimized ml_engine method
+    items = ml_engine.brdb_suggest_groups(role, exclude=already, min_conf=min_conf, limit=limit)
+    out = []
+    for item in items:
+        out.append({
+            "group": item["group"],
+            "confidence": float(item["confidence"]),
+            "evidence": {"count": item.get("count", 0)},
+        })
+    RESPONSE_CACHE.set(cache_key, out, ttl_seconds=300)
+    return out
+
+@app.get("/api/businessroles/{role}/suggestions")
+def businessrole_suggestions(role: str, limit: int = 50, min_conf: float = 0.60, username: str = Depends(require_auth)):
+    """
+    Endpoint per la sezione "AI Suggestion" della pagina Business Role.
+    """
+    items = brdb_suggest_groups_for_role(role, limit=limit, min_conf=min_conf)
+    return {"role": role, "total": len(items), "items": items}
+
+@app.post("/api/businessroles/{role}/suggestions/select")
+def businessrole_suggestion_select(role: str, body: SuggestionPickRequest, username: str = Depends(require_auth)):
+    """
+    Pulsante "Select": assegna direttamente il gruppo suggerito al role_meta del BR.
+    (È equivalente a chiamare /api/businessroles/{role}/groups/add, ma comodo per UI.)
+    """
+    g = (body.group or "").strip()
+    if not g:
+        raise HTTPException(status_code=400, detail="Group vuoto")
+
+    # Riusa la stessa logica del groups/add
+    state.setdefault("role_meta", {})
+    state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
+    gs = set(state["role_meta"][role].get("groups", []))
+    gs.add(g)
+    state["role_meta"][role]["groups"] = sorted(gs)
+    state.setdefault("business_roles", set()).add(role)
+
+    # training "forte" (se hai brdb_learn_assignment); altrimenti ignoralo
+    try:
+        brdb_learn_assignment(role, [g], weight=10)
+        record_llm_learning_event(
+            actor=username,
+            source="businessroles-suggestion",
+            signal_type="brdb-assignment",
+            entity=role,
+            details={"group": g, "weight": 10},
+        )
+    except Exception:
+        pass
+
+    state["mining_dirty"] = True
+    log("INFO", f"Suggestion selected: {role} + {g} by {username}")
+    invalidate_hot_caches(roles=True, kpi=True, mining=True)
+    return {"ok": True, "role": role, "group": g}
+
+
+@app.post("/api/businessroles/{role}/groups/remove")
+def businessrole_remove_group(role: str, body: RoleGroupRequest, username: str = Depends(require_auth)):
+    state.setdefault("role_meta", {})
+    state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
+    gs = [g for g in state["role_meta"][role].get("groups", []) if g != body.group]
+    state["role_meta"][role]["groups"] = gs
+    state["brdb_ready"] = False
+    log("INFO", f"Role group remove: {role} - {body.group} by {username}")
+    invalidate_hot_caches(roles=True, kpi=True, mining=True)
+    return {"ok": True}
+
+
+@app.post("/api/businessroles/recalculate/groups")
+def businessroles_recalculate_groups(username: str = Depends(require_auth)):
+    """
+    Recompute group -> Business Role assignment from current users.
+    Each group is assigned to the role where it appears most frequently.
+    """
+    users = active_users(state.get("last_extract", {}).get("users") or [])
+    apply_business_roles(users)
+
+    # group -> role -> count
+    group_role_counts: Dict[str, Dict[str, int]] = {}
+    for u in users:
+        role = (u.get("businessRole") or "Unassigned").strip()
+        if not role or role == "Unassigned":
+            # Do not use fallback/unassigned values to avoid destructive remaps.
+            continue
+        for g in (u.get("groups") or []):
+            if not g:
+                continue
+            bucket = group_role_counts.setdefault(g, {})
+            bucket[role] = int(bucket.get(role, 0)) + 1
+
+    # Build exclusive assignment: each group belongs to the role with max count.
+    role_groups: Dict[str, set] = {}
+    for g, counts in group_role_counts.items():
+        best_role = None
+        best_count = -1
+        for role, cnt in counts.items():
+            if cnt > best_count:
+                best_role = role
+                best_count = cnt
+        if not best_role:
+            continue
+        role_groups.setdefault(best_role, set()).add(g)
+
+    state.setdefault("role_meta", {})
+    state.setdefault("business_roles", set())
+    for role in set(state["business_roles"]).union(set(role_groups.keys())):
+        _ensure_role_registered(role)
+
+    preserved_roles = 0
+    updated_roles = 0
+    groups_added = 0
+    for role in state["business_roles"]:
+        assigned_set = set(role_groups.get(role, set()))
+        state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
+        current_set = set((state["role_meta"][role] or {}).get("groups") or [])
+
+        # Non-destructive recalc: never remove existing groups, only add newly inferred ones.
+        merged = sorted(current_set.union(assigned_set))
+        added_here = len(set(merged) - current_set)
+        groups_added += added_here
+        state["role_meta"][role]["groups"] = merged
+        if added_here > 0:
+            updated_roles += 1
+        elif merged:
+            preserved_roles += 1
+        state["brdb_ready"] = False
+
+    # Explicitly (re)build BRDB and suggestion cache only on user-triggered recalc.
+    # This keeps detail-page load fast and deterministic.
+    role_meta = state.get("role_meta") or {}
+    ml_engine.brdb_rebuild(users)
+    for role in state["business_roles"]:
+        assigned = set((role_meta.get(role) or {}).get("groups") or [])
+        ml_engine.brdb_suggest_groups(role, exclude=assigned, min_conf=0.10, limit=100)
+    state["brdb_ready"] = True
+
+    state["mining_dirty"] = True
+    log(
+        "INFO",
+        f"Business role groups recalculated by {username} (updated={updated_roles}, preserved={preserved_roles}, added={groups_added}, inferred_groups={len(group_role_counts)})",
+    )
+    invalidate_hot_caches(roles=True, kpi=True, mining=True)
+    return {
+        "ok": True,
+        "rolesUpdated": updated_roles,
+        "rolesPreserved": preserved_roles,
+        "groupsAdded": groups_added,
+        "groupsAssigned": len(group_role_counts),
+        "proposedGroupsCalculated": True,
+    }
+
+
+@app.post("/api/businessroles/create")
+def businessrole_create(body: RoleCreateRequest, username: str = Depends(require_auth)):
+    role = body.role.strip()
+    if not role:
+        raise HTTPException(status_code=400, detail="Role vuoto")
+
+    # Crea il ruolo senza assegnare utenti: basta “registrarlo”
+    state.setdefault("business_roles", set())
+    if isinstance(state["business_roles"], list):
+        state["business_roles"] = set(state["business_roles"])
+    state["business_roles"].add(role)
+
+    log("INFO", f"Business role created: {role} by {username}")
+    invalidate_hot_caches(roles=True)
+    return {"ok": True, "role": role}
+
+class ChooseCsvRowRequest(BaseModel):
+    displayNameRaw: str
+    rowId: str
+
+@app.post("/api/csv/duplicates/choose")
+def choose_csv_duplicate_row(body: ChooseCsvRowRequest, username: str = Depends(require_auth)):
+    dn_raw = body.displayNameRaw
+    row_id = body.rowId
+
+    rows = state.get("last_csv_rows") or []
+    rec = next((r for r in rows if r.get("rowId") == row_id and r.get("displayNameRaw") == dn_raw), None)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Row not found")
+
+    # salva scelta
+    state.setdefault("csv_choice_by_dn", {})
+    state["csv_choice_by_dn"][dn_raw] = row_id
+
+    # applica override “a sistema” sull’utente (per displayName)
+    users = state.get("last_extract", {}).get("users") or []
+    dn_clean = rec.get("displayName") or ""
+    br = rec.get("businessRole") or ""
+    roles = rec.get("roles") or []
+
+    uobj = next((u for u in users if (u.get("displayName") or "").strip() == dn_clean), None)
+    if not uobj:
+        raise HTTPException(status_code=400, detail="User not found in last_extract")
+
+    dept = rec.get("department")
+    if dept:
+        uobj["department"] = dept
+
+    uobj["groups"] = sorted(set(roles))
+    if br:
+        uobj["businessRole"] = br
+        state.setdefault("user_business_role", {})
+        state["user_business_role"][uobj["username"]] = br
+    record_manual_user_change(
+        actor=username,
+        username=uobj.get("username"),
+        display_name=uobj.get("displayName"),
+        action="resolve-csv-duplicate",
+        source="cluster-quality",
+        details={"displayNameRaw": dn_raw, "chosenRowId": row_id},
+    )
+
+    log("INFO", f"CSV duplicate resolved: '{dn_raw}' -> rowId={row_id} by {username}")
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    return {"ok": True, "username": uobj["username"], "chosenRowId": row_id}
+
+
+@app.get("/api/businessroles/{role}")
+def businessrole_detail(role: str, username: str = Depends(require_auth)):
+    cache_key = f"role_detail_users_{role}"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached: return cached
+    
+    users = active_users(state["last_extract"]["users"] or [])
+    apply_business_roles(users)
+    members = [u for u in users if u.get("businessRole") == role]
+    
+    res = {"role": role, "users": members}
+    RESPONSE_CACHE.set(cache_key, res, ttl_seconds=300)
+    return res
+
+@app.get("/api/ingest/conflicts/duplicate-displayname")
+def conflicts_duplicate_displayname(username: str = Depends(require_auth)):
+    """
+    Ritorna la lista dei displayName che hanno più di un candidato (conflitto).
+    """
+    items = _duplicate_resolution_items()
+    for item in items:
+        item["rows"] = [item.get("chosen")] + (item.get("alternatives") or [])
+    items.sort(key=lambda x: len(x.get("rows") or []), reverse=True)
+    return {"items": items}
+
+
+class ChooseDuplicateRequest(BaseModel):
+    displayName: str
+    candidateId: str
+
+@app.post("/api/ingest/conflicts/duplicate-displayname/choose")
+def choose_duplicate(body: ChooseDuplicateRequest, username: str = Depends(require_auth)):
+    state.setdefault("choice_by_displayName", {})
+    state["choice_by_displayName"][body.displayName] = body.candidateId
+
+    cand = next((c for c in state.get("ingest_candidates", [])
+                 if c["candidateId"] == body.candidateId and c["displayName"] == body.displayName), None)
+    if cand:
+        apply_choice_for_displayname(
+            display_name=body.displayName,
+            chosen_business_role=cand.get("businessRole"),
+            chosen_roles=cand.get("roles") or [],
+        )
+        users = state.get("last_extract", {}).get("users") or []
+        uobj = next((u for u in users if (u.get("displayName") or "").strip() == body.displayName and not u.get("excluded")), None)
+        if uobj:
+            record_manual_user_change(
+                actor=username,
+                username=uobj.get("username"),
+                display_name=uobj.get("displayName"),
+                action="resolve-duplicate",
+                source="cluster-quality",
+                details={"candidateId": body.candidateId},
+            )
+
+    _record_duplicate_feedback(body.displayName, body.candidateId, actor=username)
+    log("INFO", f"Duplicate resolved: {body.displayName} -> {body.candidateId} by {username}")
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    return {"ok": True}
+
+
+@app.get("/api/data-quality/rules/suggestions")
+def data_quality_rule_suggestions(username: str = Depends(require_auth)):
+    return {
+        "items": build_dq_rule_suggestions(),
+        "activeRules": state.get("dq_rules") or {},
+    }
+
+
+@app.post("/api/data-quality/rules/suggestions/{rule_id}/apply")
+def apply_data_quality_rule(rule_id: str, username: str = Depends(require_auth)):
+    rid = (rule_id or "").strip()
+    if not rid:
+        raise HTTPException(status_code=400, detail="rule_id required")
+
+    suggestions = {x.get("ruleId"): x for x in build_dq_rule_suggestions()}
+    item = suggestions.get(rid)
+    if not item:
+        raise HTTPException(status_code=404, detail="Rule suggestion not found")
+
+    rules = dict(state.get("dq_rules") or {})
+    preview = item.get("preview") or {}
+    for k, v in preview.items():
+        rules[k] = v
+    # Keep canonical duplicate ranking policy required by product.
+    rules["duplicate_resolution_order"] = REQUIRED_DUPLICATE_ORDER.copy()
+    state["dq_rules"] = rules
+
+    log("INFO", f"DQ rule applied: {rid} by {username}")
+    return {"ok": True, "ruleId": rid, "dqRules": rules}
+
+
+@app.get("/api/data-quality/model/presets")
+def data_quality_model_presets(username: str = Depends(require_auth)):
+    active = (state.get("dq_model_preset") or "manufacturing").strip().lower()
+    return {
+        "activePreset": active,
+        "availablePresets": sorted(MODEL_QUALITY_PRESETS.keys()),
+        "weights": get_active_model_weights(),
+    }
+
+
+@app.post("/api/data-quality/model/presets/{preset}/apply")
+def apply_data_quality_model_preset(preset: str, username: str = Depends(require_auth)):
+    p = (preset or "").strip().lower()
+    if p not in MODEL_QUALITY_PRESETS:
+        raise HTTPException(status_code=404, detail="Unknown model preset")
+    state["dq_model_preset"] = p
+    state["dq_model_weights"] = dict(MODEL_QUALITY_PRESETS[p])
+    invalidate_hot_caches(kpi=True)
+    log("INFO", f"Model quality preset applied: {p} by {username}")
+    return {"ok": True, "activePreset": p, "weights": state["dq_model_weights"]}
+
+
+
+@app.get("/api/ingest/conflicts/{kind}")
+def ingest_conflicts(kind: str, username: str = Depends(require_auth)):
+    if kind == "duplicate-displayname":
+        return conflicts_duplicate_displayname(username)
+    raise HTTPException(status_code=404, detail="Unknown conflict kind")
+
+class ChooseConflictRequest(BaseModel):
+    kind: str                   # "duplicate-displayname"
+    displayName: str
+    candidateId: str
+
+@app.post("/api/ingest/conflicts/choose")
+def choose_conflict(body: ChooseConflictRequest, username: str = Depends(require_auth)):
+    if body.kind != "duplicate-displayname":
+        raise HTTPException(status_code=404, detail="Unknown conflict kind")
+
+    state.setdefault("choice_by_displayName", {})
+    state["choice_by_displayName"][body.displayName] = body.candidateId
+
+    # Applica subito la scelta a “last_extract” (utente effettivo)
+
+    return {"ok": True}
+
+
+@app.post("/api/businessroles/{role}/add")
+def businessrole_add(role: str, body: RoleAssignRequest, username: str = Depends(require_auth)):
+    # assegna (e rimuove da eventuale ruolo precedente)
+    m = state.get("user_business_role", {})
+    m[body.username] = role
+    state["user_business_role"] = m
+    state["brdb_ready"] = False
+    # aggiorna cache estrazione per riflettere subito la modifica in UI
+    users = state["last_extract"]["users"] or []
+    apply_business_roles(users)
+        # BRDB training: quando assegni a mano è “ground truth”
+    u = next((x for x in users if x.get("username") == body.username), None)
+    if u:
+        brdb_learn_assignment(role, u.get("groups") or [], weight=10)
+        record_llm_learning_event(
+            actor=username,
+            source="businessroles-add-user",
+            signal_type="brdb-assignment",
+            entity=body.username,
+            details={"businessRole": role, "groupsCount": len(u.get("groups") or []), "weight": 10},
+        )
+        record_manual_user_change(
+            actor=username,
+            username=body.username,
+            display_name=u.get("displayName"),
+            action="assign-business-role",
+            source="business-roles",
+            details={"businessRole": role},
+        )
+
+    log("INFO", f"Business role set: {body.username} -> {role} by {username}")
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    return {"ok": True, "username": body.username, "role": role}
+
+def _slug_username(display_name: str) -> str:
+    s = (display_name or "").strip().lower()
+    s = re.sub(r"\s+", ".", s)
+    s = re.sub(r"[^a-z0-9._-]", "", s)
+    return s or "user"
+
+
+# (DEPT_MINCONF already defined at line 479)
+
+def _ensure_role_registered(role: str) -> None:
+    role = (role or "").strip()
+    if not role:
+        return
+
+    state.setdefault("role_meta", {})
+    state.setdefault("business_roles", set())
+
+    if role not in state["role_meta"]:
+        r = random.randint(100, 255)
+        g = random.randint(100, 255)
+        b = random.randint(100, 255)
+        color = f"{r:02x}{g:02x}{b:02x}".upper()
+        if not color.startswith("#"):
+            color = "#" + color
+        state["role_meta"][role] = {"color": color, "groups": []}
+
+    state["business_roles"].add(role)
+
+def apply_department_mapping_if_missing(users: list[dict]) -> None:
+    # usa BRDB già presente (inference sui gruppi)
+    brdb_rebuild()
+
+    by_dept = defaultdict(list)
+    for u in (users or []):
+        dept = (u.get("department") or "").strip()
+        if dept:
+            by_dept[dept].append(u)
+
+    for dept, members in by_dept.items():
+        weights = defaultdict(float)
+
+        for u in members:
+            s = brdb_infer_groupset(u.get("groups") or [])
+            role = (s.get("role") or "Unassigned").strip()
+            conf = float(s.get("confidence") or 0.0)
+            if role and role != "Unassigned" and conf > 0:
+                weights[role] += conf
+            for rr, sc in _br_assignment_rule_scores_for_user(u).items():
+                weights[rr] += float(sc)
+
+        if weights:
+            best_role, best_w = max(weights.items(), key=lambda x: x[1])
+            total = sum(weights.values()) or 1.0
+            dept_conf = best_w / total
+        else:
+            best_role, dept_conf = "Unassigned", 0.0
+
+        chosen_role = best_role if (best_role != "Unassigned" and dept_conf >= DEPT_MINCONF) else dept
+        _ensure_role_registered(chosen_role)
+
+        # assegna SOLO se l'utente non ha già BR assegnato
+        state.setdefault("user_business_role", {})
+        for u in members:
+            uname = u.get("username")
+            if not uname:
+                continue
+
+            already = (state.get("user_business_role") or {}).get(uname)
+            if already:
+                continue
+
+            # se per qualche motivo è già valorizzato sul record utente, non sovrascrivere
+            if (u.get("businessRole") or "").strip():
+                continue
+
+            user_rule_scores = _br_assignment_rule_scores_for_user(u)
+            if user_rule_scores:
+                boosted_role = max(user_rule_scores.items(), key=lambda x: x[1])[0]
+                _ensure_role_registered(boosted_role)
+                state["user_business_role"][uname] = boosted_role
+            else:
+                state["user_business_role"][uname] = chosen_role
+
+    # Also evaluate rule-based assignment for users without department.
+    state.setdefault("user_business_role", {})
+    for u in (users or []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        already = (state.get("user_business_role") or {}).get(uname)
+        if already:
+            continue
+        if (u.get("businessRole") or "").strip():
+            continue
+        rule_scores = _br_assignment_rule_scores_for_user(u)
+        if rule_scores:
+            forced_role = max(rule_scores.items(), key=lambda x: x[1])[0]
+            _ensure_role_registered(forced_role)
+            state["user_business_role"][uname] = forced_role
+
+
+
+@app.post("/api/import/csv")
+async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundTasks = None, username: str = Depends(require_auth)):
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="File vuoto")
+
+    text = raw.decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(text), delimiter=";", skipinitialspace=True)
+
+    if reader.fieldnames:
+        reader.fieldnames = [h.strip() for h in reader.fieldnames if h is not None]
+
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV senza header")
+
+    csv_headers_norm = sorted({(h or "").strip().lower() for h in (reader.fieldnames or []) if (h or "").strip()})
+    norm_fields = { (h or "").strip().lower() for h in reader.fieldnames }
+    if "displayname" not in norm_fields:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Headers richiesti: ['DisplayName']; trovati: {reader.fieldnames}",
+        )
+
+    def _norm_header(h: str) -> str:
+        return (h or "").strip().lower()
+
+    def _get_any(row_ci: dict, keys: list[str]) -> str:
+        for k in keys:
+            if k in row_ci and row_ci.get(k) is not None:
+                return str(row_ci.get(k))
+        return ""
+
+    CSV_KEYS = {
+        "displayName": ["displayname", "display name", "name", "utente", "user"],
+        "username": ["username", "userprincipalname", "samaccountname", "login", "accountname"],
+        "department": ["department", "dept", "dipartimento", "area", "funzione"],
+        "businessRole": ["businessrole", "business role", "br", "ruolo business", "ruolo_business"],
+        "roles": ["ruoli", "roles", "groups", "gruppi", "entitlements"],
+        "accountType": ["accounttype", "account type", "tipo utente", "tipo_utente", "type"],
+        "lastLogin": ["lastlogin", "last login", "last_logon", "lastlogon", "ultimo accesso", "ultimologin"],
+        "email": ["email", "mail", "emailaddress", "posta"],
+        "upn": ["upn", "user principal name", "userprincipalname"],
+        "employeeId": ["employeeid", "employee id", "matricola", "badgeid"],
+        "manager": ["manager", "owner", "responsabile"],
+        "statusAd": ["statusad", "adstatus", "accountstatusad", "statoad"],
+        "statusHr": ["statushr", "hrstatus", "accountstatushr", "statohr"],
+        "orphanGroups": ["orphangroups", "orphan_groups", "cataloggroups", "catalog_groups", "groupscatalog"],
+    }
+
+    def _extract_csv_fields(row: dict) -> tuple:
+        row_ci = {_norm_header(k): v for k, v in (row or {}).items()}
+        dnraw = _get_any(row_ci, CSV_KEYS["displayName"])
+        usernameraw = _get_any(row_ci, CSV_KEYS["username"])
+        deptraw = _get_any(row_ci, CSV_KEYS["department"])
+        brraw = _get_any(row_ci, CSV_KEYS["businessRole"])
+        rolesraw = _get_any(row_ci, CSV_KEYS["roles"])
+        type_raw = _get_any(row_ci, CSV_KEYS["accountType"])
+        last_login_raw = _get_any(row_ci, CSV_KEYS["lastLogin"])
+        email_raw = _get_any(row_ci, CSV_KEYS["email"])
+        upn_raw = _get_any(row_ci, CSV_KEYS["upn"])
+        employee_id_raw = _get_any(row_ci, CSV_KEYS["employeeId"])
+        manager_raw = _get_any(row_ci, CSV_KEYS["manager"])
+        status_ad_raw = _get_any(row_ci, CSV_KEYS["statusAd"])
+        status_hr_raw = _get_any(row_ci, CSV_KEYS["statusHr"])
+        orphan_groups_raw = _get_any(row_ci, CSV_KEYS["orphanGroups"])
+
+        dn = (dnraw or "").strip()
+        preferred_username = (usernameraw or "").strip()
+        dept = (deptraw or "").strip()
+        br = (brraw or "").strip()
+        roles = (rolesraw or "").strip()
+        acct_type = (type_raw or "WhiteCollar").strip()
+        last_login = _normalize_last_login((last_login_raw or "").strip() or None)
+        email = (email_raw or "").strip().lower()
+        upn = (upn_raw or "").strip().lower()
+        employee_id = (employee_id_raw or "").strip()
+        manager = (manager_raw or "").strip()
+        status_ad = (status_ad_raw or "").strip()
+        status_hr = (status_hr_raw or "").strip()
+        orphan_groups = [g.strip() for g in (orphan_groups_raw or "").split(",") if g and g.strip()]
+
+        if (not dept) and dn and ("," in dn):
+            dn, dept = [x.strip() for x in dn.split(",", 1)]
+
+        if not br:
+            br = dept
+
+        return (
+            dnraw,
+            dn,
+            preferred_username,
+            dept,
+            br,
+            roles,
+            acct_type,
+            last_login,
+            email,
+            upn,
+            employee_id,
+            manager,
+            status_ad,
+            status_hr,
+            orphan_groups,
+        )
+
+    ingest_sources = state.get("ingest_sources") or {}
+    ingest_sources["csv"] = []
+    last_csv_rows: List[Dict[str, Any]] = []
+    csv_choice_by_dn: Dict[str, str] = {}
+    csv_rows_by_dn: Dict[str, List[str]] = defaultdict(list)
+
+    csv_rows_total = 0
+    csv_dup_dn_rows = 0
+    csv_missing_displayname = 0
+    csv_missing_department = 0
+    csv_missing_businessrole = 0
+    csv_missing_roles = 0
+    csv_orphan_groups_catalog: set[str] = set()
+    csv_rejects: List[Dict[str, Any]] = []
+    reject_empty_groups = bool((state.get("dq_rules") or {}).get("reject_empty_groups"))
+
+    existing_users_list = state.get("last_extract", {}).get("users", [])
+    csv_candidates: List[Dict[str, Any]] = []
+    choice_by_displayname = state.get("choice_by_displayName") or {}
+    duplicate_autoselect: Dict[str, Any] = {}
+
+    for row in reader:
+        csv_rows_total += 1
+        row_id = f"csv:{csv_rows_total}"
+        (
+            dnraw,
+            dn,
+            preferred_username,
+            dept,
+            br,
+            roles,
+            acct_type,
+            last_login,
+            email,
+            upn,
+            employee_id,
+            manager,
+            status_ad,
+            status_hr,
+            orphan_groups,
+        ) = _extract_csv_fields(row)
+        for g in orphan_groups:
+            csv_orphan_groups_catalog.add(g)
+
+        if not dn:
+            csv_missing_displayname += 1
+            continue
+
+        if not dept:
+            csv_missing_department += 1
+        if not br:
+            csv_missing_businessrole += 1
+
+        parsed_roles = [g.strip() for g in (roles or "").split(",") if g.strip()]
+        if not parsed_roles:
+            csv_missing_roles += 1
+            if reject_empty_groups:
+                csv_rejects.append(
+                    {
+                        "source": "csv",
+                        "reason": "Missing groups (rejected by dq rule)",
+                        "user": {"displayName": dn, "department": dept, "businessRole": br},
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                continue
+
+        # Favor CSV provided type if it's not the default 'WhiteCollar', otherwise fallback to heuristic
+        atype = classify_account(dn, dept, row.get("EmployeeType", ""))
+        final_type = acct_type if acct_type not in ["", "WhiteCollar"] else atype
+
+        user_payload = {
+            "displayName": dn,
+            "groups": parsed_roles,
+            "department": dept or None,
+            "businessRole": br or None,
+            "excluded": False,
+            "lastLogin": last_login,
+            "accountType": final_type,
+            "preferredUsername": preferred_username or None,
+            "email": email or None,
+            "upn": upn or None,
+            "employeeId": employee_id or None,
+            "manager": manager or None,
+            "statusAd": status_ad or None,
+            "statusHr": status_hr or None,
+        }
+
+        rec = {
+            "rowId": row_id,
+            "displayName": dn,
+            "displayNameRaw": dnraw,
+            "preferredUsername": preferred_username,
+            "businessRole": br,
+            "department": dept,
+            "lastLogin": last_login,
+            "roles": parsed_roles,
+            "email": email,
+            "upn": upn,
+            "employeeId": employee_id,
+            "manager": manager,
+            "rawLine": f"{dnraw};{dept};{roles}",
+        }
+        last_csv_rows.append(rec)
+        csv_rows_by_dn[dnraw].append(row_id)
+        csv_choice_by_dn.setdefault(dnraw, row_id)
+        csv_candidates.append({"rowId": row_id, "rec": rec, "user": user_payload})
+
+        candidate = _mk_candidate(
+            source="csv",
+            candidate_id=row_id,
+            display_name=dn,
+            business_role=br,
+            roles=parsed_roles,
+            raw=rec["rawLine"],
+            department=dept,
+            last_login=last_login,
+        )
+        ingest_sources["csv"].append(candidate)
+        choice_by_displayname.setdefault(candidate["displayName"], candidate["candidateId"])
+
+    profile_rows = []
+    for u in existing_users_list:
+        profile_rows.append(
+            {
+                "department": (u.get("department") or "").strip(),
+                "groups": list(u.get("groups") or []),
+            }
+        )
+    for c in csv_candidates:
+        profile_rows.append(
+            {
+                "department": (c["user"].get("department") or "").strip(),
+                "groups": list(c["user"].get("groups") or []),
+            }
+        )
+    dept_profile = _build_dept_group_profile(profile_rows)
+
+    by_dn = defaultdict(list)
+    for c in csv_candidates:
+        dn_key = (c["user"].get("displayName") or "").strip().lower()
+        if dn_key:
+            by_dn[dn_key].append(c)
+
+    csv_dup_dn_rows = 0
+    for rows in by_dn.values():
+        if len(rows) > 1:
+            csv_dup_dn_rows += (len(rows) - 1)
+
+    taken_usernames = {str(u.get("username") or "").strip() for u in existing_users_list if u.get("username")}
+    new_users: List[Dict[str, Any]] = []
+    for _, rows in by_dn.items():
+        scored_rows = []
+        for item in rows:
+            score = _score_duplicate_candidate(item["user"], dept_profile)
+            scored_rows.append({**item, "score": score})
+        scored_rows.sort(key=lambda x: x["score"]["rank"], reverse=True)
+        winner = scored_rows[0]
+        winner_user = dict(winner["user"])
+
+        preferred_uname = (winner_user.get("preferredUsername") or "").strip()
+        base = _slug_username(preferred_uname or winner_user.get("displayName") or "")
+        uname = base
+        i = 2
+        while uname in taken_usernames:
+            uname = f"{base}{i}"
+            i += 1
+        taken_usernames.add(uname)
+        winner_user["username"] = uname
+        new_users.append(winner_user)
+
+        if len(scored_rows) > 1:
+            display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
+            choice_by_displayname[display_name] = winner["rowId"]
+            duplicate_autoselect[display_name] = {
+                "candidateId": winner["rowId"],
+                "reason": winner["score"]["reason"],
+                "alternatives": [
+                    {
+                        "candidateId": s["rowId"],
+                        "reason": s["score"]["reason"],
+                    }
+                    for s in scored_rows[1:]
+                ],
+            }
+        else:
+            display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
+            choice_by_displayname.setdefault(display_name, winner["rowId"])
+
+    # Merge with existing users - match ONLY by displayName.
+    # Keep all local users; update only same displayName; add others.
+    existing_by_dn = {}
+    for u in existing_users_list:
+        dn = (u.get("displayName") or "").strip().lower()
+        if dn and dn not in existing_by_dn:
+            existing_by_dn[dn] = u
+
+    added_users = 0
+    updated_users = 0
+    created_brs_count = 0
+
+    for user in new_users:
+        uname = user["username"]
+        dn_key = (user.get("displayName") or "").strip().lower()
+        
+        # Match ONLY by displayName
+        existing_user = existing_by_dn.get(dn_key)
+        
+        if existing_user:
+            # REPLACE groups and other fields with new values from import
+            existing_user["groups"] = user.get("groups") or []
+            if user.get("businessRole"):
+                existing_user["businessRole"] = user["businessRole"]
+            if user.get("department"):
+                existing_user["department"] = user["department"]
+            if user.get("displayName"):
+                existing_user["displayName"] = user["displayName"]
+            if user.get("accountType"):
+                existing_user["accountType"] = user["accountType"]
+            if user.get("lastLogin"):
+                existing_user["lastLogin"] = user["lastLogin"]
+            for k in ("email", "upn", "employeeId", "manager", "statusAd", "statusHr"):
+                if user.get(k) is not None:
+                    existing_user[k] = user.get(k)
+            
+            # Update username if it changed
+            if existing_user.get("username") != uname:
+                existing_user["username"] = uname
+            
+            updated_users += 1
+        else:
+            # New user - add to indexes
+            new_user = user.copy()
+            existing_users_list.append(new_user)
+            if dn_key:
+                existing_by_dn[dn_key] = new_user
+            added_users += 1
+
+    merged_users = existing_users_list
+    state["last_extract"]["users"] = merged_users
+    computed_groups = set(recompute_groups_from_users(merged_users))
+    computed_groups.update(csv_orphan_groups_catalog)
+    state["last_extract"]["groups"] = sorted(computed_groups)
+    state["last_extract"]["ou"] = "MERGED"
+    state["last_extract"]["ts"] = time.time()
+
+    # CRITICAL: Populate state["user_business_role"] with CSV Business Roles BEFORE auto-assignment
+    # This ensures the preservation logic in apply_department_mapping has data to preserve
+    state.setdefault("user_business_role", {})
+    for u in merged_users:
+        uname = u.get("username")
+        br = (u.get("businessRole") or "").strip()
+        if uname and br and br != "Unassigned":
+            state["user_business_role"][uname] = br
+
+    touched_depts = {u.get("department") for u in new_users if u.get("department")}
+    csv_auto_resolved_duplicates = len(duplicate_autoselect)
+
+    last_ingest_stats = {
+        "source": "csv",
+        "csvHeadersNorm": csv_headers_norm,
+        "rowsTotal": csv_rows_total,
+        "rowsKept": len(merged_users),
+        "duplicateDisplayName": csv_dup_dn_rows,
+        "missingDepartment": csv_missing_department,
+        "missingBusinessRole": csv_missing_businessrole,
+        "missingDisplayName": csv_missing_displayname,
+        "missingUsername": 0,
+        "missingRoles": csv_missing_roles,
+        "orphanGroupsCatalog": len(csv_orphan_groups_catalog),
+        "autoResolvedDuplicateUsers": len(duplicate_autoselect),
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+
+    last_csv_stats = {
+        "csvRowsTotal": csv_rows_total,
+        "csvRowsMissingBR": csv_missing_businessrole,
+        "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
+        "by": username,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+
+    state.update({
+        "ingest_sources": ingest_sources,
+        "last_csv_rows": last_csv_rows,
+        "csv_choice_by_dn": csv_choice_by_dn,
+        "csv_rows_by_dn": dict(csv_rows_by_dn),
+        "choice_by_displayName": choice_by_displayname,
+        "duplicate_autoselect": duplicate_autoselect,
+        "last_ingest_stats": last_ingest_stats,
+        "last_csv_stats": last_csv_stats,
+        "last_rejects": csv_rejects,
+        "mining_dirty": True,
+    })
+    invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+    snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
+    touched_depts_list = sorted([d for d in touched_depts if d])
+    if background_tasks:
+        background_tasks.add_task(
+            run_post_csv_snapshot_logic_background,
+            snapshot_ts,
+            username,
+            touched_depts_list,
+        )
+    else:
+        run_post_csv_snapshot_logic_background(snapshot_ts, username, touched_depts_list)
+
+    return {
+        "ok": True,
+        "snapshotReady": True,
+        "processingInBackground": True,
+        "addedUsers": added_users,
+        "updatedUsers": updated_users,
+        "updatedByDisplayName": updated_users,
+        "totalUsers": len(merged_users),
+        "rowsTotal": csv_rows_total,
+        "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
+        "autoResolvedDuplicateUsers": csv_auto_resolved_duplicates,
+        "newBusinessRoles": 0,
+    }
+
+
+
+def apply_all_choices_to_last_extract() -> None:
+    rebuild_ingest_candidates()
+    for dn, cid in (state.get("choice_by_displayName") or {}).items():
+        cand = next(
+            (c for c in (state.get("ingest_candidates") or [])
+             if c.get("candidateId") == cid and c.get("displayName") == dn),
+            None
+        )
+        if cand:
+            apply_choice_for_displayname(
+                display_name=dn,
+                chosen_business_role=cand.get("businessRole"),
+                chosen_roles=cand.get("roles") or [],
+            )
+
+    # riallinea lista gruppi (tiene conto degli excluded)
+    users = state.get("last_extract", {}).get("users") or []
+    state["last_extract"]["groups"] = recompute_groups_from_users(users)
+
+
+
+# (_slug_username already defined at line 2299)
+# (datetime import already at top of file)
+
+def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: str = ""):
+    displayname = (displayname or "").strip()
+    businessrole = (businessrole or "").strip()
+    ruoli = (ruoli or "").strip()
+    department = (department or "").strip()
+
+    if not displayname:
+        return {"skipped": True}
+
+    # Username stabile
+    uname = _slug_username(displayname)
+    
+    # Gruppi
+    groups = [g.strip() for g in (ruoli or "").split(",") if g.strip()]
+    
+    # User object
+    user = {
+        "username": uname,
+        "displayName": displayname,
+        "groups": groups,
+        "department": department or None,
+        "businessRole": businessrole or None,
+        "excluded": False,
+    }
+    
+    # Merge logic (simplified for single row)
+    last_extract = state.setdefault("last_extract", {"users": [], "groups": [], "ou": "IMPORT", "ts": None})
+    users = last_extract.get("users", [])
+    
+    existing = next((u for u in users if u.get("username") == uname), None)
+    created_user = False
+    created_role = False
+    added_groups = 0
+    
+    if existing:
+        old_groups = set(existing.get("groups") or [])
+        new_groups = set(groups)
+        added_groups = len(new_groups - old_groups)
+        existing["groups"] = sorted(old_groups | new_groups)
+        if businessrole:
+            existing["businessRole"] = businessrole
+        if department:
+            existing["department"] = department
+    else:
+        users.append(user)
+        created_user = True
+        added_groups = len(groups)
+        
+    if businessrole:
+        business_roles = state.setdefault("business_roles", set())
+        if businessrole not in business_roles:
+            _ensure_role_registered(businessrole)
+            created_role = True
+
+    state["mining_dirty"] = True
+    return {
+        "ok": True,
+        "created_user": created_user,
+        "created_role": created_role,
+        "added_groups": added_groups
+    }
+
+
+@app.post("/api/import/xlsx")
+async def import_xlsx(file: UploadFile = File(...), username: str = Depends(require_auth)):
+    raw = await file.read()
+    wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    ws = wb.active  # primo foglio
+
+    rows = ws.iter_rows(values_only=True)
+    header = next(rows, None)
+    if not header:
+        return {"ok": False, "error": "Empty Excel"}
+
+    # mappa colonne (richiede intestazioni esatte)
+    cols = {str(v).strip(): i for i, v in enumerate(header) if v is not None}
+    required = ["DisplayName", "BusinessRole", "Ruoli"]
+    if any(c not in cols for c in required):
+        return {"ok": False, "error": f"Missing headers: {required}", "found": list(cols.keys())}
+
+    created_users = 0
+    created_roles = 0
+    assigned_users = 0
+    added_groups_total = 0
+
+    for r in rows:
+        dn = r[cols["DisplayName"]] if cols["DisplayName"] < len(r) else ""
+        br = r[cols["BusinessRole"]] if cols["BusinessRole"] < len(r) else ""
+        ru = r[cols["Ruoli"]] if cols["Ruoli"] < len(r) else ""
+
+        out = applyimportrow(str(dn or ""), str(br or ""), str(ru or ""))
+        if out.get("skipped"):
+            continue
+        created_users += 1 if out.get("created_user") else 0
+        created_roles += 1 if out.get("created_role") else 0
+        assigned_users += 1
+        added_groups_total += int(out.get("added_groups") or 0)
+
+    return {
+        "ok": True,
+        "created_users": created_users,
+        "created_roles": created_roles,
+        "assigned_users": assigned_users,
+        "added_groups": added_groups_total
+    }
+
+
+# =============================================================================
+# ML ENGINE API ENDPOINTS
+# =============================================================================
+
+@app.get("/api/config/ad-fields")
+def get_ad_fields(username: str = Depends(require_auth)):
+    """Return list of all AD fields found during last import."""
+    fields = state.get("ad_available_fields", [])
+    # Ensure default fields are always present
+    defaults = {"displayName", "department", "title", "employeeType", "company", "manager", "mail"}
+    combined = sorted(list(set(fields) | defaults))
+    return {"fields": combined}
+
+@app.get("/api/brdb/status")
+def brdb_status_api(username: str = Depends(require_auth)):
+    """
+    Ritorna lo stato del calcolo BRDB (background).
+    """
+    return {
+        "calculated": state.get("brdb_calculated", False),
+        "min_confidence": state.get("brdb_min_confidence", BRDB_MIN_CONF),
+        "last_update": state.get("brdb_last_update")
+    }
+
+@app.get("/api/ml/status")
+def ml_status(username: str = Depends(require_auth)):
+    """Return ML engine status and metrics."""
+    return ml_engine.get_status()
+
+
+@app.post("/api/ml/train")
+def ml_train(username: str = Depends(require_auth)):
+    """Trigger ML model training from accumulated data."""
+    # Build training data from existing users
+    users = state.get("last_extract", {}).get("users") or []
+    training_data = []
+    
+    for u in users:
+        if u.get("accountType"):
+            training_data.append({
+                "display_name": u.get("displayName", ""),
+                "ou": u.get("department", ""),
+                "employee_type": "",  # Not always available
+                "account_type": u.get("accountType", "Internal"),
+            })
+    
+    # Also include corrections/confirmations
+    result = ml_engine.retrain_from_history()
+    if not result.get("success") and training_data:
+        result = ml_engine.train_classifier(training_data)
+    timeline = state.setdefault("ai_training_timeline", [])
+    timeline.append({
+        "id": f"run-{int(time.time()*1000)}",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "triggeredBy": username,
+        "datasetSize": len(training_data),
+        "modelName": "account-type-classifier",
+        "status": "success" if result.get("success") else "failed",
+        "metrics": {
+            "accuracy": float(result.get("accuracy") or 0.0),
+            "f1": float(result.get("f1") or 0.0),
+            "precision": float(result.get("precision") or 0.0),
+            "recall": float(result.get("recall") or 0.0),
+        },
+    })
+    record_llm_learning_event(
+        actor=username,
+        source="ml-train",
+        signal_type="model-train",
+        entity="account-type-classifier",
+        details={
+            "datasetSize": len(training_data),
+            "success": bool(result.get("success")),
+            "accuracy": float(result.get("accuracy") or 0.0),
+        },
+    )
+
+    return result
+
+
+@app.post("/api/ml/rebuild-brdb")
+def ml_rebuild_brdb(username: str = Depends(require_auth)):
+    """Force rebuild of Business Role Database."""
+    brdb_rebuild()
+    return {"ok": True, "message": "BRDB rebuilt", **ml_engine.get_status()["brdb"]}
+
+
+class AccountTypeConfirmRequest(BaseModel):
+    confirmed_type: str
+
+
+class AiBusinessRoleSuggestRequest(BaseModel):
+    group: str = ""
+    source: str = "unknown"
+    context: Optional[Dict[str, Any]] = None
+
+
+def _extract_context_groups(context: Optional[Dict[str, Any]]) -> List[str]:
+    if not context:
+        return []
+    values: List[str] = []
+    # Accept a broad set of keys for compatibility with evolving frontend payloads.
+    for key in ("groups", "roles", "entitlements", "group", "groupName", "group_name", "raw_groups", "candidateGroups"):
+        v = context.get(key)
+        if v is None:
+            continue
+        if isinstance(v, list):
+            values.extend(str(x).strip() for x in v if str(x).strip())
+        else:
+            values.extend(part.strip() for part in str(v).split(",") if part.strip())
+    # Preserve order, remove duplicates.
+    return list(dict.fromkeys(values))
+
+
+@app.get("/api/ai/health")
+def ai_health(username: str = Depends(require_auth)):
+    ml = ml_engine.get_status() or {}
+    model = ml.get("model") or {}
+    training = ml.get("training_data") or {}
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "brdbReady": bool(state.get("brdb_ready")),
+        "model": {
+            "trained": bool(model.get("trained")),
+            "accuracy": float(model.get("accuracy") or 0.0),
+            "f1": float(model.get("f1") or 0.0),
+            "precision": float(model.get("precision") or 0.0),
+            "recall": float(model.get("recall") or 0.0),
+        },
+        "trainingData": {
+            "totalSamples": int(training.get("total_samples") or 0),
+            "patternsCount": int(training.get("patterns_count") or 0),
+        },
+        "brdb": ml.get("brdb") or {},
+        "cache": RESPONSE_CACHE.stats(),
+    }
+
+
+@app.post("/api/ai/suggest-business-role-online")
+def suggest_business_role_online(
+    body: AiBusinessRoleSuggestRequest,
+    username: str = Depends(require_auth),
+):
+    group = str(body.group or "").strip()
+    if not group:
+        raise HTTPException(status_code=400, detail="Group is required")
+    pred = brdb_infer_group(group)
+    role = str(pred.get("role") or "Unassigned")
+    confidence = float(pred.get("confidence") or 0.0)
+    return {
+        "group": group,
+        "source": str(body.source or "unknown"),
+        "suggestedBusinessRole": role,
+        "confidence": round(confidence, 3),
+        "method": "brdb-online",
+        "evidence": pred.get("evidence") or {},
+    }
+
+
+@app.post("/api/ai/suggest-business-role-hybrid")
+def suggest_business_role_hybrid(
+    body: AiBusinessRoleSuggestRequest,
+    username: str = Depends(require_auth),
+):
+    group = str(body.group or "").strip()
+    context_groups = _extract_context_groups(body.context)
+    if group and group not in context_groups:
+        context_groups.insert(0, group)
+    if not context_groups:
+        raise HTTPException(status_code=400, detail="Group or context groups are required")
+
+    online = brdb_infer_group(group) if group else {"role": "Unassigned", "confidence": 0.0, "evidence": {"reason": "no_group"}}
+    groupset = brdb_infer_groupset(context_groups)
+
+    role_online = str(online.get("role") or "Unassigned")
+    conf_online = float(online.get("confidence") or 0.0)
+    role_groupset = str(groupset.get("role") or "Unassigned")
+    conf_groupset = float(groupset.get("confidence") or 0.0)
+
+    if role_online == role_groupset:
+        chosen_role = role_groupset
+        chosen_conf = min(0.99, (0.40 * conf_online) + (0.60 * conf_groupset))
+        chosen_method = "hybrid-consensus"
+    else:
+        # Prefer the stronger signal; if equal, prefer groupset because it uses more context.
+        if conf_groupset >= conf_online:
+            chosen_role = role_groupset
+            chosen_conf = conf_groupset
+            chosen_method = "hybrid-groupset"
+        else:
+            chosen_role = role_online
+            chosen_conf = conf_online
+            chosen_method = "hybrid-online"
+
+    return {
+        "group": group,
+        "source": str(body.source or "unknown"),
+        "contextGroups": context_groups,
+        "suggestedBusinessRole": chosen_role,
+        "confidence": round(float(chosen_conf), 3),
+        "method": chosen_method,
+        "components": {
+            "online": {"role": role_online, "confidence": round(conf_online, 3)},
+            "groupset": {"role": role_groupset, "confidence": round(conf_groupset, 3)},
+        },
+        "evidence": {
+            "online": online.get("evidence") or {},
+            "groupset": (groupset.get("evidence") or {}),
+        },
+    }
+
+
+@app.post("/api/users/{uname}/confirm-type")
+def confirm_account_type(uname: str, body: AccountTypeConfirmRequest, username: str = Depends(require_auth)):
+    """Record a type confirmation (trains the ML model)."""
+    users = state.get("last_extract", {}).get("users") or []
+    target = next((x for x in users if x.get("username") == uname), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Record confirmation
+    ml_engine.record_confirmation(
+        username=uname,
+        display_name=target.get("displayName", ""),
+        ou=target.get("department", ""),
+        employee_type="",
+        confirmed_type=body.confirmed_type
+    )
+    
+    # Update user type
+    target["accountType"] = body.confirmed_type
+    record_llm_learning_event(
+        actor=username,
+        source="confirm-account-type",
+        signal_type="supervised-label",
+        entity=uname,
+        details={"confirmed_type": body.confirmed_type},
+    )
+    record_manual_user_change(
+        actor=username,
+        username=uname,
+        display_name=target.get("displayName"),
+        action="confirm-account-type",
+        source="ai-training",
+        details={"accountType": body.confirmed_type},
+    )
+    
+    return {"ok": True, "user": uname, "type": body.confirmed_type}
+
+
+@app.post("/api/users/{uname}/correct-type")
+def correct_account_type(uname: str, body: AccountTypeConfirmRequest, username: str = Depends(require_auth)):
+    """Record a type correction (trains the ML model)."""
+    users = state.get("last_extract", {}).get("users") or []
+    target = next((x for x in users if x.get("username") == uname), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    old_type = target.get("accountType", "Internal")
+    
+    # Record correction
+    ml_engine.record_correction(
+        username=uname,
+        display_name=target.get("displayName", ""),
+        ou=target.get("department", ""),
+        employee_type="",
+        old_type=old_type,
+        new_type=body.confirmed_type
+    )
+    
+    # Update user type
+    target["accountType"] = body.confirmed_type
+    record_llm_learning_event(
+        actor=username,
+        source="correct-account-type",
+        signal_type="supervised-correction",
+        entity=uname,
+        details={"old_type": old_type, "new_type": body.confirmed_type},
+    )
+    record_manual_user_change(
+        actor=username,
+        username=uname,
+        display_name=target.get("displayName"),
+        action="correct-account-type",
+        source="ai-training",
+        details={"from": old_type, "to": body.confirmed_type},
+    )
+    
+    return {"ok": True, "user": uname, "old_type": old_type, "new_type": body.confirmed_type}
+
+
+@app.get("/api/ml/account-types")
+def get_account_types(username: str = Depends(require_auth)):
+    """Return the list of supported account types."""
+    return {"types": ACCOUNT_TYPES}
+
+
+# Register extracted route groups (AI Lab and Pattern Rules)
+register_ai_lab_routes(
+    app,
+    state=state,
+    response_cache=RESPONSE_CACHE,
+    require_auth=require_auth,
+    invalidate_hot_caches=invalidate_hot_caches,
+    active_users=active_users,
+    ml_engine=ml_engine,
+    normalize_last_login=_normalize_last_login,
+    slug_username=_slug_username,
+    classify_account=classify_account,
+    compute_model_quality=compute_model_quality,
+    run_smart_ai_detection=run_smart_ai_detection,
+    record_llm_learning_event=record_llm_learning_event,
+    record_manual_user_change=record_manual_user_change,
+)
+
+register_pattern_rules_routes(
+    app,
+    state=state,
+    ml_engine=ml_engine,
+    require_auth=require_auth,
+    recalculate_assignments_background=recalculate_assignments_background,
+    record_llm_learning_event=record_llm_learning_event,
+    log=log,
+)
+
+# (peer-analysis endpoint defined at line 1846)
