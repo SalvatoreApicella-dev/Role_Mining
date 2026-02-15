@@ -5095,6 +5095,24 @@ def ad_groups(username: str = Depends(require_auth)):
     return result
 
 
+@app.get("/api/stats/group-counts")
+def get_group_counts(username: str = Depends(require_auth)):
+    cache_key = "group_counts"
+    cached = RESPONSE_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    users = active_users(state["last_extract"].get("users") or [])
+    counts = defaultdict(int)
+    for u in users:
+        for g in (u.get("groups") or []):
+            counts[g] += 1
+
+    result = {"counts": dict(counts)}
+    RESPONSE_CACHE.set(cache_key, result, CACHE_TTL_USERS)
+    return result
+
+
 @app.get("/api/businessroles/{role}/meta")
 def businessrole_meta(role: str, username: str = Depends(require_auth)):
     # Check cache first

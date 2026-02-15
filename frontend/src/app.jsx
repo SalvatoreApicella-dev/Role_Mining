@@ -836,122 +836,122 @@ function Connettori() {
           <span>HRIS</span>
         </summary>
         <div className="connector-category__content">
-        <div className="panel">
-          <h3 style={{ marginTop: 0 }}>SAP Connector</h3>
-          <div className="row">
-            <input
-              style={{ width: 360 }}
-              value={cfg.sap_base_url || ""}
-              onChange={(e) => updateCfg({ sap_base_url: e.target.value })}
-              placeholder="SAP Base URL (es: https://sap.company.local)"
-              aria-label="SAP Base URL"
-            />
-            <select
-              style={{ width: 140 }}
-              value={cfg.sap_auth_mode || "AUTO"}
-              onChange={(e) => updateCfg({ sap_auth_mode: e.target.value })}
-              aria-label="SAP Auth Mode"
-            >
-              <option value="AUTO">AUTO</option>
-              <option value="OAUTH2">OAUTH2</option>
-              <option value="APIKEY">APIKEY</option>
-              <option value="BASIC">BASIC</option>
-            </select>
-            <input
-              style={{ width: 120 }}
-              value={cfg.sap_client || ""}
-              onChange={(e) => updateCfg({ sap_client: e.target.value })}
-              placeholder="Client (es: 100)"
-              aria-label="SAP Client"
-            />
-            <input
-              style={{ width: 180 }}
-              value={cfg.sap_system || ""}
-              onChange={(e) => updateCfg({ sap_system: e.target.value })}
-              placeholder="System (es: ECC)"
-              aria-label="SAP System"
-            />
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>SAP Connector</h3>
+            <div className="row">
+              <input
+                style={{ width: 360 }}
+                value={cfg.sap_base_url || ""}
+                onChange={(e) => updateCfg({ sap_base_url: e.target.value })}
+                placeholder="SAP Base URL (es: https://sap.company.local)"
+                aria-label="SAP Base URL"
+              />
+              <select
+                style={{ width: 140 }}
+                value={cfg.sap_auth_mode || "AUTO"}
+                onChange={(e) => updateCfg({ sap_auth_mode: e.target.value })}
+                aria-label="SAP Auth Mode"
+              >
+                <option value="AUTO">AUTO</option>
+                <option value="OAUTH2">OAUTH2</option>
+                <option value="APIKEY">APIKEY</option>
+                <option value="BASIC">BASIC</option>
+              </select>
+              <input
+                style={{ width: 120 }}
+                value={cfg.sap_client || ""}
+                onChange={(e) => updateCfg({ sap_client: e.target.value })}
+                placeholder="Client (es: 100)"
+                aria-label="SAP Client"
+              />
+              <input
+                style={{ width: 180 }}
+                value={cfg.sap_system || ""}
+                onChange={(e) => updateCfg({ sap_system: e.target.value })}
+                placeholder="System (es: ECC)"
+                aria-label="SAP System"
+              />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input
+                style={{ width: 540 }}
+                value={cfg.sap_users_path || ""}
+                onChange={(e) => updateCfg({ sap_users_path: e.target.value })}
+                placeholder="Users API Path (es: /sap/opu/odata/sap/ZROLE_MINING_SRV/Users)"
+                aria-label="SAP Users API Path"
+              />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input
+                style={{ width: 260 }}
+                value={cfg.sap_username || ""}
+                onChange={(e) => updateCfg({ sap_username: e.target.value })}
+                placeholder="SAP Username"
+                aria-label="SAP Username"
+              />
+              <input
+                style={{ width: 260 }}
+                value={cfg.sap_password || ""}
+                onChange={(e) => updateCfg({ sap_password: e.target.value })}
+                placeholder="SAP Password"
+                type="password"
+                aria-label="SAP Password"
+              />
+              <input
+                style={{ width: 260 }}
+                value={cfg.sap_api_key || ""}
+                onChange={(e) => updateCfg({ sap_api_key: e.target.value })}
+                placeholder="SAP API Key (opzionale)"
+                type="password"
+                aria-label="SAP API Key"
+              />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input
+                style={{ width: 360 }}
+                value={cfg.sap_token_url || ""}
+                onChange={(e) => updateCfg({ sap_token_url: e.target.value })}
+                placeholder="OAuth Token URL (es: https://<host>/oauth/token)"
+                aria-label="SAP OAuth Token URL"
+              />
+              <input
+                style={{ width: 180 }}
+                value={cfg.sap_client_id || ""}
+                onChange={(e) => updateCfg({ sap_client_id: e.target.value })}
+                placeholder="OAuth Client ID"
+                aria-label="SAP OAuth Client ID"
+              />
+              <input
+                style={{ width: 180 }}
+                value={cfg.sap_client_secret || ""}
+                onChange={(e) => updateCfg({ sap_client_secret: e.target.value })}
+                placeholder="OAuth Client Secret"
+                type="password"
+                aria-label="SAP OAuth Client Secret"
+              />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input
+                style={{ width: 180 }}
+                value={cfg.sap_oauth_scope || ""}
+                onChange={(e) => updateCfg({ sap_oauth_scope: e.target.value })}
+                placeholder="OAuth Scope (opz.)"
+                aria-label="SAP OAuth Scope"
+              />
+              <input
+                style={{ width: 180 }}
+                value={cfg.sap_company_id || ""}
+                onChange={(e) => updateCfg({ sap_company_id: e.target.value })}
+                placeholder="SuccessFactors Company ID (opz.)"
+                aria-label="SAP SuccessFactors Company ID"
+              />
+            </div>
+            {renderConnectorActions("sap", "Configurazione SAP salvata.")}
+            {sapStatusMsg && <div className="ok">{sapStatusMsg}</div>}
+            <div className="connector-loadingbar" aria-hidden="true">
+              <div className={`connector-loadingbar__fill${(sapLoading || cfgSaving) ? " is-active" : ""}`} />
+            </div>
           </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input
-              style={{ width: 540 }}
-              value={cfg.sap_users_path || ""}
-              onChange={(e) => updateCfg({ sap_users_path: e.target.value })}
-              placeholder="Users API Path (es: /sap/opu/odata/sap/ZROLE_MINING_SRV/Users)"
-              aria-label="SAP Users API Path"
-            />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input
-              style={{ width: 260 }}
-              value={cfg.sap_username || ""}
-              onChange={(e) => updateCfg({ sap_username: e.target.value })}
-              placeholder="SAP Username"
-              aria-label="SAP Username"
-            />
-            <input
-              style={{ width: 260 }}
-              value={cfg.sap_password || ""}
-              onChange={(e) => updateCfg({ sap_password: e.target.value })}
-              placeholder="SAP Password"
-              type="password"
-              aria-label="SAP Password"
-            />
-            <input
-              style={{ width: 260 }}
-              value={cfg.sap_api_key || ""}
-              onChange={(e) => updateCfg({ sap_api_key: e.target.value })}
-              placeholder="SAP API Key (opzionale)"
-              type="password"
-              aria-label="SAP API Key"
-            />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input
-              style={{ width: 360 }}
-              value={cfg.sap_token_url || ""}
-              onChange={(e) => updateCfg({ sap_token_url: e.target.value })}
-              placeholder="OAuth Token URL (es: https://<host>/oauth/token)"
-              aria-label="SAP OAuth Token URL"
-            />
-            <input
-              style={{ width: 180 }}
-              value={cfg.sap_client_id || ""}
-              onChange={(e) => updateCfg({ sap_client_id: e.target.value })}
-              placeholder="OAuth Client ID"
-              aria-label="SAP OAuth Client ID"
-            />
-            <input
-              style={{ width: 180 }}
-              value={cfg.sap_client_secret || ""}
-              onChange={(e) => updateCfg({ sap_client_secret: e.target.value })}
-              placeholder="OAuth Client Secret"
-              type="password"
-              aria-label="SAP OAuth Client Secret"
-            />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input
-              style={{ width: 180 }}
-              value={cfg.sap_oauth_scope || ""}
-              onChange={(e) => updateCfg({ sap_oauth_scope: e.target.value })}
-              placeholder="OAuth Scope (opz.)"
-              aria-label="SAP OAuth Scope"
-            />
-            <input
-              style={{ width: 180 }}
-              value={cfg.sap_company_id || ""}
-              onChange={(e) => updateCfg({ sap_company_id: e.target.value })}
-              placeholder="SuccessFactors Company ID (opz.)"
-              aria-label="SAP SuccessFactors Company ID"
-            />
-          </div>
-          {renderConnectorActions("sap", "Configurazione SAP salvata.")}
-          {sapStatusMsg && <div className="ok">{sapStatusMsg}</div>}
-          <div className="connector-loadingbar" aria-hidden="true">
-            <div className={`connector-loadingbar__fill${(sapLoading || cfgSaving) ? " is-active" : ""}`} />
-          </div>
-        </div>
         </div>
       </details>
 
@@ -960,19 +960,19 @@ function Connettori() {
           <span>IDP</span>
         </summary>
         <div className="connector-category__content">
-        <div className="panel">
-          <h3 style={{ marginTop: 0 }}>Azure AD Connector</h3>
-          <div className="row">
-            <input style={{ width: 320 }} value={cfg.azure_base_url || ""} onChange={(e) => updateCfg({ azure_base_url: e.target.value })} placeholder="Base URL (es: https://graph.microsoft.com)" />
-            <input style={{ width: 220 }} value={cfg.azure_tenant_id || ""} onChange={(e) => updateCfg({ azure_tenant_id: e.target.value })} placeholder="Tenant ID" />
-            <input style={{ width: 220 }} value={cfg.azure_client_id || ""} onChange={(e) => updateCfg({ azure_client_id: e.target.value })} placeholder="Client ID" />
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>Azure AD Connector</h3>
+            <div className="row">
+              <input style={{ width: 320 }} value={cfg.azure_base_url || ""} onChange={(e) => updateCfg({ azure_base_url: e.target.value })} placeholder="Base URL (es: https://graph.microsoft.com)" />
+              <input style={{ width: 220 }} value={cfg.azure_tenant_id || ""} onChange={(e) => updateCfg({ azure_tenant_id: e.target.value })} placeholder="Tenant ID" />
+              <input style={{ width: 220 }} value={cfg.azure_client_id || ""} onChange={(e) => updateCfg({ azure_client_id: e.target.value })} placeholder="Client ID" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 320 }} value={cfg.azure_client_secret || ""} onChange={(e) => updateCfg({ azure_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+              <input style={{ width: 540 }} value={cfg.azure_users_path || ""} onChange={(e) => updateCfg({ azure_users_path: e.target.value })} placeholder="Users Path (es: /v1.0/users?$select=...)" />
+            </div>
+            {renderConnectorActions("azure", "Configurazione Azure AD salvata.")}
           </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 320 }} value={cfg.azure_client_secret || ""} onChange={(e) => updateCfg({ azure_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
-            <input style={{ width: 540 }} value={cfg.azure_users_path || ""} onChange={(e) => updateCfg({ azure_users_path: e.target.value })} placeholder="Users Path (es: /v1.0/users?$select=...)" />
-          </div>
-          {renderConnectorActions("azure", "Configurazione Azure AD salvata.")}
-        </div>
         </div>
       </details>
 
@@ -981,55 +981,55 @@ function Connettori() {
           <span>IGA</span>
         </summary>
         <div className="connector-category__content">
-        <div className="panel">
-          <h3 style={{ marginTop: 0 }}>One Identity Connector</h3>
-          <div className="row">
-            <input style={{ width: 360 }} value={cfg.one_identity_base_url || ""} onChange={(e) => updateCfg({ one_identity_base_url: e.target.value })} placeholder="Base URL (es: https://<host>/AppServer)" />
-            <input style={{ width: 320 }} value={cfg.one_identity_token_url || ""} onChange={(e) => updateCfg({ one_identity_token_url: e.target.value })} placeholder="Token URL (opzionale/OIDC)" />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 220 }} value={cfg.one_identity_client_id || ""} onChange={(e) => updateCfg({ one_identity_client_id: e.target.value })} placeholder="Client ID" />
-            <input style={{ width: 220 }} value={cfg.one_identity_client_secret || ""} onChange={(e) => updateCfg({ one_identity_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
-            <input style={{ width: 220 }} value={cfg.one_identity_username || ""} onChange={(e) => updateCfg({ one_identity_username: e.target.value })} placeholder="Username (opzionale)" />
-            <input style={{ width: 220 }} value={cfg.one_identity_password || ""} onChange={(e) => updateCfg({ one_identity_password: e.target.value })} placeholder="Password (opzionale)" type="password" />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 620 }} value={cfg.one_identity_users_path || ""} onChange={(e) => updateCfg({ one_identity_users_path: e.target.value })} placeholder="Users Path (es: /api/entities/person?limit=100)" />
-          </div>
-          {renderConnectorActions("one_identity", "Configurazione One Identity salvata.")}
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>One Identity Connector</h3>
+            <div className="row">
+              <input style={{ width: 360 }} value={cfg.one_identity_base_url || ""} onChange={(e) => updateCfg({ one_identity_base_url: e.target.value })} placeholder="Base URL (es: https://<host>/AppServer)" />
+              <input style={{ width: 320 }} value={cfg.one_identity_token_url || ""} onChange={(e) => updateCfg({ one_identity_token_url: e.target.value })} placeholder="Token URL (opzionale/OIDC)" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 220 }} value={cfg.one_identity_client_id || ""} onChange={(e) => updateCfg({ one_identity_client_id: e.target.value })} placeholder="Client ID" />
+              <input style={{ width: 220 }} value={cfg.one_identity_client_secret || ""} onChange={(e) => updateCfg({ one_identity_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+              <input style={{ width: 220 }} value={cfg.one_identity_username || ""} onChange={(e) => updateCfg({ one_identity_username: e.target.value })} placeholder="Username (opzionale)" />
+              <input style={{ width: 220 }} value={cfg.one_identity_password || ""} onChange={(e) => updateCfg({ one_identity_password: e.target.value })} placeholder="Password (opzionale)" type="password" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 620 }} value={cfg.one_identity_users_path || ""} onChange={(e) => updateCfg({ one_identity_users_path: e.target.value })} placeholder="Users Path (es: /api/entities/person?limit=100)" />
+            </div>
+            {renderConnectorActions("one_identity", "Configurazione One Identity salvata.")}
 
-          <hr className="sep" />
+            <hr className="sep" />
 
-          <h3 style={{ marginTop: 0 }}>SailPoint Connector</h3>
-          <div className="row">
-            <input style={{ width: 360 }} value={cfg.sailpoint_base_url || ""} onChange={(e) => updateCfg({ sailpoint_base_url: e.target.value })} placeholder="Base URL (es: https://<tenant>.api.identitynow.com/v3)" />
-            <input style={{ width: 320 }} value={cfg.sailpoint_token_url || ""} onChange={(e) => updateCfg({ sailpoint_token_url: e.target.value })} placeholder="Token URL (es: https://<tenant>.api.identitynow.com/oauth/token)" />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 220 }} value={cfg.sailpoint_client_id || ""} onChange={(e) => updateCfg({ sailpoint_client_id: e.target.value })} placeholder="Client ID" />
-            <input style={{ width: 220 }} value={cfg.sailpoint_client_secret || ""} onChange={(e) => updateCfg({ sailpoint_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
-            <input style={{ width: 420 }} value={cfg.sailpoint_users_path || ""} onChange={(e) => updateCfg({ sailpoint_users_path: e.target.value })} placeholder="Users Path (es: /accounts)" />
-          </div>
-          {renderConnectorActions("sailpoint", "Configurazione SailPoint salvata.")}
+            <h3 style={{ marginTop: 0 }}>SailPoint Connector</h3>
+            <div className="row">
+              <input style={{ width: 360 }} value={cfg.sailpoint_base_url || ""} onChange={(e) => updateCfg({ sailpoint_base_url: e.target.value })} placeholder="Base URL (es: https://<tenant>.api.identitynow.com/v3)" />
+              <input style={{ width: 320 }} value={cfg.sailpoint_token_url || ""} onChange={(e) => updateCfg({ sailpoint_token_url: e.target.value })} placeholder="Token URL (es: https://<tenant>.api.identitynow.com/oauth/token)" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 220 }} value={cfg.sailpoint_client_id || ""} onChange={(e) => updateCfg({ sailpoint_client_id: e.target.value })} placeholder="Client ID" />
+              <input style={{ width: 220 }} value={cfg.sailpoint_client_secret || ""} onChange={(e) => updateCfg({ sailpoint_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+              <input style={{ width: 420 }} value={cfg.sailpoint_users_path || ""} onChange={(e) => updateCfg({ sailpoint_users_path: e.target.value })} placeholder="Users Path (es: /accounts)" />
+            </div>
+            {renderConnectorActions("sailpoint", "Configurazione SailPoint salvata.")}
 
-          <hr className="sep" />
+            <hr className="sep" />
 
-          <h3 style={{ marginTop: 0 }}>Saviynt Connector</h3>
-          <div className="row">
-            <input style={{ width: 360 }} value={cfg.saviynt_base_url || ""} onChange={(e) => updateCfg({ saviynt_base_url: e.target.value })} placeholder="Base URL (tenant-specific Saviynt API)" />
-            <input style={{ width: 320 }} value={cfg.saviynt_token_url || ""} onChange={(e) => updateCfg({ saviynt_token_url: e.target.value })} placeholder="Token URL (tenant-specific, se previsto)" />
+            <h3 style={{ marginTop: 0 }}>Saviynt Connector</h3>
+            <div className="row">
+              <input style={{ width: 360 }} value={cfg.saviynt_base_url || ""} onChange={(e) => updateCfg({ saviynt_base_url: e.target.value })} placeholder="Base URL (tenant-specific Saviynt API)" />
+              <input style={{ width: 320 }} value={cfg.saviynt_token_url || ""} onChange={(e) => updateCfg({ saviynt_token_url: e.target.value })} placeholder="Token URL (tenant-specific, se previsto)" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 220 }} value={cfg.saviynt_client_id || ""} onChange={(e) => updateCfg({ saviynt_client_id: e.target.value })} placeholder="Client ID" />
+              <input style={{ width: 220 }} value={cfg.saviynt_client_secret || ""} onChange={(e) => updateCfg({ saviynt_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+              <input style={{ width: 220 }} value={cfg.saviynt_username || ""} onChange={(e) => updateCfg({ saviynt_username: e.target.value })} placeholder="Service Username" />
+              <input style={{ width: 220 }} value={cfg.saviynt_password || ""} onChange={(e) => updateCfg({ saviynt_password: e.target.value })} placeholder="Service Password" type="password" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 620 }} value={cfg.saviynt_users_path || ""} onChange={(e) => updateCfg({ saviynt_users_path: e.target.value })} placeholder="Users Path (tenant-specific, vedi doc Saviynt)" />
+            </div>
+            {renderConnectorActions("saviynt", "Configurazione Saviynt salvata.")}
           </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 220 }} value={cfg.saviynt_client_id || ""} onChange={(e) => updateCfg({ saviynt_client_id: e.target.value })} placeholder="Client ID" />
-            <input style={{ width: 220 }} value={cfg.saviynt_client_secret || ""} onChange={(e) => updateCfg({ saviynt_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
-            <input style={{ width: 220 }} value={cfg.saviynt_username || ""} onChange={(e) => updateCfg({ saviynt_username: e.target.value })} placeholder="Service Username" />
-            <input style={{ width: 220 }} value={cfg.saviynt_password || ""} onChange={(e) => updateCfg({ saviynt_password: e.target.value })} placeholder="Service Password" type="password" />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 620 }} value={cfg.saviynt_users_path || ""} onChange={(e) => updateCfg({ saviynt_users_path: e.target.value })} placeholder="Users Path (tenant-specific, vedi doc Saviynt)" />
-          </div>
-          {renderConnectorActions("saviynt", "Configurazione Saviynt salvata.")}
-        </div>
         </div>
       </details>
 
@@ -1038,80 +1038,80 @@ function Connettori() {
           <span>Directories</span>
         </summary>
         <div className="connector-category__content">
-        <div className="panel">
-          <h3 style={{ marginTop: 0 }}>Active Directory Connector</h3>
-          <div className="row">
-            <input
-              style={{ width: 260 }}
-              value={cfg.server}
-              onChange={(e) => updateCfg({ server: e.target.value })}
-              placeholder="server (es: ad.local o mock)"
-              aria-label="AD Server Address"
-            />
-            <select value={cfg.auth} onChange={(e) => updateCfg({ auth: e.target.value })}>
-              <option value="SIMPLE">SIMPLE</option>
-              <option value="NTLM">NTLM</option>
-            </select>
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input
-              type="number"
-              style={{ width: 120 }}
-              value={cfg.port || ""}
-              onChange={(e) => updateCfg({ port: e.target.value })}
-              placeholder="Port (389)"
-            />
-            <label style={{ display: "flex", alignItems: "center", marginLeft: 10, cursor: "pointer" }}>
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>Active Directory Connector</h3>
+            <div className="row">
               <input
-                type="checkbox"
-                checked={!!cfg.use_ssl}
-                onChange={(e) => updateCfg({ use_ssl: e.target.checked })}
-                style={{ marginRight: 6 }}
+                style={{ width: 260 }}
+                value={cfg.server}
+                onChange={(e) => updateCfg({ server: e.target.value })}
+                placeholder="server (es: ad.local o mock)"
+                aria-label="AD Server Address"
               />
-              Usa SSL
-            </label>
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 260 }} value={cfg.bind_user} onChange={(e) => updateCfg({ bind_user: e.target.value })} placeholder="bind_user" />
-            <input style={{ width: 260 }} value={cfg.bind_password} onChange={(e) => updateCfg({ bind_password: e.target.value })} placeholder="bind_password" type="password" />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 540 }} value={cfg.base_dn} onChange={(e) => updateCfg({ base_dn: e.target.value })} placeholder="base_dn (opzionale qui)" />
-          </div>
-          {renderConnectorActions("ad", "Configurazione AD salvata.")}
-          <hr className="sep" />
-          <div className="row">
-            <input style={{ width: 540 }} value={ou} onChange={(e) => setOu(e.target.value)} placeholder="OU DN" />
-            <button
-              className="primary"
-              title="Scarica ultima estrazione AD (CSV)"
-              aria-label="Scarica ultima estrazione AD in CSV"
-              onClick={downloadLastAdExtractCsv}
-              disabled={adExporting}
-              style={{ padding: "10px 12px", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 44 }}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
+              <select value={cfg.auth} onChange={(e) => updateCfg({ auth: e.target.value })}>
+                <option value="SIMPLE">SIMPLE</option>
+                <option value="NTLM">NTLM</option>
+              </select>
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input
+                type="number"
+                style={{ width: 120 }}
+                value={cfg.port || ""}
+                onChange={(e) => updateCfg({ port: e.target.value })}
+                placeholder="Port (389)"
+              />
+              <label style={{ display: "flex", alignItems: "center", marginLeft: 10, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={!!cfg.use_ssl}
+                  onChange={(e) => updateCfg({ use_ssl: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Usa SSL
+              </label>
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 260 }} value={cfg.bind_user} onChange={(e) => updateCfg({ bind_user: e.target.value })} placeholder="bind_user" />
+              <input style={{ width: 260 }} value={cfg.bind_password} onChange={(e) => updateCfg({ bind_password: e.target.value })} placeholder="bind_password" type="password" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 540 }} value={cfg.base_dn} onChange={(e) => updateCfg({ base_dn: e.target.value })} placeholder="base_dn (opzionale qui)" />
+            </div>
+            {renderConnectorActions("ad", "Configurazione AD salvata.")}
+            <hr className="sep" />
+            <div className="row">
+              <input style={{ width: 540 }} value={ou} onChange={(e) => setOu(e.target.value)} placeholder="OU DN" />
+              <button
+                className="primary"
+                title="Scarica ultima estrazione AD (CSV)"
+                aria-label="Scarica ultima estrazione AD in CSV"
+                onClick={downloadLastAdExtractCsv}
+                disabled={adExporting}
+                style={{ padding: "10px 12px", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 44 }}
               >
-                <path d="M12 3v11" />
-                <path d="m7 10 5 5 5-5" />
-                <path d="M4 21h16" />
-              </svg>
-            </button>
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3v11" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M4 21h16" />
+                </svg>
+              </button>
+            </div>
+            {statusMsg && <div className="ok">{statusMsg}</div>}
+            <div className="connector-loadingbar" aria-hidden="true">
+              <div className={`connector-loadingbar__fill${(adLoading || adExporting || cfgSaving) ? " is-active" : ""}`} />
+            </div>
           </div>
-          {statusMsg && <div className="ok">{statusMsg}</div>}
-          <div className="connector-loadingbar" aria-hidden="true">
-            <div className={`connector-loadingbar__fill${(adLoading || adExporting || cfgSaving) ? " is-active" : ""}`} />
-          </div>
-        </div>
         </div>
       </details>
 
@@ -1120,18 +1120,18 @@ function Connettori() {
           <span>ITSM</span>
         </summary>
         <div className="connector-category__content">
-        <div className="panel">
-          <h3 style={{ marginTop: 0 }}>ServiceNow Connector</h3>
-          <div className="row">
-            <input style={{ width: 420 }} value={cfg.servicenow_base_url || ""} onChange={(e) => updateCfg({ servicenow_base_url: e.target.value })} placeholder="Base URL (es: https://instance.service-now.com)" />
-            <input style={{ width: 220 }} value={cfg.servicenow_username || ""} onChange={(e) => updateCfg({ servicenow_username: e.target.value })} placeholder="Username" />
-            <input style={{ width: 220 }} value={cfg.servicenow_password || ""} onChange={(e) => updateCfg({ servicenow_password: e.target.value })} placeholder="Password" type="password" />
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>ServiceNow Connector</h3>
+            <div className="row">
+              <input style={{ width: 420 }} value={cfg.servicenow_base_url || ""} onChange={(e) => updateCfg({ servicenow_base_url: e.target.value })} placeholder="Base URL (es: https://instance.service-now.com)" />
+              <input style={{ width: 220 }} value={cfg.servicenow_username || ""} onChange={(e) => updateCfg({ servicenow_username: e.target.value })} placeholder="Username" />
+              <input style={{ width: 220 }} value={cfg.servicenow_password || ""} onChange={(e) => updateCfg({ servicenow_password: e.target.value })} placeholder="Password" type="password" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 620 }} value={cfg.servicenow_users_path || ""} onChange={(e) => updateCfg({ servicenow_users_path: e.target.value })} placeholder="Users Path (es: /api/now/table/sys_user?sysparm_fields=...)" />
+            </div>
+            {renderConnectorActions("servicenow", "Configurazione ServiceNow salvata.")}
           </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 620 }} value={cfg.servicenow_users_path || ""} onChange={(e) => updateCfg({ servicenow_users_path: e.target.value })} placeholder="Users Path (es: /api/now/table/sys_user?sysparm_fields=...)" />
-          </div>
-          {renderConnectorActions("servicenow", "Configurazione ServiceNow salvata.")}
-        </div>
         </div>
       </details>
 
@@ -1140,19 +1140,19 @@ function Connettori() {
           <span>CRM</span>
         </summary>
         <div className="connector-category__content">
-        <div className="panel">
-          <h3 style={{ marginTop: 0 }}>Salesforce Connector</h3>
-          <div className="row">
-            <input style={{ width: 320 }} value={cfg.salesforce_base_url || ""} onChange={(e) => updateCfg({ salesforce_base_url: e.target.value })} placeholder="Instance URL" />
-            <input style={{ width: 320 }} value={cfg.salesforce_token_url || ""} onChange={(e) => updateCfg({ salesforce_token_url: e.target.value })} placeholder="Token URL (es: https://login.salesforce.com/services/oauth2/token)" />
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>Salesforce Connector</h3>
+            <div className="row">
+              <input style={{ width: 320 }} value={cfg.salesforce_base_url || ""} onChange={(e) => updateCfg({ salesforce_base_url: e.target.value })} placeholder="Instance URL" />
+              <input style={{ width: 320 }} value={cfg.salesforce_token_url || ""} onChange={(e) => updateCfg({ salesforce_token_url: e.target.value })} placeholder="Token URL (es: https://login.salesforce.com/services/oauth2/token)" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 240 }} value={cfg.salesforce_client_id || ""} onChange={(e) => updateCfg({ salesforce_client_id: e.target.value })} placeholder="Client ID" />
+              <input style={{ width: 240 }} value={cfg.salesforce_client_secret || ""} onChange={(e) => updateCfg({ salesforce_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+              <input style={{ width: 420 }} value={cfg.salesforce_users_path || ""} onChange={(e) => updateCfg({ salesforce_users_path: e.target.value })} placeholder="Users Query Path (es: /services/data/v60.0/query?q=...)" />
+            </div>
+            {renderConnectorActions("salesforce", "Configurazione Salesforce salvata.")}
           </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 240 }} value={cfg.salesforce_client_id || ""} onChange={(e) => updateCfg({ salesforce_client_id: e.target.value })} placeholder="Client ID" />
-            <input style={{ width: 240 }} value={cfg.salesforce_client_secret || ""} onChange={(e) => updateCfg({ salesforce_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
-            <input style={{ width: 420 }} value={cfg.salesforce_users_path || ""} onChange={(e) => updateCfg({ salesforce_users_path: e.target.value })} placeholder="Users Query Path (es: /services/data/v60.0/query?q=...)" />
-          </div>
-          {renderConnectorActions("salesforce", "Configurazione Salesforce salvata.")}
-        </div>
         </div>
       </details>
 
@@ -1161,19 +1161,19 @@ function Connettori() {
           <span>Collaboration</span>
         </summary>
         <div className="connector-category__content">
-        <div className="panel">
-          <h3 style={{ marginTop: 0 }}>Microsoft 365 Connector</h3>
-          <div className="row">
-            <input style={{ width: 320 }} value={cfg.m365_base_url || ""} onChange={(e) => updateCfg({ m365_base_url: e.target.value })} placeholder="Base URL (es: https://graph.microsoft.com)" />
-            <input style={{ width: 220 }} value={cfg.m365_tenant_id || ""} onChange={(e) => updateCfg({ m365_tenant_id: e.target.value })} placeholder="Tenant ID" />
-            <input style={{ width: 220 }} value={cfg.m365_client_id || ""} onChange={(e) => updateCfg({ m365_client_id: e.target.value })} placeholder="Client ID" />
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>Microsoft 365 Connector</h3>
+            <div className="row">
+              <input style={{ width: 320 }} value={cfg.m365_base_url || ""} onChange={(e) => updateCfg({ m365_base_url: e.target.value })} placeholder="Base URL (es: https://graph.microsoft.com)" />
+              <input style={{ width: 220 }} value={cfg.m365_tenant_id || ""} onChange={(e) => updateCfg({ m365_tenant_id: e.target.value })} placeholder="Tenant ID" />
+              <input style={{ width: 220 }} value={cfg.m365_client_id || ""} onChange={(e) => updateCfg({ m365_client_id: e.target.value })} placeholder="Client ID" />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <input style={{ width: 320 }} value={cfg.m365_client_secret || ""} onChange={(e) => updateCfg({ m365_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+              <input style={{ width: 540 }} value={cfg.m365_users_path || ""} onChange={(e) => updateCfg({ m365_users_path: e.target.value })} placeholder="Users Path (es: /v1.0/users?$select=...)" />
+            </div>
+            {renderConnectorActions("m365", "Configurazione Microsoft 365 salvata.")}
           </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <input style={{ width: 320 }} value={cfg.m365_client_secret || ""} onChange={(e) => updateCfg({ m365_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
-            <input style={{ width: 540 }} value={cfg.m365_users_path || ""} onChange={(e) => updateCfg({ m365_users_path: e.target.value })} placeholder="Users Path (es: /v1.0/users?$select=...)" />
-          </div>
-          {renderConnectorActions("m365", "Configurazione Microsoft 365 salvata.")}
-        </div>
         </div>
       </details>
 
@@ -1182,34 +1182,34 @@ function Connettori() {
           <span>File-based</span>
         </summary>
         <div className="connector-category__content">
-        <div className="panel">
-          <h3 style={{ marginTop: 0 }}>Connettore CSV</h3>
-          <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
-            Atteso: DisplayName;Dipartimento;Ruoli (con Ruoli separati da virgola)
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>Connettore CSV</h3>
+            <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
+              Atteso: DisplayName;Dipartimento;Ruoli (con Ruoli separati da virgola)
+            </div>
+            <div className="row">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+              />
+            </div>
+            <div className="row connector-form-actions" style={{ marginTop: 10 }}>
+              <button
+                className="primary"
+                disabled={!csvFile}
+                onClick={() => runDiscovery("csv")}
+              >
+                {csvLoading ? "Discovery..." : "Discovery"}
+              </button>
+              <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading}>Schedule</button>
+              <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
+            </div>
+            {importMsg && <div style={{ marginTop: 10 }}>{importMsg}</div>}
+            <div className="connector-loadingbar" aria-hidden="true">
+              <div className={`connector-loadingbar__fill${csvLoading ? " is-active" : ""}`} />
+            </div>
           </div>
-          <div className="row">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-            />
-          </div>
-          <div className="row connector-form-actions" style={{ marginTop: 10 }}>
-            <button
-              className="primary"
-              disabled={!csvFile}
-              onClick={() => runDiscovery("csv")}
-            >
-              {csvLoading ? "Discovery..." : "Discovery"}
-            </button>
-            <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading}>Schedule</button>
-            <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
-          </div>
-          {importMsg && <div style={{ marginTop: 10 }}>{importMsg}</div>}
-          <div className="connector-loadingbar" aria-hidden="true">
-            <div className={`connector-loadingbar__fill${csvLoading ? " is-active" : ""}`} />
-          </div>
-        </div>
         </div>
       </details>
 
@@ -1522,6 +1522,7 @@ function UserDetail() {
   const [animatingNodeId, setAnimatingNodeId] = useState("");
   const [graphTypeFilter, setGraphTypeFilter] = useState("all"); // all | active | inactive
   const [activationTransition, setActivationTransition] = useState(null); // {id,start,duration}
+  const [groupCounts, setGroupCounts] = useState({}); // {groupName: totalUserCount}
   const graphRef = useRef(null);
   const forceGraphRef = useRef(null);
   const nodePositionsRef = useRef(new Map());
@@ -1575,9 +1576,11 @@ function UserDetail() {
 
       const u = await api.get(`/api/users/${encodeURIComponent(username)}`); // {user, allGroups}
       const br = await api.businessRoles(); // {roles, assignments}
+      const gc = await api.groupCounts(); // {counts}
 
       setUser(u.user);
       setRolesData(br);
+      setGroupCounts(gc.counts || {});
 
       setSelectedRole(u.user?.businessRole || "Unassigned");
       setSelectedGroups((u.user?.groups || []).slice().sort());
@@ -1683,7 +1686,20 @@ function UserDetail() {
   const forceGraphData = useMemo(() => {
     const selectedSet = new Set((selectedGroups || []).map((g) => String(g)));
     const roleSet = new Set((roleGroups || []).map((g) => String(g)));
-    const merged = Array.from(new Set([...selectedSet, ...roleSet]));
+    // 1. Build a map of confidence/frequency from peerStats
+    // peerStats.suggestedGroups has { group, frequency, count, peers }
+    const freqMap = {};
+    const suggestedSet = new Set();
+    if (peerStats?.suggestedGroups) {
+      for (const sg of peerStats.suggestedGroups) {
+        freqMap[sg.group] = sg.frequency; // 0..1
+        suggestedSet.add(sg.group);
+      }
+    }
+
+    // Merge suggested groups into the graph
+    // We want to show: Selected Groups + Role Groups + Peer Suggested Groups
+    const merged = Array.from(new Set([...selectedSet, ...roleSet, ...suggestedSet]));
     const orderedAll = merged
       .filter((group) => {
         if (graphTypeFilter === "active") return selectedSet.has(group);
@@ -1696,8 +1712,13 @@ function UserDetail() {
         if (aUser !== bUser) return aUser ? -1 : 1;
         return a.localeCompare(b);
       });
+
     const ordered = orderedAll.slice(0, MAX_GRAPH_NODES);
     const userNodeId = "__user_center__";
+    // Also include anomalies if relevant? Usually anomalies are "assigned but weird", so frequency might be low. 
+    // But for the atomic model, if it's assigned, it goes to Orbit 1 regardless of frequency.
+    // So we primarily care about frequency for UNASSIGNED nodes to place them in outer orbits.
+
     const nodes = [
       {
         id: userNodeId,
@@ -1706,23 +1727,60 @@ function UserDetail() {
         label: user?.displayName || user?.username || username,
         fx: 0,
         fy: 0,
+        orbitIndex: 0,
       },
-      ...ordered.map((group) => ({
-        ...(nodePositionsRef.current.get(`group:${group}`) || {}),
-        id: `group:${group}`,
-        group,
-        label: group,
-        inUser: selectedSet.has(group),
-        inRole: roleSet.has(group),
-        type: selectedSet.has(group) ? "user" : "role",
-      })),
+      ...ordered.map((group) => {
+        const inUser = selectedSet.has(group);
+        const f = freqMap[group] || 0;
+        let orbitIndex = 5; // default outer
+        let confidence = 0;
+
+        if (inUser) {
+          orbitIndex = 1; // Assigned -> Orbit 1
+          confidence = 1;
+        } else {
+          // Unassigned
+          confidence = f;
+
+          if (f > 0) {
+            // It is suggested by peers. 
+            // Prioritize this status even if it's also in the Business Role.
+            if (f >= 0.8) orbitIndex = 2;       // 80-100%
+            else if (f >= 0.6) orbitIndex = 3;  // 60-80%
+            else if (f >= 0.4) orbitIndex = 4;  // 40-60%
+            else orbitIndex = 5;                // < 40%
+          } else {
+            // Not suggested by peers. 
+            // If it's in the Business Role (roleSet.has(group)), it's a "standard" role for this job.
+            // If not in roleSet (but selectedSet has it? covered by inUser), or neither..
+            // In our atomic model, standard unassigned roles go to outer orbit.
+            orbitIndex = 5;
+          }
+        }
+
+        return {
+          ...(nodePositionsRef.current.get(`group:${group}`) || {}),
+          id: `group:${group}`,
+          group,
+          label: group,
+          inUser,
+          inRole: roleSet.has(group),
+          type: inUser ? "user" : "role",
+          orbitIndex,
+          confidence,
+          isSuggested: f > 0,
+        };
+      }),
     ];
+
     const links = ordered.map((group) => ({
       source: userNodeId,
       target: `group:${group}`,
       type: selectedSet.has(group) ? "user" : "role",
       isParticle: false,
     }));
+
+    // Particle links only for assigned (Orbit 1)
     const particleLinks = ordered
       .filter((group) => selectedSet.has(group))
       .flatMap((group) => ([
@@ -1739,6 +1797,7 @@ function UserDetail() {
           isParticle: true,
         },
       ]));
+
     return {
       userNodeId,
       nodes,
@@ -1747,20 +1806,24 @@ function UserDetail() {
       totalRendered: ordered.length,
       truncated: orderedAll.length > ordered.length,
     };
-  }, [selectedGroups, roleGroups, graphTypeFilter]);
+  }, [selectedGroups, roleGroups, graphTypeFilter, peerStats]);
 
   const allGraphCounts = useMemo(() => {
     const selectedSet = new Set((selectedGroups || []).map((g) => String(g)));
     const roleSet = new Set((roleGroups || []).map((g) => String(g)));
-    const merged = Array.from(new Set([...selectedSet, ...roleSet]));
+    const suggestedSet = new Set((peerStats?.suggestedGroups || []).map((sg) => String(sg.group)));
+
+    // The "all" set should match the "merged" set used in forceGraphData
+    const merged = Array.from(new Set([...selectedSet, ...roleSet, ...suggestedSet]));
+
     let active = 0;
     let inactive = 0;
     for (const g of merged) {
       if (selectedSet.has(g)) active += 1;
-      else if (roleSet.has(g)) inactive += 1;
+      else inactive += 1; // If it's in roleSet or suggestedSet but not in selectedGroups, it's inactive
     }
     return { active, inactive };
-  }, [selectedGroups, roleGroups]);
+  }, [selectedGroups, roleGroups, peerStats]);
 
   const forceNodeById = useMemo(
     () => forceGraphData.nodes.reduce((acc, n) => {
@@ -1865,27 +1928,75 @@ function UserDetail() {
   useEffect(() => {
     const fg = forceGraphRef.current;
     if (!fg) return;
+
+    // Configurazione visuale delle orbite (raggi)
+    const ORBIT_RADII = {
+      0: 0,
+      1: 130, // Assegnati
+      2: 210, // Conf > 80%
+      3: 280, // Conf > 60%
+      4: 340, // Conf > 40%
+      5: 400, // Altri
+    };
+
     fg.centerAt(0, 0, 0);
-    fg.zoom(0.76, 0);
+    fg.zoom(0.63, 0); // Zoom out del 10% supplementare (0.70 -> 0.63) per vedere meglio l'intero modello atomico
+
+    // Charge: repulsione tra i nodi
     const charge = fg.d3Force("charge");
-    if (charge && typeof charge.strength === "function") charge.strength(-245);
+    if (charge && typeof charge.strength === "function") charge.strength(-120);
+
+    // Link: forza elastica (solo per tenere insieme, ma non troppo forte da rompere l'orbita)
     const link = fg.d3Force("link");
     if (link) {
-      if (typeof link.distance === "function") link.distance(208);
-      if (typeof link.strength === "function") link.strength((l) => (l?.isParticle ? 0 : 0.58));
+      // Distanza ideale = raggio dell'orbita 1 per i link utente
+      if (typeof link.distance === "function") link.distance(130);
+      if (typeof link.strength === "function") link.strength((l) => {
+        if (l?.isParticle) return 0;
+        // Solo i link "user" (assegnati) hanno una forza strutturale significativa
+        if (l?.type === "user") return 0.2;
+        return 0; // I link "role" (non assegnati) non devono tirare verso il centro, li gestisce la radiale
+      });
     }
+
+    // Radial: forza principale per il posizionamento atomico
     fg.d3Force(
       "radial",
       forceRadial((node) => {
         if (node?.isCenter) return 0;
-        const pendingActivation = pendingActiveIdsRef.current.has(node?.id);
-        return (node?.inUser || pendingActivation) ? 160 : 305; // red closer, blue farther from center
-      }).strength(0.11)
+
+        // Se un nodo sta venendo attivato (cliccato), spostalo temporaneamente verso l'orbita target
+        // Ma qui semplifichiamo: orbitIndex è già ricalcolato nel render successivo se cambia selectedGroups via toggle.
+        // L'animazione "in transito" è gestita più visivamente o dalla transizione di stato.
+        // Tuttavia, per fluidità, consideriamo pendingActiveIdsRef.
+
+        const pending = pendingActiveIdsRef.current.has(node?.id);
+        if (pending) {
+          // Se sta diventando attivo, va verso orbita 1
+          // Se sta diventando inattivo, dovrebbe andare verso la sua confidence orbit. 
+          // (per ora non sappiamo la confidence orbit di destinazione senza ricalcolo complesso, 
+          // usiamo un fallback o lasciamo che il prossimo render lo aggiusti)
+          return ORBIT_RADII[1];
+        }
+
+        const idx = node.orbitIndex || 5;
+        return ORBIT_RADII[idx] || ORBIT_RADII[5];
+      }).strength(0.8) // Forza radiale molto alta per costringere sulle orbite
     );
-    fg.d3Force("collide", forceCollide((node) => (node?.isCenter ? 52 : 31)).iterations(2));
-    if (typeof fg.d3VelocityDecay === "function") fg.d3VelocityDecay(0.28);
-    if (typeof fg.d3AlphaDecay === "function") fg.d3AlphaDecay(0.018);
+
+    fg.d3Force("collide", forceCollide((node) => (node?.isCenter ? 45 : 18)).iterations(2));
+
+    if (typeof fg.d3VelocityDecay === "function") fg.d3VelocityDecay(0.25); // Smorzamento per evitare oscillazioni
+    if (typeof fg.d3AlphaDecay === "function") fg.d3AlphaDecay(0.015);
+
+    // Forzare il ri-centramento dopo un piccolo delay per assicurarci che il canvas sia pronto
+    const tid = setTimeout(() => {
+      fg.centerAt(0, 0, 400); // 400ms transition
+      fg.zoom(0.63, 400);
+    }, 50);
+
     fg.d3ReheatSimulation();
+    return () => clearTimeout(tid);
   }, [forceGraphData]);
 
   function handleGraphNodeClick(node) {
@@ -1931,11 +2042,11 @@ function UserDetail() {
   const getGraphNodeRadius = React.useCallback((node) => {
     if (!node) return 0;
     const isAnimating = Boolean(animatingNodeId && node?.id === animatingNodeId);
-    const isActivatingNode = Boolean(activationTransition && activationTransition.id === node?.id);
-    let baseRadius = node?.isCenter ? 32 : OUTER_NODE_RADIUS;
-    if (isActivatingNode) baseRadius = OUTER_NODE_RADIUS;
-    return node?.isCenter ? baseRadius : baseRadius + (isAnimating ? 2 : 0);
-  }, [animatingNodeId, activationTransition]);
+    // Center node bigger. Outer nodes synchronized at radius 9 (same as assigned)
+    let baseRadius = node?.isCenter ? 36 : 9;
+
+    return baseRadius + (isAnimating ? 3 : 0);
+  }, [animatingNodeId]);
 
 
   return (
@@ -1994,6 +2105,7 @@ function UserDetail() {
                 { value: "Service", label: "Service" },
                 { value: "Administrative", label: "Administrative" },
                 { value: "BlueCollar", label: "BlueCollar" },
+                { value: "Administrative", label: "Administrative" }, // potential dupe in original but keeping structure
               ]}
               menuPortalTarget={document.body}
               menuPosition="fixed"
@@ -2066,7 +2178,7 @@ function UserDetail() {
 
         <hr className="sep" />
 
-        <h3 style={{ marginTop: 0 }}>Roles</h3>
+        <h3 style={{ marginTop: 0 }}>Atomic Roles Model</h3>
 
         <div style={{ height: 12 }} />
 
@@ -2119,87 +2231,110 @@ function UserDetail() {
                   linkDirectionalParticleColor={() => "rgba(255,120,133,0.88)"}
                   linkDirectionalParticleSpeed={() => graphPerf.particleSpeed}
                   nodeLabel={() => ""}
+                  onNodeHover={(node) => setHoveredGraphNode(node)}
+                  onNodeDoubleClick={(node) => {
+                    if (!node || node.isCenter) return;
+                    toggleGroup(node.group);
+                  }}
+                  onRenderFramePre={(ctx) => {
+                    // Draw Orbits
+                    const ORBIT_RADII = {
+                      1: { r: 130, color: "rgba(225, 35, 55, 0.45)", width: 2 },    // Assigned
+                      2: { r: 210, color: "rgba(100, 255, 100, 0.35)", width: 1.8 },   // High Conf
+                      3: { r: 280, color: "rgba(100, 255, 100, 0.25)", width: 1.5 },
+                      4: { r: 340, color: "rgba(100, 255, 100, 0.18)", width: 1.2 },
+                      5: { r: 400, color: "rgba(255, 255, 255, 0.12)", width: 1.2 },
+                    };
+
+                    ctx.save();
+                    ctx.translate(0, 0); // Assuming center is 0,0 via d3 center force
+
+                    Object.values(ORBIT_RADII).forEach(orbit => {
+                      ctx.beginPath();
+                      ctx.arc(0, 0, orbit.r, 0, 2 * Math.PI, false);
+                      ctx.strokeStyle = orbit.color;
+                      ctx.lineWidth = orbit.width;
+                      ctx.stroke();
+                    });
+
+                    ctx.restore();
+                  }}
                   nodeCanvasObject={(node, ctx, globalScale) => {
                     const isAnimating = Boolean(animatingNodeId && node?.id === animatingNodeId);
                     const now = Date.now();
-                    const centerPulse = 0.5 + 0.5 * Math.sin(now / 900);
-                    const isActivatingNode = Boolean(activationTransition && activationTransition.id === node?.id);
-                    const t = isActivatingNode
-                      ? Math.max(0, Math.min(1, (now - activationTransition.start) / Math.max(1, activationTransition.duration)))
-                      : 0;
-                    const lerp = (a, b, x) => a + ((b - a) * x);
-                    const radius = getGraphNodeRadius(node);
-                    const fromBlue = [0, 83, 179];
-                    const toRed = [225, 35, 55];
-                    const tr = Math.round(lerp(fromBlue[0], toRed[0], t));
-                    const tg = Math.round(lerp(fromBlue[1], toRed[1], t));
-                    const tb = Math.round(lerp(fromBlue[2], toRed[2], t));
-                    const fill = node?.isCenter
-                      ? "#a7adb7"
-                      : isActivatingNode
-                        ? `rgb(${tr},${tg},${tb})`
-                        : (node?.type === "user" ? "#e12337" : "#0053b3");
-                    const border = node?.isCenter ? "rgba(226,230,236,0.95)" : "rgba(245,248,255,0.76)";
 
+                    // Synchronize radius for all non-center nodes
+                    const radius = node?.isCenter ? 36 : 11;
+
+                    // Colors
+                    // User/Center
+                    if (node?.isCenter) {
+                      // Nucleus style
+                      ctx.beginPath();
+                      ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+                      ctx.fillStyle = "#ffffff";
+                      ctx.fill();
+
+                      // Glow
+                      const pulse = 0.5 + 0.5 * Math.sin(now / 800);
+                      ctx.beginPath();
+                      ctx.arc(node.x, node.y, radius + 4 + pulse * 4, 0, 2 * Math.PI, false);
+                      ctx.lineWidth = 2;
+                      ctx.strokeStyle = `rgba(255,255,255,${0.1 + pulse * 0.2})`;
+                      ctx.stroke();
+
+                      return;
+                    }
+
+                    // Group Nodes
+                    // Color based on Orbit/Status
+                    let fill = "#445566"; // default grey
+                    let stroke = "rgba(255,255,255,0.1)";
+
+                    if (node.orbitIndex === 1) {
+                      // Assigned
+                      fill = "#e12337"; // Red
+                      stroke = "rgba(255,100,100,0.5)";
+                    } else if (node.isSuggested) {
+                      // Suggested (Green)
+                      if (node.orbitIndex === 2) {
+                        fill = "#4ade80"; // Bright Green (High Conf)
+                        stroke = "rgba(74, 222, 128, 0.4)";
+                      } else if (node.orbitIndex === 3) {
+                        fill = "#2f8f5b"; // Muted Green
+                      } else if (node.orbitIndex === 4) {
+                        fill = "#1d5c3d"; // Dark Green
+                      } else {
+                        // Orbit 5 but suggested (Low Conf < 40%)
+                        fill = "#0f392b"; // Very Dark Green
+                        stroke = "rgba(74, 222, 128, 0.2)";
+                      }
+                    } else if (node.orbitIndex === 5) {
+                      // Not suggested, just standard Business Role (Blueish Grey)
+                      fill = "#445566";
+                    }
+
+                    // Draw Node
                     ctx.beginPath();
                     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
                     ctx.fillStyle = fill;
                     ctx.fill();
-                    ctx.lineWidth = node?.isCenter ? 2 : 1.4;
-                    ctx.strokeStyle = border;
+                    ctx.strokeStyle = stroke;
+                    ctx.lineWidth = 1;
                     ctx.stroke();
 
-                    if (node?.isCenter) {
-                      ctx.beginPath();
-                      ctx.arc(node.x, node.y, radius + 7 + centerPulse * 2, 0, 2 * Math.PI, false);
-                      ctx.lineWidth = 1.2;
-                      ctx.strokeStyle = `rgba(210,216,226,${0.22 + centerPulse * 0.2})`;
-                      ctx.stroke();
-                    }
+                    // Label on hover or if center/important? 
+                    // Atomic model usually clean. Labels only on hover is existing behavior.
 
+                    // Highlight ring for animating/transitioning
                     if (isAnimating) {
                       ctx.beginPath();
-                      ctx.arc(node.x, node.y, radius + 6 + centerPulse, 0, 2 * Math.PI, false);
-                      ctx.lineWidth = 1.2;
-                      ctx.strokeStyle = "rgba(255,255,255,0.45)";
+                      ctx.arc(node.x, node.y, radius + 4, 0, 2 * Math.PI, false);
+                      ctx.strokeStyle = "#ffffff";
+                      ctx.lineWidth = 1.5;
                       ctx.stroke();
                     }
-
-                    if (!node?.isCenter && node?.type === "user" && graphPerf.particleCount > 0) {
-                      // Alternating pulse: each active node listens to only one particle phase.
-                      const dist = Math.max(1, Math.hypot(Number(node.x) || 0, Number(node.y) || 0));
-                      const travelMs = Math.max(900, Math.min(2300, dist * 7.4));
-                      const seed = String(node.id || "")
-                        .split("")
-                        .reduce((acc, ch) => ((acc * 33) + ch.charCodeAt(0)) % 1000003, 17);
-                      const phase = (((now + seed) % travelMs) / travelMs); // 0..1
-                      const lane = seed % 2; // alternate particle lane by node
-                      const target = lane === 0 ? 0 : 0.5;
-                      const d = Math.abs(phase - target);
-                      const cyc = Math.min(d, 1 - d);
-                      const spike = Math.exp(-(cyc * cyc) / 0.00042);
-                      if (spike > 0.05) {
-                        ctx.beginPath();
-                        ctx.arc(node.x, node.y, radius + 1.5 + spike * 7.5, 0, 2 * Math.PI, false);
-                        ctx.lineWidth = 1.2 + spike * 0.6;
-                        ctx.strokeStyle = `rgba(225,35,55,${0.18 + spike * 0.52})`;
-                        ctx.stroke();
-                      }
-                    }
                   }}
-                  nodePointerAreaPaint={(node, color, ctx) => {
-                    const radius = getGraphNodeRadius(node);
-                    ctx.fillStyle = color;
-                    ctx.beginPath();
-                    ctx.arc(node.x, node.y, radius + 1, 0, 2 * Math.PI, false);
-                    ctx.fill();
-                  }}
-                  onNodeHover={(node) => {
-                    if (!node || node.isCenter) setHoveredGraphNode(null);
-                    else setHoveredGraphNode(node);
-                  }}
-                  onNodeClick={handleGraphNodeClick}
-                  onEngineStop={captureNodePositions}
                 />
               ) : (
                 <div className="user-graph-empty">
@@ -2211,6 +2346,7 @@ function UserDetail() {
                 const node = forceNodeById[hoveredGraphNode.id];
                 const roles = groupRoleHints[node.group] || [];
                 const freq = peerFrequencyByGroup[node.group];
+                const totalUsers = groupCounts[node.group] || 0;
                 return (
                   <div className="user-graph-tooltip user-graph-tooltip--dock">
                     <div className="user-graph-tooltip__title">{node.group}</div>
@@ -2220,6 +2356,9 @@ function UserDetail() {
                     </div>
                     <div className="user-graph-tooltip__row">
                       Peer frequency: <b>{freq ? `${Math.round(freq.frequency * 100)}% (${freq.count}/${freq.peers})` : "n/a"}</b>
+                    </div>
+                    <div className="user-graph-tooltip__row">
+                      Total users with this group: <b>{totalUsers}</b>
                     </div>
                   </div>
                 );

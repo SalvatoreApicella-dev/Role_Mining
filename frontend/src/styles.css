@@ -1580,32 +1580,57 @@ hr.sep {
 .user-graph-tooltip {
   position: absolute;
   z-index: 12;
-  min-width: 220px;
-  max-width: 300px;
+  min-width: 240px;
+  max-width: 340px;
   pointer-events: none;
-  border-radius: 10px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  background: #0b162b;
-  padding: 8px 10px;
-  transform: translate3d(0, 0, 0);
+  background: rgba(11, 22, 43, 0.88);
+  backdrop-filter: blur(12px);
+  padding: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  animation: user-tooltip-in 0.2s ease-out;
 }
 
 .user-graph-tooltip--dock {
-  left: 12px;
-  bottom: 12px;
+  left: 16px;
+  bottom: 16px;
   top: auto;
 }
 
 .user-graph-tooltip__title {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 10px;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  padding-bottom: 6px;
+  word-break: break-all;
 }
 
 .user-graph-tooltip__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
   font-size: 11px;
   color: #cdd8ef;
-  line-height: 1.4;
+  line-height: 1.6;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.user-graph-tooltip__row:last-child {
+  border-bottom: none;
+}
+
+.user-graph-tooltip__row b {
+  color: #fff;
+  text-align: right;
+}
+
+@keyframes user-tooltip-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes user-node-in {

@@ -1,0 +1,57 @@
+INFO:     Will watch for changes in these directories: ['/Users/salvo/Development/Role_Mining/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [20189] using WatchFiles
+INFO:     Started server process [20240]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:60088 - "GET /api/stats/group-counts HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60101 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60102 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60103 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60108 - "GET /api/users/marco.russo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60109 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60112 - "GET /api/users/marco.russo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60115 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60118 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60121 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60124 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60127 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60130 - "GET /api/users/marco.russo/peer-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60178 - "GET /api/users/marco.russo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60183 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60184 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60187 - "GET /api/users/marco.russo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60190 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60193 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60196 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60197 - "GET /api/users/adm_luca.rossi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60202 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60203 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60206 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60209 - "GET /api/users/adm_luca.rossi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60212 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60218 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60221 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60261 - "GET /api/users/marco.russo/peer-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60330 - "GET /api/users/marco.russo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60335 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60336 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60339 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60342 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60343 - "GET /api/users/adm_luca.rossi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60348 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60349 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60352 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60355 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60367 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60368 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60371 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60374 - "GET /api/users/marco.russo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60377 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60380 - "GET /api/users/marco.russo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60383 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60386 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60389 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60392 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60395 - "GET /api/stats/group-counts HTTP/1.1" 200 OK

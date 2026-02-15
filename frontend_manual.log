@@ -16,3 +16,35 @@ Error: connect ECONNREFUSED 127.0.0.1:8000
 2:56:03 PM [vite] http proxy error: /api/auth/login
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+4:10:47 PM [vite] hmr update /src/app.jsx
+4:11:21 PM [vite] hmr update /src/styles.css
+4:14:44 PM [vite] hmr update /src/styles.css
+4:14:44 PM [vite] hmr update /src/app.jsx
+4:33:01 PM [vite] hmr update /src/app.jsx
+4:33:02 PM [vite] warning: Duplicate "nodeCanvasObject" attribute in JSX element
+2333|                    ctx.restore();
+2334|                  }}
+2335|                  nodeCanvasObject={(node, ctx, globalScale) => {
+   |                  ^
+2336|                    const isAnimating = Boolean(animatingNodeId && node?.id === animatingNodeId);
+2337|                    const now = Date.now();
+
+  Plugin: vite:esbuild
+  File: /Users/salvo/Development/Role_Mining/frontend/src/app.jsx
+4:33:33 PM [vite] hmr update /src/app.jsx
+4:39:42 PM [vite] hmr update /src/app.jsx
+4:46:02 PM [vite] hmr update /src/app.jsx
+4:48:58 PM [vite] hmr update /src/app.jsx
+4:49:01 PM [vite] hmr update /src/app.jsx
+5:03:22 PM [vite] hmr update /src/app.jsx
+5:18:16 PM [vite] hmr update /src/app.jsx
+5:20:48 PM [vite] hmr update /src/app.jsx
+5:40:01 PM [vite] hmr update /src/app.jsx
+5:45:11 PM [vite] hmr update /src/app.jsx
+5:51:15 PM [vite] hmr update /src/app.jsx, /src/pages/AiDetectionPage.jsx
+5:51:23 PM [vite] hmr update /src/app.jsx
+5:51:36 PM [vite] hmr update /src/app.jsx
+5:51:56 PM [vite] hmr update /src/styles.css
+6:06:09 PM [vite] hmr update /src/app.jsx, /src/pages/AiDetectionPage.jsx
+6:21:28 PM [vite] hmr update /src/app.jsx
+6:28:53 PM [vite] hmr update /src/app.jsx

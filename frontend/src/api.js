@@ -187,6 +187,7 @@ export const api = {
 
   updateAccountType: (username, accountType) => request(`/api/users/${encodeURIComponent(username)}/update`, { method: "POST", body: { accountType } }),
   peerAnalysis: (username) => request(`/api/users/${encodeURIComponent(username)}/peer-analysis`),
+  groupCounts: () => request("/api/stats/group-counts"),
 
   // Pattern rules (AI Training)
   getPatterns: () => request("/api/ml/patterns"),
@@ -217,25 +218,11 @@ export const api = {
   aiLabFeedbackAdd: (payload) => request("/api/ai-lab/feedback", { method: "POST", body: payload }),
 
   async get(path) {
-    const res = await fetch(path, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${getToken()}` },
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return await res.json();
+    return request(path, { method: "GET" });
   },
 
   async post(path, body) {
-    const res = await fetch(path, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`,
-      },
-      body: JSON.stringify(body ?? {}),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return await res.json();
+    return request(path, { method: "POST", body });
   },
 
 
