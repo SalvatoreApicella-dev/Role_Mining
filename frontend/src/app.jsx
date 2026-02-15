@@ -33,8 +33,8 @@ const OUTER_NODE_RADIUS = 27; // all non-center nodes use the same radius
 
 
 function Sidebar({ onLogout, roles }) {
-  const [openCfg, setOpenCfg] = useState(true);
-  const [openAiGym, setOpenAiGym] = useState(true);
+  const [openCfg, setOpenCfg] = useState(false);
+  const [openAiGym, setOpenAiGym] = useState(false);
 
   return (
     <aside className="sidebar bip-sidebar">
@@ -182,6 +182,7 @@ function Login() {
 function Analytics() {
 
   const [kpi, setKpi] = useState({ totalUsers: 0, clusterQuality: 0, modelQuality: 0, aiDetection: 0 });
+  const [connectorCfg, setConnectorCfg] = useState({ discovery_results: {} });
   const [err, setErr] = useState("");
 
   const navigate = useNavigate();
@@ -191,9 +192,17 @@ function Analytics() {
     (async () => {
       try {
         setErr("");
-        const data = await api.kpi();
-        const normalized = (data && typeof data.kpi === "object") ? data.kpi : data;
-        setKpi(normalized || {});
+        const [kpiRes, cfgRes] = await Promise.allSettled([api.kpi(), api.getConnector()]);
+        if (kpiRes.status === "fulfilled") {
+          const data = kpiRes.value;
+          const normalized = (data && typeof data.kpi === "object") ? data.kpi : data;
+          setKpi(normalized || {});
+        } else {
+          throw kpiRes.reason;
+        }
+        if (cfgRes.status === "fulfilled") {
+          setConnectorCfg(cfgRes.value || { discovery_results: {} });
+        }
       } catch (e) {
         setErr(String(e.message || e));
       }
@@ -235,13 +244,35 @@ function Analytics() {
   const routeByLabel = Object.fromEntries(kpiItems.map((item) => [item.label, item.route]));
   const gapFor = (item) => Math.abs((Number(item.target) || 0) - (Number(item.value) || 0));
   const rankedByGap = [...kpiItems].sort((a, b) => gapFor(b) - gapFor(a));
+  const rankedByGapCard = [...kpiItems].sort((a, b) => {
+    if (a.label === "Model Score" && b.label !== "Model Score") return -1;
+    if (b.label === "Model Score" && a.label !== "Model Score") return 1;
+    return gapFor(b) - gapFor(a);
+  });
   const railItems = [...rankedByGap];
   const biggestGap = rankedByGap[0];
-  const smallestGap = rankedByGap[rankedByGap.length - 1];
   const focusItem = biggestGap || kpiItems[0];
   const overall = Math.round((clusterPct + modelPct + aiPct) / 3);
-  const dispersion = Math.max(...kpiItems.map((i) => i.value)) - Math.min(...kpiItems.map((i) => i.value));
-  const balanceIndex = Math.max(0, 100 - dispersion).toFixed(1);
+  const discoveryResults = connectorCfg?.discovery_results || {};
+  const connectorMeta = {
+    sap: "SAP",
+    ad: "AD",
+    azure: "Azure AD",
+    one_identity: "One Identity",
+    sailpoint: "SailPoint",
+    saviynt: "Saviynt",
+    servicenow: "ServiceNow",
+    salesforce: "Salesforce",
+    m365: "Microsoft 365",
+    csv: "CSV",
+  };
+  const connectorUsage = Object.entries(discoveryResults)
+    .filter(([, value]) => Boolean(value?.last_run_at))
+    .map(([key]) => ({
+      key,
+      label: connectorMeta[key] || key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const radarData = [
     {
@@ -267,13 +298,13 @@ function Analytics() {
     {
       type: "bar",
       orientation: "h",
-      x: rankedByGap.map((item) => gapFor(item)),
-      y: rankedByGap.map((item) => item.label),
+      x: rankedByGapCard.map((item) => gapFor(item)),
+      y: rankedByGapCard.map((item) => item.label),
       marker: {
-        color: rankedByGap.map((item) => item.color),
+        color: rankedByGapCard.map((item) => item.color),
         line: { color: "rgba(255,255,255,0.28)", width: 1 },
       },
-      customdata: rankedByGap.map((item) => [item.value]),
+      customdata: rankedByGapCard.map((item) => [item.value]),
       hovertemplate:
         "<b>%{y}</b><br>Gap: %{x:.0f}%<br>Score corrente: %{customdata[0]:.0f}%<extra></extra>",
     },
@@ -292,7 +323,9 @@ function Analytics() {
           <div className="analytics-widget__value">{kpi.totalUsers ?? 0}</div>
           <div className="analytics-hero-meta">
             <span>Overall Score {overall}%</span>
-            <span>Balance Index {balanceIndex}%</span>
+            {connectorUsage.map((c) => (
+              <span key={c.key}>{c.label}</span>
+            ))}
             <span style={{ color: focusItem.color }}>Focus Area: {focusItem.label} (target {focusItem.target}%)</span>
           </div>
         </div>
@@ -372,6 +405,7 @@ function Analytics() {
                   zeroline: false,
                 },
                 yaxis: {
+                  autorange: "reversed",
                   automargin: true,
                   ticklabelposition: "outside",
                   ticklabelstandoff: 16,
