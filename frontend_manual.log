@@ -3,23 +3,16 @@
 > vite --host 0.0.0.0 --port 5173 --strictPort
 
 
-  VITE v5.4.21  ready in 116 ms
+  VITE v5.4.21  ready in 141 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.46:5173/
-1:27:03 AM [vite] hmr update /src/app.jsx
-1:28:05 AM [vite] hmr update /src/app.jsx
-1:29:03 AM [vite] hmr update /src/app.jsx
-1:30:06 AM [vite] hmr update /src/app.jsx
-1:30:57 AM [vite] hmr update /src/app.jsx
-1:31:06 AM [vite] hmr update /src/app.jsx
-1:31:46 AM [vite] hmr update /src/app.jsx
-1:33:32 AM [vite] hmr update /src/app.jsx
-1:33:42 AM [vite] hmr update /src/app.jsx
-1:35:28 AM [vite] hmr update /src/app.jsx
-1:38:36 AM [vite] hmr update /src/app.jsx
-1:38:43 AM [vite] hmr update /src/styles.css
-1:39:45 AM [vite] hmr update /src/styles.css
-1:39:45 AM [vite] hmr update /src/app.jsx
-1:41:14 AM [vite] hmr update /src/app.jsx
-1:41:20 AM [vite] hmr update /src/styles.css
+2:56:03 PM [vite] http proxy error: /api/me
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+2:56:03 PM [vite] http proxy error: /api/me
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+2:56:03 PM [vite] http proxy error: /api/auth/login
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)

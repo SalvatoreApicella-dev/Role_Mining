@@ -14,6 +14,8 @@ const IDENTITY_INDICATOR_DESCRIPTIONS = {
   orphan_references: "Rileva riferimenti a manager/owner non presenti nel dataset, con impatto su ownership e flussi approvativi.",
   inactive_source_mismatch: "Rileva mismatch di stato tra AD e HR (es. AD attivo ma HR terminated), segnale di sincronizzazione sorgenti incompleta.",
   import_reject_rate: "Misura righe scartate o incoerenti in ingestione. Valori alti indicano feed sorgente da normalizzare a monte.",
+  csv_peer_value_outlier: "Rileva valori rari rispetto al peer-group appreso automaticamente dal CSV (es. stesso Business Role/Account Type). Valori a bassa frequenza nei peer sono classificati come sporchi/anomali.",
+  csv_peer_missing_critical: "Rileva campi mancanti dove il peer-group mostra alta completezza. Indica record incompleti o inconsistenze nel tracciato CSV.",
 };
 
 export default function KpiDrilldownPage() {
@@ -213,9 +215,16 @@ export default function KpiDrilldownPage() {
     );
   }
 
-  const visibleClusterSections = (data?.items || []).filter(
-    (s) => s?.type === "Duplicates" || s?.type === "Missing Business Role" || s?.type === "Identity Integrity" || s?.type === "Missing Department"
-  );
+  const visibleClusterSections = data?.items || [];
+  const summaryCards = (data?.summaryCards && data.summaryCards.length > 0)
+    ? data.summaryCards
+    : [
+      { id: "rows_total", label: "Total Rows", count: data?.stats?.rowsTotal || 0 },
+      { id: "duplicates", label: "Duplicates", count: data?.stats?.duplicateDisplayName || 0, sectionType: "Duplicates" },
+      { id: "missing_department", label: "Missing Department", count: data?.stats?.missingDepartment || 0, sectionType: "Missing Department" },
+      { id: "missing_business_role", label: "Missing Business Role", count: data?.stats?.missingBusinessRole || 0, sectionType: "Missing Business Role" },
+      { id: "identity_integrity", label: "Identity Integrity", count: data?.stats?.identityIntegrityIssues || 0, sectionType: "Identity Integrity" },
+    ];
 
   return (
     <div className="main">
@@ -299,44 +308,36 @@ export default function KpiDrilldownPage() {
         <div className="panel">
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ marginTop: 0, fontSize: 16, textTransform: "uppercase", letterSpacing: 1 }}>Riepilogo Qualità Dati</h3>
-            <div className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
-              <div className="card">
-                <div className="k">Righe Totali</div>
-                <div className="v">{data.stats?.rowsTotal || 0}</div>
+            <div style={{ marginBottom: 10, color: "var(--muted)", fontSize: 12 }}>
+              Connector type: <b style={{ color: "var(--text)", textTransform: "uppercase" }}>{String(data.connectorType || "generic")}</b>
+            </div>
+            {String(data.connectorType || "").toLowerCase() === "csv" && (
+              <div style={{ marginBottom: 10, color: "var(--muted)", fontSize: 12 }}>
+                Peer model: <b style={{ color: "var(--text)" }}>{String(data.stats?.csvPeerModel || "global")}</b>
+                {" • "}
+                Signals: <b style={{ color: "var(--text)" }}>{(data.stats?.csvPeerSignals || []).join(", ") || "n/a"}</b>
               </div>
-              <div
-                className="card"
-                onClick={() => openSectionFromCard("Duplicates")}
-                style={{
-                  borderLeft: "3px solid " + ((data.stats?.duplicateDisplayName || 0) > 0 ? "var(--danger)" : "#71ffb2"),
-                  cursor: "pointer",
-                }}
-              >
-                <div className="k">Duplicati</div>
-                <div className="v" style={{ color: (data.stats?.duplicateDisplayName || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.duplicateDisplayName || 0}</div>
-              </div>
-              <div
-                className="card"
-                onClick={() => openSectionFromCard("Missing Business Role")}
-                style={{
-                  borderLeft: "3px solid " + ((data.stats?.missingBusinessRole || 0) > 0 ? "var(--danger)" : "#71ffb2"),
-                  cursor: "pointer",
-                }}
-              >
-                <div className="k">Missing Business Roles</div>
-                <div className="v" style={{ color: (data.stats?.missingBusinessRole || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.missingBusinessRole || 0}</div>
-              </div>
-              <div
-                className="card"
-                onClick={() => openSectionFromCard("Identity Integrity")}
-                style={{
-                  borderLeft: "3px solid " + ((data.stats?.identityIntegrityIssues || 0) > 0 ? "var(--danger)" : "#71ffb2"),
-                  cursor: "pointer",
-                }}
-              >
-                <div className="k">Integrita Identita</div>
-                <div className="v" style={{ color: (data.stats?.identityIntegrityIssues || 0) > 0 ? "var(--danger)" : "#71ffb2" }}>{data.stats?.identityIntegrityIssues || 0}</div>
-              </div>
+            )}
+            <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.min(5, Math.max(2, summaryCards.length))}, minmax(0, 1fr))`, gap: 20 }}>
+              {summaryCards.map((card) => {
+                const count = Number(card?.count || 0);
+                const clickable = Boolean(card?.sectionType);
+                const color = count > 0 ? "var(--danger)" : "#71ffb2";
+                return (
+                  <div
+                    key={card.id || card.label}
+                    className="card"
+                    onClick={clickable ? () => openSectionFromCard(card.sectionType) : undefined}
+                    style={{
+                      borderLeft: clickable ? `3px solid ${color}` : "3px solid rgba(255,255,255,0.14)",
+                      cursor: clickable ? "pointer" : "default",
+                    }}
+                  >
+                    <div className="k">{card.label}</div>
+                    <div className="v" style={{ color: clickable ? color : "var(--text)" }}>{count}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -392,7 +393,7 @@ export default function KpiDrilldownPage() {
                   style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}
                 >
                   <h4 style={{ color: "var(--muted)", margin: 0 }}>
-                    {sectionLabel(section.type)} <span style={{ marginLeft: 8, fontSize: 12 }}>Conteggio: {section.count}</span>
+                    {section.label || sectionLabel(section.type)} <span style={{ marginLeft: 8, fontSize: 12 }}>Conteggio: {section.count}</span>
                   </h4>
                 </button>
                 <button

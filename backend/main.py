@@ -2268,6 +2268,46 @@ class ConnectorConfig(BaseModel):
     sap_oauth_scope: str = Field("", description="OAuth2 scope (opzionale)")
     sap_company_id: str = Field("", description="SuccessFactors company id (opzionale)")
     sap_users_path: str = Field("/sap/opu/odata/sap/ZROLE_MINING_SRV/Users", description="SAP users endpoint path")
+    azure_base_url: str = Field("https://graph.microsoft.com", description="Azure Graph base URL")
+    azure_tenant_id: str = Field("", description="Azure tenant id")
+    azure_client_id: str = Field("", description="Azure app client id")
+    azure_client_secret: str = Field("", description="Azure app client secret")
+    azure_users_path: str = Field("/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled", description="Azure users endpoint/query")
+    one_identity_base_url: str = Field("https://<host>/AppServer", description="One Identity base URL")
+    one_identity_token_url: str = Field("", description="One Identity token URL")
+    one_identity_client_id: str = Field("", description="One Identity client id")
+    one_identity_client_secret: str = Field("", description="One Identity client secret")
+    one_identity_username: str = Field("", description="One Identity username (optional)")
+    one_identity_password: str = Field("", description="One Identity password (optional)")
+    one_identity_users_path: str = Field("/api/entities/person?limit=100", description="One Identity users path")
+    sailpoint_base_url: str = Field("https://<tenant>.api.identitynow.com/v3", description="SailPoint base URL")
+    sailpoint_token_url: str = Field("", description="SailPoint token URL")
+    sailpoint_client_id: str = Field("", description="SailPoint client id")
+    sailpoint_client_secret: str = Field("", description="SailPoint client secret")
+    sailpoint_users_path: str = Field("/accounts", description="SailPoint users path")
+    saviynt_base_url: str = Field("", description="Saviynt base URL")
+    saviynt_token_url: str = Field("", description="Saviynt token URL")
+    saviynt_client_id: str = Field("", description="Saviynt client id")
+    saviynt_client_secret: str = Field("", description="Saviynt client secret")
+    saviynt_username: str = Field("", description="Saviynt service username")
+    saviynt_password: str = Field("", description="Saviynt service password")
+    saviynt_users_path: str = Field("", description="Saviynt users path (tenant-specific)")
+    servicenow_base_url: str = Field("", description="ServiceNow instance URL")
+    servicenow_username: str = Field("", description="ServiceNow username")
+    servicenow_password: str = Field("", description="ServiceNow password")
+    servicenow_users_path: str = Field("/api/now/table/sys_user?sysparm_fields=sys_id,user_name,name,email,department,active", description="ServiceNow users API path")
+    salesforce_base_url: str = Field("", description="Salesforce instance URL")
+    salesforce_token_url: str = Field("https://login.salesforce.com/services/oauth2/token", description="Salesforce OAuth token URL")
+    salesforce_client_id: str = Field("", description="Salesforce client id")
+    salesforce_client_secret: str = Field("", description="Salesforce client secret")
+    salesforce_users_path: str = Field("/services/data/v60.0/query?q=SELECT+Id,Name,Username,Email,Department,IsActive+FROM+User", description="Salesforce users query path")
+    m365_base_url: str = Field("https://graph.microsoft.com", description="Microsoft 365 Graph base URL")
+    m365_tenant_id: str = Field("", description="Microsoft 365 tenant id")
+    m365_client_id: str = Field("", description="Microsoft 365 client id")
+    m365_client_secret: str = Field("", description="Microsoft 365 client secret")
+    m365_users_path: str = Field("/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled", description="Microsoft 365 users query path")
+    discovery_schedules: Dict[str, Any] = Field(default_factory=dict, description="Discovery schedule by connector target")
+    discovery_results: Dict[str, Any] = Field(default_factory=dict, description="Last discovery result by connector target")
 
 
 class ExtractRequest(BaseModel):
@@ -2497,8 +2537,10 @@ def extract_from_sap(scope: str) -> List[Dict[str, Any]]:
     sap_has_oauth = bool(str(cfg.get("sap_token_url") or "").strip() and str(cfg.get("sap_client_id") or "").strip() and str(cfg.get("sap_client_secret") or "").strip())
 
     if not sap_base_url and not sap_username and not sap_password and not sap_api_key and not sap_has_oauth:
-        log("INFO", "Using MOCK SAP extract (connector not configured)")
-        return mock_sap_users()
+        raise HTTPException(
+            status_code=400,
+            detail="Connettore SAP non configurato: imposta SAP Base URL e credenziali reali in Connettori",
+        )
 
     if not sap_base_url:
         raise HTTPException(status_code=400, detail="Configura sap_base_url in Connettori")
@@ -3057,6 +3099,7 @@ def compute_kpis(
         "totalUsers": total_users,
         # "overprivilegedPct": round(overpriv, 2), # Removed/Deprecated
         "modelQuality": mq.get("modelQuality", 0),
+        "orphanRolesCount": mq.get("orphanRoles", mq.get("orphanGroups", 0)),
         "orphanGroupsCount": mq.get("orphanGroups", 0),
         "overprivilegedCount": mq.get("overprivilegedUsers", 0),
         "zeroGroupCount": mq.get("zeroGroupUsers", 0),
@@ -3072,6 +3115,236 @@ def compute_kpis(
     }
 
 
+def compute_cluster_quality_live() -> float:
+    """
+    Compute Cluster Quality from the currently loaded dataset, not only from the
+    last ingest counters. This keeps /api/kpi aligned with cluster-quality drilldown.
+    """
+    ingest = state.get("last_ingest_stats") or {}
+    last_extract = state.get("last_extract") or {}
+    users = last_extract.get("users") or []
+
+    total_ingest = int(ingest.get("rowsTotal") or 0)
+    total_users = len(users)
+    total = max(total_ingest, total_users)
+    if total <= 0:
+        return 0.0
+
+    missing_department = sum(1 for u in users if not str(u.get("department") or "").strip())
+    missing_business_role = sum(1 for u in users if not str(u.get("businessRole") or "").strip())
+    missing_display_name = sum(
+        1 for u in users if not str((u.get("displayName") or u.get("display_name") or "")).strip()
+    )
+    missing_username = sum(1 for u in users if not str(u.get("username") or "").strip())
+
+    duplicate_items = _duplicate_resolution_items()
+    candidate_dup_extra_rows = sum(max(0, int(x.get("count") or 0) - 1) for x in duplicate_items)
+    ingest_dup = int(ingest.get("duplicateDisplayName") or 0)
+    reject_dup_count = 0
+    for r in (state.get("last_rejects") or []):
+        reason = str((r or {}).get("reason") or "")
+        if "Duplicate displayName" in reason:
+            reject_dup_count += 1
+    duplicates = max(ingest_dup, candidate_dup_extra_rows, reject_dup_count)
+
+    src = str(ingest.get("source") or "").lower()
+    if src.startswith("ad"):
+        missing_business_role = 0
+        duplicates = 0
+
+    penalty = (
+        1.00 * (duplicates / total) +
+        0.70 * (missing_department / total) +
+        0.70 * (missing_business_role / total) +
+        0.40 * (missing_display_name / total) +
+        0.40 * (missing_username / total)
+    )
+    penalty = min(1.0, penalty)
+    return round(max(0.0, 100.0 * (1.0 - penalty)), 2)
+
+
+def _effective_connector_type() -> str:
+    """
+    Resolve active connector family for Data Quality rendering.
+    Values: ad | sap | csv | generic
+    """
+    last_extract = state.get("last_extract") or {}
+    ingest = state.get("last_ingest_stats") or {}
+    connector = state.get("connector") or {}
+
+    src = str(last_extract.get("source") or ingest.get("source") or "").strip().lower()
+    if src.startswith("sap"):
+        return "sap"
+    if src.startswith("ad") or src.startswith("ldap"):
+        return "ad"
+    if src.startswith("csv"):
+        return "csv"
+
+    if str(connector.get("sap_base_url") or "").strip():
+        return "sap"
+    if str(connector.get("server") or "").strip():
+        return "ad"
+    return "generic"
+
+
+def _csv_connector_peer_quality(users: List[Dict[str, Any]], ingest: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    CSV-specific, column-aware peer quality checks.
+    - Detects available columns from CSV headers + effective data coverage.
+    - Chooses the best peer model automatically.
+    - Flags dirty values as peer outliers or suspicious missing values.
+    """
+    users = users or []
+    if not users:
+        return {
+            "presentColumns": [],
+            "peerModel": "none",
+            "signals": [],
+            "cases": [],
+        }
+
+    headers = {str(h or "").strip().lower() for h in (ingest.get("csvHeadersNorm") or [])}
+
+    def _val(u: Dict[str, Any], field: str) -> str:
+        if field == "emailDomain":
+            email = str(u.get("email") or "").strip().lower()
+            return email.split("@", 1)[1] if ("@" in email and len(email.split("@", 1)[1]) > 0) else ""
+        if field == "upnDomain":
+            upn = str(u.get("upn") or "").strip().lower()
+            return upn.split("@", 1)[1] if ("@" in upn and len(upn.split("@", 1)[1]) > 0) else ""
+        return str(u.get(field) or "").strip()
+
+    canonical = {
+        "department": {"department", "dept", "dipartimento", "area", "funzione"},
+        "businessRole": {"businessrole", "business role", "br", "ruolo business", "ruolo_business"},
+        "accountType": {"accounttype", "account type", "tipo utente", "tipo_utente", "type"},
+        "manager": {"manager", "owner", "responsabile"},
+        "emailDomain": {"email", "mail", "emailaddress", "posta"},
+        "upnDomain": {"upn", "user principal name", "userprincipalname"},
+        "statusAd": {"statusad", "adstatus", "accountstatusad", "statoad"},
+        "statusHr": {"statushr", "hrstatus", "accountstatushr", "statohr"},
+    }
+
+    present_columns: set[str] = set()
+    field_stats: Dict[str, Dict[str, Any]] = {}
+    for field, aliases in canonical.items():
+        from_header = bool(headers.intersection(aliases))
+        vals = [_val(u, field) for u in users]
+        non_empty_vals = [v for v in vals if v]
+        coverage = (len(non_empty_vals) / max(1, len(users)))
+        distinct = len(set(v.lower() for v in non_empty_vals))
+        if from_header or coverage >= 0.08:
+            present_columns.add(field)
+        field_stats[field] = {
+            "coverage": round(coverage, 4),
+            "distinct": distinct,
+            "fromHeader": from_header,
+        }
+
+    def _usable_for_peer(field: str) -> bool:
+        st = field_stats.get(field) or {}
+        return (field in present_columns) and (st.get("coverage", 0) >= 0.55) and (st.get("distinct", 0) >= 2)
+
+    peer_candidates = [
+        ("businessRole", "accountType"),
+        ("businessRole",),
+        ("department", "accountType"),
+        ("department",),
+        ("accountType",),
+    ]
+    peer_fields: Tuple[str, ...] = tuple()
+    for cand in peer_candidates:
+        if all(_usable_for_peer(x) for x in cand):
+            peer_fields = cand
+            break
+    if not peer_fields:
+        peer_fields = tuple()
+
+    groups: Dict[Tuple[str, ...], List[Dict[str, Any]]] = defaultdict(list)
+    for u in users:
+        if peer_fields:
+            key = tuple((_val(u, f) or "__missing__").lower() for f in peer_fields)
+        else:
+            key = ("__all__",)
+        groups[key].append(u)
+    peer_groups = {k: v for k, v in groups.items() if len(v) >= 5}
+
+    signal_fields = [f for f in ["manager", "emailDomain", "upnDomain", "statusAd", "statusHr", "department", "businessRole", "accountType"] if f in present_columns]
+
+    outlier_users: Dict[str, Dict[str, Any]] = {}
+    missing_users: Dict[str, Dict[str, Any]] = {}
+
+    def _row_ref(u: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "username": str(u.get("username") or "").strip(),
+            "displayName": str(u.get("displayName") or u.get("username") or "").strip(),
+        }
+
+    for _, members in peer_groups.items():
+        group_size = len(members)
+        for field in signal_fields:
+            if field in peer_fields:
+                continue
+            vals_raw = [_val(u, field).strip() for u in members]
+            vals = [v.lower() for v in vals_raw if v]
+            non_empty = len(vals)
+            if non_empty < 5:
+                continue
+            counts = Counter(vals)
+            completeness = non_empty / max(1, group_size)
+
+            for u in members:
+                base = _row_ref(u)
+                key = base["username"] or base["displayName"]
+                uv = _val(u, field).strip().lower()
+                if not uv:
+                    if completeness >= 0.90:
+                        rec = missing_users.setdefault(key, {"username": base["username"], "displayName": base["displayName"], "fields": set()})
+                        rec["fields"].add(field)
+                    continue
+                freq = counts.get(uv, 0) / max(1, non_empty)
+                if non_empty >= 8 and freq < 0.08:
+                    rec = outlier_users.setdefault(key, {"username": base["username"], "displayName": base["displayName"], "fields": set()})
+                    rec["fields"].add(field)
+
+    def _materialize_rows(src: Dict[str, Dict[str, Any]], label_prefix: str) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for rec in src.values():
+            rows.append(
+                {
+                    "username": rec.get("username"),
+                    "displayName": rec.get("displayName"),
+                    "reason": f"{label_prefix}: {', '.join(sorted(rec.get('fields') or []))}",
+                }
+            )
+        rows.sort(key=lambda r: (str(r.get("displayName") or "").lower(), str(r.get("username") or "").lower()))
+        return rows
+
+    outlier_rows = _materialize_rows(outlier_users, "Peer outlier fields")
+    missing_rows = _materialize_rows(missing_users, "Missing vs peer baseline")
+    cases = [
+        {
+            "id": "csv_peer_value_outlier",
+            "label": "CSV peer value outliers",
+            "count": len(outlier_rows),
+            "users": outlier_rows,
+        },
+        {
+            "id": "csv_peer_missing_critical",
+            "label": "CSV peer critical missing values",
+            "count": len(missing_rows),
+            "users": missing_rows,
+        },
+    ]
+
+    return {
+        "presentColumns": sorted(list(present_columns)),
+        "peerModel": "+".join(peer_fields) if peer_fields else "global",
+        "signals": signal_fields,
+        "cases": cases,
+    }
+
+
 def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[str, int]], groups: List[str]) -> Dict[str, Any]:
     import numpy as np
     from datetime import datetime, timezone
@@ -3083,10 +3356,12 @@ def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[st
     if total_users == 0 or total_groups == 0:
         return {
             "modelQuality": 0,
+            "orphanRoles": 0,
             "orphanGroups": 0,
             "overprivilegedUsers": 0,
             "zeroGroupUsers": 0,
             "staleUsers": 0,
+            "orphanRolesList": [],
             "orphansList": [],
             "indicators": [],
             "policyViolations": [],
@@ -3298,7 +3573,7 @@ def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[st
         {"id": "ambiguity", "label": "Assignment Ambiguity", "value": round(ambiguity_pct, 2), "penalty": round(ambiguity_pct, 2), "weight": float(weights.get("ambiguity", 0.08))},
         {"id": "temporal_drift", "label": "Temporal Drift", "value": round(drift_pct, 2), "penalty": round(drift_pct, 2), "weight": float(weights.get("temporal_drift", 0.07))},
         {"id": "matrix_density", "label": "Matrix Density Risk", "value": round(density_penalty_pct, 2), "penalty": round(density_penalty_pct, 2), "weight": float(weights.get("matrix_density", 0.07))},
-        {"id": "orphan_weighted", "label": "Weighted Orphans", "value": round(orphan_weighted_pct, 2), "penalty": round(orphan_weighted_pct, 2), "weight": float(weights.get("orphan_weighted", 0.09))},
+        {"id": "orphan_weighted", "label": "Weighted Orphan Roles", "value": round(orphan_weighted_pct, 2), "penalty": round(orphan_weighted_pct, 2), "weight": float(weights.get("orphan_weighted", 0.09))},
         {"id": "overprivileged", "label": "Overprivileged Concentration", "value": round(over_pct, 2), "penalty": round(over_pct, 2), "weight": float(weights.get("overprivileged", 0.10))},
         {"id": "stale_access", "label": "Stale Access Quality", "value": round(stale_pct, 2), "penalty": round(stale_pct, 2), "weight": float(weights.get("stale_access", 0.10))},
         {"id": "policy_violation", "label": "Policy Violation Rate", "value": round(policy_violation_pct, 2), "penalty": round(policy_violation_pct, 2), "weight": float(weights.get("policy_violation", 0.08))},
@@ -3315,10 +3590,12 @@ def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[st
 
     return {
         "modelQuality": round(quality, 2),
+        "orphanRoles": n_orphans,
         "orphanGroups": n_orphans,
         "overprivilegedUsers": n_over,
         "zeroGroupUsers": n_zero,
         "staleUsers": stale_count,
+        "orphanRolesList": orphans_list,
         "orphansList": orphans_list,
         "staleList": stale_list,
         "zeroList": [{"username": uname, "displayName": (user_by_username.get(uname) or {}).get("displayName"), "groupCount": 0} for uname, gs in user_groups_map.items() if len(gs) == 0],
@@ -3550,7 +3827,173 @@ def kpidrilldown_q(metric: str): #, username: str = Depends(require_auth)):
 
 @app.get("/api/health")
 def health():
+    ensure_discovery_scheduler_started()
     return {"ok": True, "ts": int(time.time())}
+
+
+DISCOVERY_SCHEDULER_STOP = threading.Event()
+DISCOVERY_SCHEDULER_THREAD: Optional[threading.Thread] = None
+
+
+def _run_background_tasks_sync(background_tasks: BackgroundTasks) -> None:
+    for t in list(getattr(background_tasks, "tasks", []) or []):
+        try:
+            t.func(*t.args, **t.kwargs)
+        except Exception as e:
+            log("ERROR", f"Discovery scheduler background task failed: {e}")
+
+
+def _schedule_due(schedule: Dict[str, Any], now_local: datetime) -> Tuple[bool, str]:
+    if not schedule or schedule.get("enabled") is False:
+        return False, ""
+    time_raw = str(schedule.get("time") or "09:00")
+    hh_raw, _, mm_raw = time_raw.partition(":")
+    try:
+        hh = int(hh_raw)
+        mm = int(mm_raw)
+    except Exception:
+        return False, ""
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        return False, ""
+
+    y = now_local.year
+    m = f"{now_local.month:02d}"
+    d = f"{now_local.day:02d}"
+    h = f"{now_local.hour:02d}"
+    minute = f"{mm:02d}"
+    freq = str(schedule.get("frequency") or "DAILY").upper()
+
+    if freq == "HOURLY":
+        due = now_local.minute == mm
+        return due, f"{y}-{m}-{d}T{h}:{minute}"
+    if freq == "WEEKLY":
+        dow_map = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6}
+        wanted = dow_map.get(str(schedule.get("day") or "MON").upper(), 0)
+        due = now_local.weekday() == wanted and now_local.hour == hh and now_local.minute == mm
+        week_num = int((now_local.timetuple().tm_yday - 1) // 7)
+        return due, f"{y}-W{week_num:02d}-{wanted}-{hh:02d}:{mm:02d}"
+    due = now_local.hour == hh and now_local.minute == mm
+    return due, f"{y}-{m}-{d}"
+
+
+def _run_discovery_target(target: str) -> Dict[str, Any]:
+    target = str(target or "").strip().lower()
+    bg = BackgroundTasks()
+    if target == "sap":
+        scope = str((state.get("connector") or {}).get("sap_system") or "").strip() or "SAP"
+        res = extract_sap(ExtractRequest(ou=scope), bg, username="scheduler")
+        _run_background_tasks_sync(bg)
+        summary = {
+            "users": int(getattr(res, "total_users", 0) or 0),
+            "groups": int(getattr(res, "total_groups", 0) or 0),
+            "new_users": int(getattr(res, "new_users", 0) or 0),
+            "updated_users": int(getattr(res, "updated_users", 0) or 0),
+            "updated_by_displayname": int(getattr(res, "updated_by_displayname", 0) or 0),
+            "new_groups": int(getattr(res, "new_groups", 0) or 0),
+            "updated_groups": int(getattr(res, "updated_groups", 0) or 0),
+        }
+        return {
+            "status": "ok",
+            "message": f"SAP discovery completed. Users:{summary['users']} Groups:{summary['groups']}",
+            "summary": summary,
+            "csv_available": True,
+        }
+    if target == "ad":
+        connector_cfg = state.get("connector") or {}
+        ou_dn = str(connector_cfg.get("base_dn") or "").strip()
+        if not ou_dn:
+            raise HTTPException(status_code=400, detail="base_dn non valorizzato per discovery schedulata AD")
+        res = extract(ExtractRequest(ou=ou_dn), bg, username="scheduler")
+        _run_background_tasks_sync(bg)
+        summary = {
+            "users": int(getattr(res, "total_users", 0) or 0),
+            "groups": int(getattr(res, "total_groups", 0) or 0),
+            "new_users": int(getattr(res, "new_users", 0) or 0),
+            "updated_users": int(getattr(res, "updated_users", 0) or 0),
+            "updated_by_displayname": int(getattr(res, "updated_by_displayname", 0) or 0),
+            "new_groups": int(getattr(res, "new_groups", 0) or 0),
+            "updated_groups": int(getattr(res, "updated_groups", 0) or 0),
+        }
+        return {
+            "status": "ok",
+            "message": f"AD discovery completed. Users:{summary['users']} Groups:{summary['groups']}",
+            "summary": summary,
+            "csv_available": True,
+        }
+    if target == "csv":
+        raise HTTPException(status_code=400, detail="Discovery schedulata CSV non supportata (richiede file input)")
+    raise HTTPException(status_code=400, detail=f"Discovery schedulata non supportata per target '{target}'")
+
+
+def run_discovery_scheduler_once() -> None:
+    connector = dict(state.get("connector") or {})
+    schedules = dict(connector.get("discovery_schedules") or {})
+    discovery_results = dict(connector.get("discovery_results") or {})
+    if not schedules:
+        return
+    now = datetime.now()
+    for target, schedule in schedules.items():
+        sched = dict(schedule or {})
+        due, period = _schedule_due(sched, now)
+        if not due:
+            continue
+        if str(sched.get("last_run_period") or "") == str(period):
+            continue
+        log(
+            "INFO",
+            f"Scheduled discovery started target={target} period={period} freq={sched.get('frequency')} time={sched.get('time')}",
+        )
+        try:
+            payload = _run_discovery_target(target)
+            status_msg = str(payload.get("message") or "Discovery completed")
+            sched["last_status"] = "ok"
+            sched["last_message"] = status_msg
+            discovery_results[target] = {
+                **payload,
+                "status": "ok",
+                "message": status_msg,
+                "last_run_at": datetime.now(timezone.utc).isoformat(),
+                "source": "schedule",
+            }
+            log("INFO", f"Scheduled discovery completed target={target} period={period} status=ok")
+        except Exception as e:
+            sched["last_status"] = "error"
+            sched["last_message"] = str(e)
+            discovery_results[target] = {
+                "status": "error",
+                "message": str(e),
+                "last_run_at": datetime.now(timezone.utc).isoformat(),
+                "source": "schedule",
+            }
+            log("ERROR", f"Scheduled discovery failed for target={target}: {e}")
+        sched["last_run_period"] = period
+        sched["last_run_at"] = datetime.now(timezone.utc).isoformat()
+        schedules[target] = sched
+        connector["discovery_schedules"] = schedules
+        connector["discovery_results"] = discovery_results
+        state["connector"] = connector
+        break
+
+
+def _discovery_scheduler_loop() -> None:
+    while not DISCOVERY_SCHEDULER_STOP.is_set():
+        try:
+            run_discovery_scheduler_once()
+        except Exception as e:
+            log("ERROR", f"Discovery scheduler loop error: {e}")
+        DISCOVERY_SCHEDULER_STOP.wait(30)
+
+
+def ensure_discovery_scheduler_started() -> None:
+    global DISCOVERY_SCHEDULER_THREAD
+    if DISCOVERY_SCHEDULER_THREAD and DISCOVERY_SCHEDULER_THREAD.is_alive():
+        return
+    DISCOVERY_SCHEDULER_STOP.clear()
+    DISCOVERY_SCHEDULER_THREAD = threading.Thread(target=_discovery_scheduler_loop, daemon=True)
+    DISCOVERY_SCHEDULER_THREAD.start()
+
+
+ensure_discovery_scheduler_started()
 
 
 class ToggleUserGroupRequest(BaseModel):
@@ -3615,11 +4058,13 @@ def me(username: str = Depends(require_auth)):
 
 @app.get("/api/config/connector", response_model=ConnectorConfig)
 def get_connector(username: str = Depends(require_auth)):
+    ensure_discovery_scheduler_started()
     return ConnectorConfig(**state["connector"])
 
 
 @app.post("/api/config/connector", response_model=ConnectorConfig)
 def set_connector(cfg: ConnectorConfig, username: str = Depends(require_auth)):
+    ensure_discovery_scheduler_started()
     state["connector"] = cfg.model_dump()
     log("INFO", f"Connector config updated by {username} (server={cfg.server}, auth={cfg.auth})")
     return cfg
@@ -4026,10 +4471,24 @@ def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)
     last = state.get("last_mining") or {}
     kpi_data = last.get("kpi") or {}
 
-    # If modelQuality is missing from stored KPI (e.g. from older run), recompute it.
-    if ("modelQuality" not in kpi_data or kpi_data.get("modelQuality") is None) and last.get("matrix"):
+    # Backward/forward compatibility for historical snapshots:
+    # some runs may expose only one of clusterQuality/clusteringQuality.
+    if kpi_data.get("clusterQuality") is None and kpi_data.get("clusteringQuality") is not None:
+        kpi_data["clusterQuality"] = kpi_data.get("clusteringQuality")
+    if kpi_data.get("clusteringQuality") is None and kpi_data.get("clusterQuality") is not None:
+        kpi_data["clusteringQuality"] = kpi_data.get("clusterQuality")
+
+    # If core KPI fields are missing from stored KPI (e.g. from older runs), recompute.
+    needs_recompute = (
+        ("modelQuality" not in kpi_data or kpi_data.get("modelQuality") is None) or
+        ("clusterQuality" not in kpi_data or kpi_data.get("clusterQuality") is None)
+    )
+    if needs_recompute and last.get("matrix"):
         kpi_data = compute_kpis(last.get("users", []), last.get("clusters", []), last.get("matrix", {}))
         last["kpi"] = kpi_data
+
+    # Keep clusterQuality aligned with current dataset quality (same basis as drilldown).
+    kpi_data["clusterQuality"] = compute_cluster_quality_live()
 
     # Overlay latest Smart AI Detection stats if available (aligns KPI with internal page)
     last_ai = state.get("last_ai_detection") or {}
@@ -4048,6 +4507,7 @@ def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)
         kpi_data = {
             "totalUsers": 0,
             "modelQuality": 0,
+            "orphanRolesCount": 0,
             "orphanGroupsCount": 0,
             "overprivilegedCount": 0,
             "zeroGroupCount": 0,
@@ -4148,16 +4608,11 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         ingest = state.get("last_ingest_stats") or {}
         last_extract = state.get("last_extract") or {}
         users = last_extract.get("users") or []
+        connector_type = _effective_connector_type()
         
         # Fallback if state is empty (for consistency)
         if not ingest and not users:
              ingest = {"rowsTotal": 0, "duplicateDisplayName": 0, "missingDepartment": 0}
-
-        # DEBUG: Inspect users
-        if users:
-            print(f"DEBUG: First user object: {users[0]}")
-            missing_preview = [u for u in users if not (u.get("department") or "").strip()][:3]
-            print(f"DEBUG: Missing Dept Preview (Raw): {missing_preview}")
 
         # Missing fields detection
         missing_dept = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("department") or "").strip()]
@@ -4368,7 +4823,7 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         )
         import_reject_rate = round((import_reject_events / max(1, len(users))) * 100.0, 2)
 
-        identity_cases = [
+        identity_cases_all = [
             {"id": "invalid_identity_keys", "label": "Chiavi identita non valide", "count": len(invalid_identity_users), "users": invalid_identity_users},
             {"id": "identity_collisions", "label": "Collisioni identita", "count": len(collision_users), "users": collision_users},
             {"id": "invalid_lastlogon", "label": "LastLogon non valido", "count": len(invalid_lastlogon_users), "users": invalid_lastlogon_users},
@@ -4378,6 +4833,44 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
             {"id": "inactive_source_mismatch", "label": "Mismatch stato AD/HR", "count": len(inactive_mismatch_users), "users": inactive_mismatch_users},
             {"id": "import_reject_rate", "label": "Import reject rate", "count": import_reject_events, "rate": import_reject_rate, "users": []},
         ]
+        csv_peer_info = None
+        if connector_type == "csv":
+            csv_peer_info = _csv_connector_peer_quality(users, ingest)
+            identity_cases_all.extend(csv_peer_info.get("cases") or [])
+        if connector_type == "sap":
+            identity_allowed = {
+                "invalid_identity_keys",
+                "identity_collisions",
+                "businessrole_vocab_drift",
+                "import_reject_rate",
+            }
+        elif connector_type == "ad":
+            identity_allowed = {
+                "invalid_identity_keys",
+                "identity_collisions",
+                "invalid_lastlogon",
+                "department_vocab_drift",
+                "orphan_references",
+                "inactive_source_mismatch",
+                "import_reject_rate",
+            }
+        elif connector_type == "csv":
+            identity_allowed = {
+                "invalid_identity_keys",
+                "identity_collisions",
+                "invalid_lastlogon",
+                "department_vocab_drift",
+                "businessrole_vocab_drift",
+                "orphan_references",
+                "inactive_source_mismatch",
+                "import_reject_rate",
+                "csv_peer_value_outlier",
+                "csv_peer_missing_critical",
+            }
+        else:
+            identity_allowed = {c.get("id") for c in identity_cases_all}
+
+        identity_cases = [c for c in identity_cases_all if c.get("id") in identity_allowed]
         identity_total = sum(int(c.get("count") or 0) for c in identity_cases)
 
         # Merging stats to reflect calculation on the actual displayed data
@@ -4389,16 +4882,63 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         stats["missingDepartment"] = len(missing_dept)
         stats["missingBusinessRole"] = len(missing_br)
         stats["identityIntegrityIssues"] = identity_total
+        if csv_peer_info:
+            stats["csvPresentColumns"] = csv_peer_info.get("presentColumns") or []
+            stats["csvPeerModel"] = csv_peer_info.get("peerModel") or "global"
+            stats["csvPeerSignals"] = csv_peer_info.get("signals") or []
+
+        items = [
+            {"type": "Duplicates", "label": "Duplicates", "count": len(duplicate_items), "users": duplicate_items},
+            {"type": "Missing Department", "label": "Missing Department", "count": len(missing_dept), "users": missing_dept},
+            {"type": "Missing Business Role", "label": "Missing Business Role", "count": len(missing_br), "users": missing_br},
+            {"type": "Identity Integrity", "label": "Identity Integrity", "count": identity_total, "cases": identity_cases, "users": []},
+        ]
+        if connector_type == "sap":
+            visible_types = {"Duplicates", "Missing Business Role", "Identity Integrity"}
+            summary_cards = [
+                {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)},
+                {"id": "duplicates", "label": "Duplicates", "count": int(stats.get("duplicateDisplayName") or 0), "sectionType": "Duplicates"},
+                {"id": "missing_business_role", "label": "Missing Business Role", "count": int(stats.get("missingBusinessRole") or 0), "sectionType": "Missing Business Role"},
+                {"id": "identity_integrity", "label": "Identity Integrity", "count": int(stats.get("identityIntegrityIssues") or 0), "sectionType": "Identity Integrity"},
+            ]
+        elif connector_type == "ad":
+            visible_types = {"Duplicates", "Missing Department", "Identity Integrity"}
+            summary_cards = [
+                {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)},
+                {"id": "duplicates", "label": "Duplicates", "count": int(stats.get("duplicateDisplayName") or 0), "sectionType": "Duplicates"},
+                {"id": "missing_department", "label": "Missing Department", "count": int(stats.get("missingDepartment") or 0), "sectionType": "Missing Department"},
+                {"id": "identity_integrity", "label": "Identity Integrity", "count": int(stats.get("identityIntegrityIssues") or 0), "sectionType": "Identity Integrity"},
+            ]
+        elif connector_type == "csv":
+            outlier_case = next((c for c in identity_cases if c.get("id") == "csv_peer_value_outlier"), {"count": 0})
+            missing_case = next((c for c in identity_cases if c.get("id") == "csv_peer_missing_critical"), {"count": 0})
+            visible_types = {"Duplicates", "Missing Department", "Missing Business Role", "Identity Integrity"}
+            summary_cards = [
+                {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)},
+                {"id": "duplicates", "label": "Duplicates", "count": int(stats.get("duplicateDisplayName") or 0), "sectionType": "Duplicates"},
+                {"id": "missing_department", "label": "Missing Department", "count": int(stats.get("missingDepartment") or 0), "sectionType": "Missing Department"},
+                {"id": "missing_business_role", "label": "Missing Business Role", "count": int(stats.get("missingBusinessRole") or 0), "sectionType": "Missing Business Role"},
+                {"id": "csv_peer_value_outlier", "label": "Peer Dirty Values", "count": int(outlier_case.get("count") or 0), "sectionType": "Identity Integrity"},
+                {"id": "csv_peer_missing_critical", "label": "Peer Critical Missing", "count": int(missing_case.get("count") or 0), "sectionType": "Identity Integrity"},
+            ]
+        else:
+            visible_types = {"Duplicates", "Missing Department", "Missing Business Role", "Identity Integrity"}
+            summary_cards = [
+                {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)},
+                {"id": "duplicates", "label": "Duplicates", "count": int(stats.get("duplicateDisplayName") or 0), "sectionType": "Duplicates"},
+                {"id": "missing_department", "label": "Missing Department", "count": int(stats.get("missingDepartment") or 0), "sectionType": "Missing Department"},
+                {"id": "missing_business_role", "label": "Missing Business Role", "count": int(stats.get("missingBusinessRole") or 0), "sectionType": "Missing Business Role"},
+                {"id": "identity_integrity", "label": "Identity Integrity", "count": int(stats.get("identityIntegrityIssues") or 0), "sectionType": "Identity Integrity"},
+            ]
+
+        items = [x for x in items if x.get("type") in visible_types]
 
         return {
             "metric": "cluster-quality",
+            "connectorType": connector_type,
             "stats": stats,
-            "items": [
-                {"type": "Duplicates", "count": len(duplicate_items), "users": duplicate_items},
-                {"type": "Missing Department", "count": len(missing_dept), "users": missing_dept},
-                {"type": "Missing Business Role", "count": len(missing_br), "users": missing_br},
-                {"type": "Identity Integrity", "count": identity_total, "cases": identity_cases, "users": []},
-            ],
+            "summaryCards": summary_cards,
+            "items": items,
             "rejects": state.get("last_rejects") or []
         }
 
@@ -4414,12 +4954,16 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
 
         mq = compute_model_quality(users, matrix, groups_list)
 
-        orphans = [{"groupName": g, "userCount": 0} for g in mq.get("orphansList", [])]
+        orphan_roles = [
+            {"roleName": g, "groupName": g, "userCount": 0}
+            for g in (mq.get("orphanRolesList") or mq.get("orphansList") or [])
+        ]
 
         return {
             "metric": metric,
             "modelQuality": mq.get("modelQuality", 0),
-            "groupsIssues": orphans,
+            "roleIssues": orphan_roles,
+            "groupsIssues": orphan_roles,
             "staleAccounts": mq.get("staleList", []),
             "zeroGroupsUsers": mq.get("zeroList", []),
             "overprivilegedUsers": mq.get("overprivilegedList", []),
@@ -4695,6 +5239,9 @@ def businessroles_recalculate_groups(username: str = Depends(require_auth)):
     group_role_counts: Dict[str, Dict[str, int]] = {}
     for u in users:
         role = (u.get("businessRole") or "Unassigned").strip()
+        if not role or role == "Unassigned":
+            # Do not use fallback/unassigned values to avoid destructive remaps.
+            continue
         for g in (u.get("groups") or []):
             if not g:
                 continue
@@ -4719,10 +5266,23 @@ def businessroles_recalculate_groups(username: str = Depends(require_auth)):
     for role in set(state["business_roles"]).union(set(role_groups.keys())):
         _ensure_role_registered(role)
 
+    preserved_roles = 0
+    updated_roles = 0
+    groups_added = 0
     for role in state["business_roles"]:
-        assigned = sorted(role_groups.get(role, set()))
+        assigned_set = set(role_groups.get(role, set()))
         state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
-        state["role_meta"][role]["groups"] = assigned
+        current_set = set((state["role_meta"][role] or {}).get("groups") or [])
+
+        # Non-destructive recalc: never remove existing groups, only add newly inferred ones.
+        merged = sorted(current_set.union(assigned_set))
+        added_here = len(set(merged) - current_set)
+        groups_added += added_here
+        state["role_meta"][role]["groups"] = merged
+        if added_here > 0:
+            updated_roles += 1
+        elif merged:
+            preserved_roles += 1
         state["brdb_ready"] = False
 
     # Explicitly (re)build BRDB and suggestion cache only on user-triggered recalc.
@@ -4735,11 +5295,16 @@ def businessroles_recalculate_groups(username: str = Depends(require_auth)):
     state["brdb_ready"] = True
 
     state["mining_dirty"] = True
-    log("INFO", f"Business role groups recalculated by {username}")
+    log(
+        "INFO",
+        f"Business role groups recalculated by {username} (updated={updated_roles}, preserved={preserved_roles}, added={groups_added}, inferred_groups={len(group_role_counts)})",
+    )
     invalidate_hot_caches(roles=True, kpi=True, mining=True)
     return {
         "ok": True,
-        "rolesUpdated": len(state["business_roles"]),
+        "rolesUpdated": updated_roles,
+        "rolesPreserved": preserved_roles,
+        "groupsAdded": groups_added,
         "groupsAssigned": len(group_role_counts),
         "proposedGroupsCalculated": True,
     }
@@ -5102,6 +5667,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
     if not reader.fieldnames:
         raise HTTPException(status_code=400, detail="CSV senza header")
 
+    csv_headers_norm = sorted({(h or "").strip().lower() for h in (reader.fieldnames or []) if (h or "").strip()})
     norm_fields = { (h or "").strip().lower() for h in reader.fieldnames }
     if "displayname" not in norm_fields:
         raise HTTPException(
@@ -5451,6 +6017,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
 
     last_ingest_stats = {
         "source": "csv",
+        "csvHeadersNorm": csv_headers_norm,
         "rowsTotal": csv_rows_total,
         "rowsKept": len(merged_users),
         "duplicateDisplayName": csv_dup_dn_rows,

@@ -1,22 +1,22 @@
 {
   "role_group_counts": {
     "Backend Engineer": {
-      "INF_MAIL_READ": 203.0,
+      "INF_MAIL_READ": 182.0,
       "INF_STORAGE_VIEW": 1.0,
       "INF_VPN_ALL": 14.0,
-      "INF_VPN_READ": 203.0,
+      "INF_VPN_READ": 182.0,
       "SYS_AWS_ALL": 15.0,
-      "SYS_AWS_READ": 99.0,
-      "SYS_CONFLUENCE_READ": 202.0,
+      "SYS_AWS_READ": 98.0,
+      "SYS_CONFLUENCE_READ": 182.0,
       "SYS_CONFLUENCE_VIEW": 78.0,
-      "SYS_GITLAB_WRITE": 83.0,
+      "SYS_GITLAB_WRITE": 64.0,
       "SYS_JENKINS_WRITE": 57.0,
       "SYS_JIRA_WRITE": 59.0,
       "SYS_K8S_READ": 85.0,
       "SYS_AWS_WRITE": 67.0,
       "SYS_GITLAB_READ": 56.0,
-      "SYS_JIRA_READ": 77.0,
-      "SYS_JENKINS_READ": 54.0,
+      "SYS_JIRA_READ": 57.0,
+      "SYS_JENKINS_READ": 53.0,
       "SYS_K8S_WRITE": 80.0,
       "SYS_JIRA_VIEW": 59.0,
       "SYS_GITLAB_VIEW": 53.0,
@@ -38,18 +38,17 @@
       "SYS_K8S_ADMIN": 6.0,
       "SYS_CONFLUENCE_ALL": 3.0,
       "INF_CD_WRITE": 7.0,
-      "INF_CI_WRITE": 7.0,
-      "INF_STORAGE_READ": 20.0
+      "INF_CI_WRITE": 7.0
     },
     "Frontend Engineer": {
-      "INF_MAIL_READ": 134.0,
+      "INF_MAIL_READ": 116.0,
       "INF_STORAGE_READ": 1.0,
-      "INF_VPN_READ": 134.0,
-      "SYS_AWS_READ": 64.0,
+      "INF_VPN_READ": 116.0,
+      "SYS_AWS_READ": 46.0,
       "SYS_CONFLUENCE_READ": 116.0,
       "SYS_CONFLUENCE_WRITE": 41.0,
       "SYS_GITHUB_WRITE": 37.0,
-      "SYS_JENKINS_READ": 54.0,
+      "SYS_JENKINS_READ": 36.0,
       "SYS_JIRA_READ": 43.0,
       "SYS_AWS_WRITE": 56.0,
       "SYS_JENKINS_VIEW": 39.0,
@@ -77,7 +76,6 @@
       "INF_VPN_ALL": 8.0
     },
     "Mobile Engineer": {
-      "INF_MAIL_READ": 116.0,
       "INF_STORAGE_WRITE": 1.0,
       "INF_VPN_READ": 115.0,
       "SYS_AWS_READ": 45.0,
@@ -86,6 +84,7 @@
       "SYS_GITHUB_WRITE": 29.0,
       "SYS_JENKINS_WRITE": 30.0,
       "SYS_JIRA_READ": 31.0,
+      "INF_MAIL_READ": 115.0,
       "SYS_GITHUB_VIEW": 42.0,
       "SYS_AWS_WRITE": 52.0,
       "SYS_JENKINS_VIEW": 47.0,
@@ -114,10 +113,10 @@
     "QA Engineer": {
       "INF_MAIL_READ": 117.0,
       "INF_VPN_READ": 117.0,
-      "SYS_CONFLUENCE_READ": 117.0,
       "SYS_JENKINS_VIEW": 39.0,
       "SYS_JIRA_VIEW": 42.0,
       "SYS_K8S_READ": 52.0,
+      "SYS_CONFLUENCE_READ": 116.0,
       "SYS_CONFLUENCE_WRITE": 34.0,
       "SYS_JENKINS_WRITE": 34.0,
       "SYS_JIRA_WRITE": 30.0,
@@ -950,10 +949,7 @@
       "INF_CI_WRITE": 6.0,
       "INF_FILESHARE_WRITE": 29.0,
       "INF_VPN_ALL": 8.0,
-      "INF_FILESHARE_READ": 38.0,
-      "SAP_CO_DISPLAY": 1.0,
-      "SAP_FI_DISPLAY": 1.0,
-      "SAP_PORTAL_USER": 1.0
+      "INF_FILESHARE_READ": 38.0
     },
     "AP Specialist": {
       "INF_ERP_VIEW": 41.0,
@@ -1189,158 +1185,6 @@
       "SYS_SALESFORCE_ADMIN": 5.0,
       "SYS_SERVICENOW_ADMIN": 3.0,
       "SYS_WORKDAY_READ": 37.0
-    },
-    "HR Manager": {
-      "INF_MAIL_READ": 1.0,
-      "SYS_CONFLUENCE_READ": 1.0,
-      "SYS_JIRA_READ": 1.0
-    },
-    "Security Analyst": {
-      "INF_MAIL_READ": 19.0,
-      "INF_STORAGE_READ": 19.0,
-      "INF_VPN_READ": 19.0,
-      "SYS_CONFLUENCE_READ": 19.0,
-      "SYS_JIRA_READ": 19.0
-    },
-    "Finance Specialist": {
-      "INF_MAIL_READ": 19.0,
-      "INF_STORAGE_READ": 19.0,
-      "INF_VPN_READ": 19.0,
-      "SYS_CONFLUENCE_READ": 19.0,
-      "SYS_JIRA_READ": 19.0,
-      "SYS_GITLAB_WRITE": 19.0
-    },
-    "Sales Specialist": {
-      "INF_MAIL_READ": 18.0,
-      "INF_VPN_READ": 18.0,
-      "SYS_AWS_READ": 18.0,
-      "SYS_JENKINS_READ": 18.0
-    },
-    "HR Specialist": {
-      "INF_MAIL_READ": 17.0,
-      "INF_STORAGE_READ": 17.0,
-      "INF_VPN_READ": 17.0,
-      "SYS_CONFLUENCE_READ": 17.0,
-      "SYS_JIRA_READ": 17.0,
-      "SAP_HCM_DISPLAY": 1.0,
-      "SAP_HCM_WRITE": 1.0,
-      "SAP_PORTAL_USER": 1.0
-    },
-    "Back-end Engineer": {
-      "INF_MAIL_READ": 3.0,
-      "INF_STORAGE_READ": 2.0,
-      "INF_VPN_READ": 3.0,
-      "SYS_CONFLUENCE_READ": 2.0,
-      "SYS_JIRA_READ": 2.0,
-      "SYS_GITLAB_WRITE": 1.0,
-      "SYS_AWS_READ": 1.0,
-      "SYS_JENKINS_READ": 1.0
-    },
-    "BE Engineer": {
-      "INF_MAIL_READ": 2.0,
-      "INF_STORAGE_READ": 1.0,
-      "INF_VPN_READ": 2.0,
-      "SYS_CONFLUENCE_READ": 1.0,
-      "SYS_JIRA_READ": 1.0,
-      "SYS_GITLAB_WRITE": 1.0,
-      "SYS_AWS_READ": 1.0,
-      "SYS_JENKINS_READ": 1.0
-    },
-    "Backend Eng.": {
-      "INF_MAIL_READ": 2.0,
-      "INF_VPN_READ": 2.0,
-      "SYS_AWS_READ": 1.0,
-      "SYS_JENKINS_READ": 1.0,
-      "INF_STORAGE_READ": 1.0,
-      "SYS_CONFLUENCE_READ": 1.0,
-      "SYS_JIRA_READ": 1.0
-    },
-    "LEGAL": {
-      "eSign_Admin": 2.0,
-      "eSign_User": 4.0,
-      "ContractMgmt_Admin": 2.0,
-      "ContractMgmt_User": 3.0
-    },
-    "HR": {
-      "Azure": 3.0,
-      "Confluence": 3.0,
-      "Payroll_Admin": 3.0,
-      "HRIS": 4.0,
-      "TimeTracking_User": 3.0,
-      "Payroll": 2.0
-    },
-    "SALES": {
-      "CRM": 7.0,
-      "VPN": 4.0,
-      "DiscountApproval": 3.0,
-      "Salesforce_User": 2.0,
-      "VPN_ALL": 4.0
-    },
-    "IT": {
-      "Azure_ALL": 4.0,
-      "GitLab_Admin": 3.0,
-      "Azure": 6.0,
-      "AzureAD_Admin": 3.0,
-      "Confluence": 3.0,
-      "Admin": 2.0,
-      "GitLab": 4.0,
-      "Jira_User": 2.0
-    },
-    "OPS": {
-      "Warehouse_User": 5.0,
-      "WMS_User": 5.0,
-      "ShiftRoster_User": 4.0
-    },
-    "FINANCE": {
-      "Accounting_Read": 6.0,
-      "ExpenseMgmt_User": 5.0,
-      "SAP_FI": 5.0,
-      "Approver": 4.0
-    },
-    "MARKETING": {
-      "CMS_Editor": 3.0,
-      "Analytics_Read": 5.0,
-      "Confluence": 4.0
-    },
-    "Accountant": {
-      "SAP_FI_DISPLAY": 1.0,
-      "SAP_FI_POST": 1.0,
-      "SAP_PORTAL_USER": 1.0
-    },
-    "Buyer": {
-      "SAP_MM_BUYER": 1.0,
-      "SAP_MM_DISPLAY": 1.0,
-      "SAP_PORTAL_USER": 1.0
-    },
-    "Warehouse Operator": {
-      "SAP_MM_DISPLAY": 1.0,
-      "SAP_MM_WM_WRITE": 1.0,
-      "SAP_PORTAL_USER": 1.0
-    },
-    "Sales Rep": {
-      "SAP_PORTAL_USER": 1.0,
-      "SAP_SD_DISPLAY": 1.0,
-      "SAP_SD_ORDER": 1.0
-    },
-    "IT Operator": {
-      "SAP_BASIS_MONITOR": 1.0,
-      "SAP_BASIS_SUPPORT": 1.0,
-      "SAP_PORTAL_USER": 1.0
-    },
-    "Production Planner": {
-      "SAP_PORTAL_USER": 1.0,
-      "SAP_PP_DISPLAY": 1.0,
-      "SAP_PP_PLAN": 1.0
-    },
-    "Quality Analyst": {
-      "SAP_PORTAL_USER": 1.0,
-      "SAP_QM_DISPLAY": 1.0,
-      "SAP_QM_WRITE": 1.0
-    },
-    "Logistics Specialist": {
-      "SAP_LE_DISPLAY": 1.0,
-      "SAP_LE_SHIP": 1.0,
-      "SAP_PORTAL_USER": 1.0
     }
   },
   "group_role_primary": {
@@ -1382,7 +1226,7 @@
     "SYS_CONFLUENCE_ALL": "CSM Enterprise",
     "INF_CD_WRITE": "Backend Engineer",
     "INF_CI_WRITE": "Backend Engineer",
-    "INF_STORAGE_READ": "Backend Engineer",
+    "INF_STORAGE_READ": "Frontend Engineer",
     "SYS_GITHUB_WRITE": "Frontend Engineer",
     "SYS_GITHUB_READ": "Frontend Engineer",
     "SYS_GITHUB_VIEW": "Mobile Engineer",
@@ -1527,60 +1371,11 @@
     "INF_ERP_VIEW": "AR Specialist",
     "INF_ERP_ALL": "Controller",
     "INF_ERP_ADMIN": "Procurement Specialist",
-    "SAP_CO_DISPLAY": "Controller",
-    "SAP_FI_DISPLAY": "Controller",
-    "SAP_PORTAL_USER": "Controller",
     "SYS_WORKDAY_READ": "Payroll Specialist",
     "SYS_WORKDAY_ADMIN": "Talent Partner",
     "SYS_WORKDAY_ALL": "Payroll Specialist",
     "SYS_WORKDAY_WRITE": "Payroll Specialist",
-    "SYS_WORKDAY_VIEW": "Business Apps Analyst",
-    "SAP_HCM_DISPLAY": "HR Specialist",
-    "SAP_HCM_WRITE": "HR Specialist",
-    "eSign_Admin": "LEGAL",
-    "eSign_User": "LEGAL",
-    "ContractMgmt_Admin": "LEGAL",
-    "ContractMgmt_User": "LEGAL",
-    "Azure": "IT",
-    "Confluence": "MARKETING",
-    "Payroll_Admin": "HR",
-    "HRIS": "HR",
-    "TimeTracking_User": "HR",
-    "Payroll": "HR",
-    "CRM": "SALES",
-    "VPN": "SALES",
-    "DiscountApproval": "SALES",
-    "Salesforce_User": "SALES",
-    "VPN_ALL": "SALES",
-    "Azure_ALL": "IT",
-    "GitLab_Admin": "IT",
-    "AzureAD_Admin": "IT",
-    "Admin": "IT",
-    "GitLab": "IT",
-    "Jira_User": "IT",
-    "Warehouse_User": "OPS",
-    "WMS_User": "OPS",
-    "ShiftRoster_User": "OPS",
-    "Accounting_Read": "FINANCE",
-    "ExpenseMgmt_User": "FINANCE",
-    "SAP_FI": "FINANCE",
-    "Approver": "FINANCE",
-    "CMS_Editor": "MARKETING",
-    "Analytics_Read": "MARKETING",
-    "SAP_FI_POST": "Accountant",
-    "SAP_MM_BUYER": "Buyer",
-    "SAP_MM_DISPLAY": "Buyer",
-    "SAP_MM_WM_WRITE": "Warehouse Operator",
-    "SAP_SD_DISPLAY": "Sales Rep",
-    "SAP_SD_ORDER": "Sales Rep",
-    "SAP_BASIS_MONITOR": "IT Operator",
-    "SAP_BASIS_SUPPORT": "IT Operator",
-    "SAP_PP_DISPLAY": "Production Planner",
-    "SAP_PP_PLAN": "Production Planner",
-    "SAP_QM_DISPLAY": "Quality Analyst",
-    "SAP_QM_WRITE": "Quality Analyst",
-    "SAP_LE_DISPLAY": "Logistics Specialist",
-    "SAP_LE_SHIP": "Logistics Specialist"
+    "SYS_WORKDAY_VIEW": "Business Apps Analyst"
   },
-  "total_assignments": 4924
+  "total_assignments": 4743
 }

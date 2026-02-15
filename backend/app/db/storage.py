@@ -5,10 +5,11 @@ Uses JSON for simplicity and human-readability.
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
 import threading
 from contextlib import contextmanager
+import tempfile
 
 
 class JsonFileStore:
@@ -40,26 +41,81 @@ class JsonFileStore:
         """Load state from file."""
         with self._lock:
             try:
-                with open(self.filepath, 'r', encoding='utf-8') as f:
-                    raw_data = json.load(f)
-                    self._state = self._restore_from_json(raw_data)
-            except (json.JSONDecodeError, FileNotFoundError):
+                raw_data = self._load_json_file(self.filepath)
+                self._state = self._restore_from_json(raw_data)
+            except FileNotFoundError:
+                # First boot path: keep empty in-memory state; caller will initialize defaults.
                 self._state = {}
-                self.save()
+            except json.JSONDecodeError as exc:
+                self._quarantine_corrupted_primary()
+                restored = self._restore_from_latest_backup()
+                if restored is not None:
+                    self._state = self._restore_from_json(restored)
+                    # Heal primary file immediately from recovered backup.
+                    self.save()
+                    return
+                raise RuntimeError(
+                    f"Persistent storage is corrupted and no valid backup was found: {self.filepath}"
+                ) from exc
     
     def save(self):
         """Persist state to file."""
         with self._lock:
             # Convert sets to lists for JSON serialization
             serializable_state = self._prepare_for_json(self._state)
-            with open(self.filepath, 'w', encoding='utf-8') as f:
-                json.dump(
-                    serializable_state,
-                    f,
-                    indent=self._json_indent,
-                    ensure_ascii=False,
-                    separators=(",", ":") if self._json_indent is None else None,
-                )
+            self._atomic_write_json(self.filepath, serializable_state)
+
+    def _load_json_file(self, path: Path) -> Dict[str, Any]:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _atomic_write_json(self, path: Path, payload: Dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=str(path.parent),
+            prefix=f"{path.name}.tmp.",
+            suffix=".json",
+            delete=False,
+        ) as tf:
+            json.dump(
+                payload,
+                tf,
+                indent=self._json_indent,
+                ensure_ascii=False,
+                separators=(",", ":") if self._json_indent is None else None,
+            )
+            tf.flush()
+            os.fsync(tf.fileno())
+            temp_name = tf.name
+        os.replace(temp_name, path)
+
+    def _backup_candidates(self) -> List[Path]:
+        pattern = f"{self.filepath.name}.backup_*"
+        return sorted(self.filepath.parent.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    def _restore_from_latest_backup(self) -> Optional[Dict[str, Any]]:
+        candidates = self._backup_candidates()
+        if not candidates:
+            return None
+        for backup in candidates:
+            try:
+                return self._load_json_file(backup)
+            except Exception:
+                continue
+        return None
+
+    def _quarantine_corrupted_primary(self) -> None:
+        try:
+            if not self.filepath.exists():
+                return
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            corrupt = self.filepath.with_name(f"{self.filepath.name}.corrupt_{ts}")
+            os.replace(self.filepath, corrupt)
+        except Exception:
+            # Never block startup because quarantine failed.
+            pass
     
     def _prepare_for_json(self, obj: Any) -> Any:
         """Recursively convert non-JSON-serializable types."""
@@ -210,6 +266,46 @@ def init_default_state():
             "sap_oauth_scope": "",
             "sap_company_id": "",
             "sap_users_path": "/sap/opu/odata/sap/ZROLE_MINING_SRV/Users",
+            "azure_base_url": "https://graph.microsoft.com",
+            "azure_tenant_id": "",
+            "azure_client_id": "",
+            "azure_client_secret": "",
+            "azure_users_path": "/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled",
+            "one_identity_base_url": "https://<host>/AppServer",
+            "one_identity_token_url": "",
+            "one_identity_client_id": "",
+            "one_identity_client_secret": "",
+            "one_identity_username": "",
+            "one_identity_password": "",
+            "one_identity_users_path": "/api/entities/person?limit=100",
+            "sailpoint_base_url": "https://<tenant>.api.identitynow.com/v3",
+            "sailpoint_token_url": "",
+            "sailpoint_client_id": "",
+            "sailpoint_client_secret": "",
+            "sailpoint_users_path": "/accounts",
+            "saviynt_base_url": "",
+            "saviynt_token_url": "",
+            "saviynt_client_id": "",
+            "saviynt_client_secret": "",
+            "saviynt_username": "",
+            "saviynt_password": "",
+            "saviynt_users_path": "",
+            "servicenow_base_url": "",
+            "servicenow_username": "",
+            "servicenow_password": "",
+            "servicenow_users_path": "/api/now/table/sys_user?sysparm_fields=sys_id,user_name,name,email,department,active",
+            "salesforce_base_url": "",
+            "salesforce_token_url": "https://login.salesforce.com/services/oauth2/token",
+            "salesforce_client_id": "",
+            "salesforce_client_secret": "",
+            "salesforce_users_path": "/services/data/v60.0/query?q=SELECT+Id,Name,Username,Email,Department,IsActive+FROM+User",
+            "m365_base_url": "https://graph.microsoft.com",
+            "m365_tenant_id": "",
+            "m365_client_id": "",
+            "m365_client_secret": "",
+            "m365_users_path": "/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled",
+            "discovery_schedules": {},
+            "discovery_results": {},
         },
         "last_extract": {
             "ou": "",

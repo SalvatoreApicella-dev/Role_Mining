@@ -8,7 +8,7 @@ const INDICATOR_DESCRIPTIONS = {
     ambiguity: "Misura quanti utenti hanno una confidenza bassa nella classificazione del ruolo. Un valore alto indica che il modello fatica a distinguere chiaramente il ruolo corretto per molti utenti.",
     temporal_drift: "Misura quanto gli accessi recenti si discostano dai pattern storici del ruolo. Un valore alto indica deriva del comportamento e necessita di aggiornare policy o template.",
     matrix_density: "Misura il rischio dovuto a una matrice permessi troppo sparsa o troppo densa. Entrambi gli estremi riducono la qualita del modello e la sua capacita di generalizzare.",
-    orphan_weighted: "Misura i gruppi orfani (senza utenti) con peso maggiore per gruppi critici. Un valore alto segnala configurazioni inutilizzate o incoerenti, con impatto su governance e manutenzione.",
+    orphan_weighted: "Misura i ruoli orfani (gruppi senza utenti assegnati) con peso maggiore per ruoli critici. Un valore alto segnala configurazioni inutilizzate o incoerenti, con impatto su governance e manutenzione.",
     overprivileged: "Misura la concentrazione di utenti con numero di gruppi molto alto rispetto alla baseline. Un valore alto aumenta la superficie di rischio e riduce il principio del least privilege.",
     stale_access: "Misura la quota di account con ultimo accesso molto vecchio ma ancora dotati di permessi. Un valore alto indica possibile accumulo di accessi non necessari o obsoleti.",
     policy_violation: "Misura la frequenza di combinazioni di permessi in conflitto con regole di policy (es. pattern SoD). Un valore alto indica rischio di non conformita e separazione dei compiti insufficiente.",
@@ -105,7 +105,7 @@ export default function ModelQualityPage() {
     );
 
     const score = data?.modelQualityScore ?? 0;
-    const orphanCount = (data?.groupsIssues || []).length;
+    const orphanCount = (data?.roleIssues || data?.groupsIssues || []).length;
     const staleCount = (data?.staleAccounts || []).length;
     const zeroCount = (data?.zeroGroupsUsers || []).length;
     const overCount = (data?.overprivilegedUsers || []).length;
@@ -172,7 +172,7 @@ export default function ModelQualityPage() {
 
             <div className="grid" style={{ marginBottom: 24, gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>
                 <StatCard label="Model Score" value={`${score}%`} color={score > 80 ? "#71ffb2" : score > 50 ? "#ff9f1c" : "#ff6a6a"} onClick={() => openFromCard("indicators")} />
-                <StatCard label="Gruppi Orfani" value={orphanCount} color={orphanCount > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("groups")} />
+                <StatCard label="Ruoli Orfani" value={orphanCount} color={orphanCount > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("groups")} />
                 <StatCard label="Account Stale" value={staleCount} color={staleCount > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("stale")} />
                 <StatCard label="Issue Utenti" value={totalUserIssues} color={totalUserIssues > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("users")} />
                 <StatCard label="Policy Violations" value={policyCount} color={policyCount > 0 ? "var(--danger)" : "#71ffb2"} onClick={() => openFromCard("policy")} />
@@ -191,7 +191,7 @@ export default function ModelQualityPage() {
                             transition: "all 0.2s"
                         }}
                     >
-                        Gruppi Impattati
+                        Ruoli Impattati
                     </button>
                     <button
                         onClick={() => setActiveTab("users")}
@@ -226,27 +226,27 @@ export default function ModelQualityPage() {
                                 onClick={() => setGroupsOpen((x) => !x)}
                                 style={{ background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}
                             >
-                                <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 0 }}>Gruppi Orfani (0 Membri)</h3>
+                                <h3 style={{ marginTop: 0, fontSize: 15, color: "var(--muted)", textTransform: "uppercase", marginBottom: 0 }}>Ruoli Orfani (0 Utenti Assegnati)</h3>
                             </button>
                             <ExportCsvButton
                                 onClick={() =>
                                     downloadCsv(
-                                        "gruppi_impattati.csv",
-                                        ["groupName", "userCount"],
-                                        (data?.groupsIssues || []).map((g) => [g.groupName, g.userCount])
+                                        "ruoli_orfani.csv",
+                                        ["roleName", "userCount"],
+                                        (data?.roleIssues || data?.groupsIssues || []).map((g) => [g.roleName || g.groupName, g.userCount])
                                     )
                                 }
                             />
                         </div>
                         {groupsOpen && (
                             <>
-                                {orphanCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun gruppo orfano trovato.</div> : (
+                                {orphanCount === 0 ? <div style={{ color: "#71ffb2", fontSize: 13 }}>Nessun ruolo orfano trovato.</div> : (
                                     <table className="table">
-                                        <thead><tr><th>Nome Gruppo</th><th style={{ width: 120, textAlign: "center" }}>Utenti</th></tr></thead>
+                                        <thead><tr><th>Nome Ruolo</th><th style={{ width: 120, textAlign: "center" }}>Utenti</th></tr></thead>
                                         <tbody>
-                                            {(data?.groupsIssues || []).map((g, i) => (
+                                            {(data?.roleIssues || data?.groupsIssues || []).map((g, i) => (
                                                 <tr key={i}>
-                                                    <td style={{ fontWeight: 500 }}>{g.groupName}</td>
+                                                    <td style={{ fontWeight: 500 }}>{g.roleName || g.groupName}</td>
                                                     <td style={{ textAlign: "center", fontFamily: "monospace" }}>{g.userCount}</td>
                                                 </tr>
                                             ))}

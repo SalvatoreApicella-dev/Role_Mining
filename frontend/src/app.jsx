@@ -192,7 +192,8 @@ function Analytics() {
       try {
         setErr("");
         const data = await api.kpi();
-        setKpi(data);
+        const normalized = (data && typeof data.kpi === "object") ? data.kpi : data;
+        setKpi(normalized || {});
       } catch (e) {
         setErr(String(e.message || e));
       }
@@ -200,9 +201,11 @@ function Analytics() {
   }, []);
 
   const pct = (v) => Math.max(0, Math.min(100, Number(v) || 0));
-  const clusterPct = pct(kpi.clusterQuality);
-  const modelPct = pct(kpi.modelQuality);
-  const aiPct = pct(kpi.aiDetection);
+  const clusterPct = pct(
+    kpi.clusterQuality ?? kpi.clusteringQuality ?? kpi.cluster_quality ?? kpi.clustering_quality
+  );
+  const modelPct = pct(kpi.modelQuality ?? kpi.model_quality);
+  const aiPct = pct(kpi.aiDetection ?? kpi.ai_detection);
   const kpiItems = [
     {
       label: "Cluster Quality",
@@ -399,6 +402,7 @@ function Analytics() {
             <div>
               <div className="analytics-rail-label">{item.label}</div>
               <div className="analytics-rail-meta">
+                {`Score ${Math.round(Number(item.value) || 0)}% • `}
                 {idx === 0 ? "Priorita alta" : idx === railItems.length - 1 ? "Stabile" : "Da monitorare"}
               </div>
             </div>
@@ -432,18 +436,69 @@ function Connettori() {
     sap_oauth_scope: "",
     sap_company_id: "",
     sap_users_path: "/sap/opu/odata/sap/ZROLE_MINING_SRV/Users",
+    azure_base_url: "https://graph.microsoft.com",
+    azure_tenant_id: "",
+    azure_client_id: "",
+    azure_client_secret: "",
+    azure_users_path: "/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled",
+    one_identity_base_url: "https://<host>/AppServer",
+    one_identity_token_url: "",
+    one_identity_client_id: "",
+    one_identity_client_secret: "",
+    one_identity_username: "",
+    one_identity_password: "",
+    one_identity_users_path: "/api/entities/person?limit=100",
+    sailpoint_base_url: "https://<tenant>.api.identitynow.com/v3",
+    sailpoint_token_url: "",
+    sailpoint_client_id: "",
+    sailpoint_client_secret: "",
+    sailpoint_users_path: "/accounts",
+    saviynt_base_url: "",
+    saviynt_token_url: "",
+    saviynt_client_id: "",
+    saviynt_client_secret: "",
+    saviynt_username: "",
+    saviynt_password: "",
+    saviynt_users_path: "",
+    servicenow_base_url: "",
+    servicenow_username: "",
+    servicenow_password: "",
+    servicenow_users_path: "/api/now/table/sys_user?sysparm_fields=sys_id,user_name,name,email,department,active",
+    salesforce_base_url: "",
+    salesforce_token_url: "https://login.salesforce.com/services/oauth2/token",
+    salesforce_client_id: "",
+    salesforce_client_secret: "",
+    salesforce_users_path: "/services/data/v60.0/query?q=SELECT+Id,Name,Username,Email,Department,IsActive+FROM+User",
+    m365_base_url: "https://graph.microsoft.com",
+    m365_tenant_id: "",
+    m365_client_id: "",
+    m365_client_secret: "",
+    m365_users_path: "/v1.0/users?$select=id,displayName,userPrincipalName,mail,department,accountEnabled",
+    discovery_schedules: {},
+    discovery_results: {},
   });
   const [ou, setOu] = useState("OU=Users,DC=example,DC=local");
   const [statusMsg, setStatusMsg] = useState("");
   const [sapStatusMsg, setSapStatusMsg] = useState("");
+  const [cfgStatusMsg, setCfgStatusMsg] = useState("");
   const [err, setErr] = useState("");
   const [adLoading, setAdLoading] = useState(false);
   const [sapLoading, setSapLoading] = useState(false);
   const [adExporting, setAdExporting] = useState(false);
+  const [cfgSaving, setCfgSaving] = useState(false);
 
   const [csvFile, setCsvFile] = useState(null);
   const [importMsg, setImportMsg] = useState("");
   const [csvLoading, setCsvLoading] = useState(false);
+  const [discoveryLoadingTarget, setDiscoveryLoadingTarget] = useState("");
+  const [scheduleModal, setScheduleModal] = useState({ open: false, target: "" });
+  const [resultModal, setResultModal] = useState({ open: false, target: "" });
+  const [scheduleForm, setScheduleForm] = useState({
+    frequency: "DAILY",
+    time: "09:00",
+    day: "MON",
+    enabled: true,
+  });
 
 
 
@@ -451,7 +506,7 @@ function Connettori() {
     try {
       setErr("");
       const c = await api.getConnector();
-      setCfg(c);
+      setCfg((prev) => ({ ...prev, ...(c || {}) }));
       if (c?.base_dn) {
         setOu(c.base_dn);
       }
@@ -462,18 +517,31 @@ function Connettori() {
 
   useEffect(() => { load(); }, []);
 
-  async function saveCfg() {
-    setAdLoading(true);
-    setSapLoading(true);
+  const connectorLabels = {
+    sap: "SAP",
+    ad: "Active Directory",
+    azure: "Azure AD",
+    one_identity: "One Identity",
+    sailpoint: "SailPoint",
+    saviynt: "Saviynt",
+    servicenow: "ServiceNow",
+    salesforce: "Salesforce",
+    m365: "Microsoft 365",
+    csv: "CSV",
+  };
+
+  async function saveCfg(msg = "Configurazione salvata.", opts = {}) {
+    const { silent = false, overrideCfg = null } = opts;
+    setCfgSaving(true);
     try {
-      setErr(""); setStatusMsg("");
-      await api.setConnector(cfg);
-      setStatusMsg("Configurazione salvata.");
+      setErr("");
+      if (!silent) setCfgStatusMsg("");
+      await api.setConnector(overrideCfg || cfg);
+      if (!silent) setCfgStatusMsg(msg);
     } catch (e) {
       setErr(String(e.message || e));
     } finally {
-      setAdLoading(false);
-      setSapLoading(false);
+      setCfgSaving(false);
     }
   }
 
@@ -492,13 +560,16 @@ function Connettori() {
       ]
         .filter(([, value]) => value > 0)
         .map(([label, value]) => `${label}: ${value}`);
-      setStatusMsg(
+      const message = (
         `Snapshot AD completato.` +
         `${parts.length ? ` ${parts.join(", ")}.` : ""}` +
         ` Logiche in background in esecuzione.`
       );
+      setStatusMsg(message);
+      return { message, res };
     } catch (e) {
       setErr(String(e.message || e));
+      throw e;
     } finally {
       setAdLoading(false);
     }
@@ -520,17 +591,218 @@ function Connettori() {
       ]
         .filter(([, value]) => value > 0)
         .map(([label, value]) => `${label}: ${value}`);
-      setSapStatusMsg(
+      const message = (
         `Snapshot SAP completato.` +
         `${parts.length ? ` ${parts.join(", ")}.` : ""}` +
         ` Logiche in background in esecuzione.`
       );
+      setSapStatusMsg(message);
+      return { message, res };
     } catch (e) {
       setErr(String(e.message || e));
+      throw e;
     } finally {
       setSapLoading(false);
     }
   }
+
+  async function doCsvDiscovery() {
+    if (!csvFile) {
+      setImportMsg("Seleziona un file CSV prima della Discovery.");
+      throw new Error("CSV non selezionato");
+    }
+    setCsvLoading(true);
+    try {
+      setImportMsg("");
+      const out = await importBusinessRolesCsv(csvFile);
+      const n = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+      const parts = [
+        ["Righe importate", n(out.rowsTotal ?? out.csvRowsTotal)],
+        ["Nuovi utenti", n(out.addedUsers ?? out.rowsKept)],
+        ["Aggiornati per displayName", n(out.updatedByDisplayName ?? out.updatedUsers)],
+        ["Valori duplicati", n(out.csvDuplicateDisplayNameRows ?? out.duplicateDisplayName)],
+        ["Valori incompleti", n(out.csvRowsMissingBR ?? out.missingBusinessRole)],
+      ]
+        .filter(([, value]) => value > 0)
+        .map(([label, value]) => `${label}: ${value}`);
+      const message = (
+        `Discovery CSV completata.` +
+        `${parts.length ? ` ${parts.join(", ")}.` : ""}` +
+        `${out.processingInBackground ? " Logiche in background in esecuzione." : ""}`
+      );
+      setImportMsg(message);
+      return { message, out };
+    } catch (e) {
+      const msg = `Discovery KO: ${e?.message ?? String(e)}`;
+      setImportMsg(msg);
+      throw e;
+    } finally {
+      setCsvLoading(false);
+    }
+  }
+
+  async function persistDiscoveryResult(target, payload) {
+    const { status, message, source = "manual", summary = {}, csv_available = true } = payload || {};
+    const nextCfg = {
+      ...cfg,
+      discovery_results: {
+        ...(cfg.discovery_results || {}),
+        [target]: {
+          status: status || "ok",
+          message: message || "",
+          summary,
+          csv_available: !!csv_available,
+          source,
+          last_run_at: new Date().toISOString(),
+        },
+      },
+    };
+    setCfg(nextCfg);
+    await saveCfg("", { silent: true, overrideCfg: nextCfg });
+  }
+
+  async function runDiscovery(target) {
+    setDiscoveryLoadingTarget(target);
+    try {
+      setErr("");
+      if (target !== "csv") {
+        await saveCfg("", { silent: true });
+      }
+      if (target === "sap") {
+        const { message, res } = await doSapExtract();
+        await persistDiscoveryResult(target, {
+          status: "ok",
+          message,
+          source: "manual",
+          summary: {
+            users: Number(res?.total_users || 0),
+            groups: Number(res?.total_groups || 0),
+            new_users: Number(res?.new_users || 0),
+            updated_users: Number(res?.updated_users || 0),
+            updated_by_displayname: Number(res?.updated_by_displayname || 0),
+            new_groups: Number(res?.new_groups || 0),
+            updated_groups: Number(res?.updated_groups || 0),
+          },
+          csv_available: true,
+        });
+        return;
+      }
+      if (target === "ad") {
+        const { message, res } = await doExtract();
+        await persistDiscoveryResult(target, {
+          status: "ok",
+          message,
+          source: "manual",
+          summary: {
+            users: Number(res?.total_users || 0),
+            groups: Number(res?.total_groups || 0),
+            new_users: Number(res?.new_users || 0),
+            updated_users: Number(res?.updated_users || 0),
+            updated_by_displayname: Number(res?.updated_by_displayname || 0),
+            new_groups: Number(res?.new_groups || 0),
+            updated_groups: Number(res?.updated_groups || 0),
+          },
+          csv_available: true,
+        });
+        return;
+      }
+      if (target === "csv") {
+        const { message, out } = await doCsvDiscovery();
+        await persistDiscoveryResult(target, {
+          status: "ok",
+          message,
+          source: "manual",
+          summary: {
+            rows_imported: Number(out?.rowsTotal ?? out?.csvRowsTotal ?? 0),
+            new_users: Number(out?.addedUsers ?? out?.rowsKept ?? 0),
+            updated_by_displayname: Number(out?.updatedByDisplayName ?? out?.updatedUsers ?? 0),
+            duplicate_values: Number(out?.csvDuplicateDisplayNameRows ?? out?.duplicateDisplayName ?? 0),
+            incomplete_values: Number(out?.csvRowsMissingBR ?? out?.missingBusinessRole ?? 0),
+          },
+          csv_available: true,
+        });
+        return;
+      }
+      const msg = `Discovery ${connectorLabels[target] || target} salvata. Endpoint Discovery backend da collegare.`;
+      setCfgStatusMsg(msg);
+      await persistDiscoveryResult(target, {
+        status: "pending",
+        message: msg,
+        source: "manual",
+        summary: {},
+        csv_available: false,
+      });
+    } catch (e) {
+      const msg = String(e?.message || e);
+      await persistDiscoveryResult(target, {
+        status: "error",
+        message: msg,
+        source: "manual",
+        summary: {},
+        csv_available: false,
+      });
+    } finally {
+      setDiscoveryLoadingTarget("");
+    }
+  }
+
+  function openScheduleModal(target) {
+    const current = (cfg.discovery_schedules || {})[target] || {};
+    setScheduleForm({
+      frequency: current.frequency || "DAILY",
+      time: current.time || "09:00",
+      day: current.day || "MON",
+      enabled: current.enabled !== false,
+    });
+    setScheduleModal({ open: true, target });
+  }
+
+  function closeScheduleModal() {
+    setScheduleModal({ open: false, target: "" });
+  }
+
+  function openResultModal(target) {
+    setResultModal({ open: true, target });
+  }
+
+  function closeResultModal() {
+    setResultModal({ open: false, target: "" });
+  }
+
+  async function saveSchedule(e) {
+    e.preventDefault();
+    const target = scheduleModal.target;
+    if (!target) return;
+    const nextCfg = {
+      ...cfg,
+      discovery_schedules: {
+        ...(cfg.discovery_schedules || {}),
+        [target]: {
+          ...scheduleForm,
+          updated_at: new Date().toISOString(),
+        },
+      },
+    };
+    setCfg(nextCfg);
+    await saveCfg(`Schedulazione Discovery salvata per ${connectorLabels[target] || target}.`, { overrideCfg: nextCfg });
+    closeScheduleModal();
+  }
+
+  function renderConnectorActions(target, saveMessage) {
+    const loading = discoveryLoadingTarget === target;
+    return (
+      <div className="row connector-form-actions" style={{ marginTop: 10 }}>
+        <button className="primary" onClick={() => saveCfg(saveMessage)} disabled={cfgSaving}>Salva</button>
+        <button className="primary" onClick={() => runDiscovery(target)} disabled={cfgSaving || loading}>
+          {loading ? "Discovery..." : "Discovery"}
+        </button>
+        <button className="primary" onClick={() => openScheduleModal(target)} disabled={cfgSaving || loading}>Schedule</button>
+        <button className="primary" onClick={() => openResultModal(target)} disabled={cfgSaving}>Esito</button>
+      </div>
+    );
+  }
+
+  const updateCfg = (patch) => setCfg((prev) => ({ ...prev, ...patch }));
 
   async function downloadLastAdExtractCsv() {
     try {
@@ -555,311 +827,516 @@ function Connettori() {
   return (
     <div className="main">
       <h2 style={{ marginTop: 0 }}>Connettori</h2>
+      <div style={{ color: "var(--muted)", marginBottom: 12 }}>
+        Lista per categoria con un solo connettore per target.
+      </div>
 
-      {/* CARD 1: AD Connector */}
-      <div className="panel">
-        <h3 style={{ marginTop: 0 }}>Active Directory (Connector)</h3>
-
-        <div className="row">
-          <input
-            style={{ width: 260 }}
-            value={cfg.server}
-            onChange={e => setCfg({ ...cfg, server: e.target.value })}
-            placeholder="server (es: ad.local o mock)"
-            aria-label="AD Server Address"
-          />
-          <select
-            value={cfg.auth}
-            onChange={e => setCfg({ ...cfg, auth: e.target.value })}
-          >
-            <option value="SIMPLE">SIMPLE</option>
-            <option value="NTLM">NTLM</option>
-          </select>
-        </div>
-
-        <div className="row" style={{ marginTop: 10 }}>
-          <input
-            type="number"
-            style={{ width: 120 }}
-            value={cfg.port || ""}
-            onChange={e => setCfg({ ...cfg, port: e.target.value })}
-            placeholder="Port (389)"
-          />
-          <label style={{ display: "flex", alignItems: "center", marginLeft: 10, cursor: "pointer" }}>
+      <details className="connector-category" open>
+        <summary>
+          <span>HRIS</span>
+        </summary>
+        <div className="connector-category__content">
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>SAP Connector</h3>
+          <div className="row">
             <input
-              type="checkbox"
-              checked={!!cfg.use_ssl}
-              onChange={e => setCfg({ ...cfg, use_ssl: e.target.checked })}
-              style={{ marginRight: 6 }}
+              style={{ width: 360 }}
+              value={cfg.sap_base_url || ""}
+              onChange={(e) => updateCfg({ sap_base_url: e.target.value })}
+              placeholder="SAP Base URL (es: https://sap.company.local)"
+              aria-label="SAP Base URL"
             />
-            Usa SSL
-          </label>
-        </div>
-
-        <div className="row" style={{ marginTop: 10 }}>
-          <input
-            style={{ width: 260 }}
-            value={cfg.bind_user}
-            onChange={e => setCfg({ ...cfg, bind_user: e.target.value })}
-            placeholder="bind_user"
-          />
-          <input
-            style={{ width: 260 }}
-            value={cfg.bind_password}
-            onChange={e => setCfg({ ...cfg, bind_password: e.target.value })}
-            placeholder="bind_password"
-            type="password"
-          />
-        </div>
-
-        <div className="row" style={{ marginTop: 10 }}>
-          <input
-            style={{ width: 540 }}
-            value={cfg.base_dn}
-            onChange={e => setCfg({ ...cfg, base_dn: e.target.value })}
-            placeholder="base_dn (opzionale qui)"
-          />
-          <button className="primary" onClick={saveCfg}>Salva</button>
-        </div>
-
-        <hr className="sep" />
-
-        <div className="row">
-          <input
-            style={{ width: 540 }}
-            value={ou}
-            onChange={e => setOu(e.target.value)}
-            placeholder="OU DN"
-          />
-          <button className="primary" onClick={doExtract}>AD Import</button>
-          <button
-            className="primary"
-            title="Scarica ultima estrazione AD (CSV)"
-            aria-label="Scarica ultima estrazione AD in CSV"
-            onClick={downloadLastAdExtractCsv}
-            disabled={adExporting}
-            style={{ padding: "10px 12px", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 44 }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+            <select
+              style={{ width: 140 }}
+              value={cfg.sap_auth_mode || "AUTO"}
+              onChange={(e) => updateCfg({ sap_auth_mode: e.target.value })}
+              aria-label="SAP Auth Mode"
             >
-              <path d="M12 3v11" />
-              <path d="m7 10 5 5 5-5" />
-              <path d="M4 21h16" />
-            </svg>
-          </button>
+              <option value="AUTO">AUTO</option>
+              <option value="OAUTH2">OAUTH2</option>
+              <option value="APIKEY">APIKEY</option>
+              <option value="BASIC">BASIC</option>
+            </select>
+            <input
+              style={{ width: 120 }}
+              value={cfg.sap_client || ""}
+              onChange={(e) => updateCfg({ sap_client: e.target.value })}
+              placeholder="Client (es: 100)"
+              aria-label="SAP Client"
+            />
+            <input
+              style={{ width: 180 }}
+              value={cfg.sap_system || ""}
+              onChange={(e) => updateCfg({ sap_system: e.target.value })}
+              placeholder="System (es: ECC)"
+              aria-label="SAP System"
+            />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input
+              style={{ width: 540 }}
+              value={cfg.sap_users_path || ""}
+              onChange={(e) => updateCfg({ sap_users_path: e.target.value })}
+              placeholder="Users API Path (es: /sap/opu/odata/sap/ZROLE_MINING_SRV/Users)"
+              aria-label="SAP Users API Path"
+            />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input
+              style={{ width: 260 }}
+              value={cfg.sap_username || ""}
+              onChange={(e) => updateCfg({ sap_username: e.target.value })}
+              placeholder="SAP Username"
+              aria-label="SAP Username"
+            />
+            <input
+              style={{ width: 260 }}
+              value={cfg.sap_password || ""}
+              onChange={(e) => updateCfg({ sap_password: e.target.value })}
+              placeholder="SAP Password"
+              type="password"
+              aria-label="SAP Password"
+            />
+            <input
+              style={{ width: 260 }}
+              value={cfg.sap_api_key || ""}
+              onChange={(e) => updateCfg({ sap_api_key: e.target.value })}
+              placeholder="SAP API Key (opzionale)"
+              type="password"
+              aria-label="SAP API Key"
+            />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input
+              style={{ width: 360 }}
+              value={cfg.sap_token_url || ""}
+              onChange={(e) => updateCfg({ sap_token_url: e.target.value })}
+              placeholder="OAuth Token URL (es: https://<host>/oauth/token)"
+              aria-label="SAP OAuth Token URL"
+            />
+            <input
+              style={{ width: 180 }}
+              value={cfg.sap_client_id || ""}
+              onChange={(e) => updateCfg({ sap_client_id: e.target.value })}
+              placeholder="OAuth Client ID"
+              aria-label="SAP OAuth Client ID"
+            />
+            <input
+              style={{ width: 180 }}
+              value={cfg.sap_client_secret || ""}
+              onChange={(e) => updateCfg({ sap_client_secret: e.target.value })}
+              placeholder="OAuth Client Secret"
+              type="password"
+              aria-label="SAP OAuth Client Secret"
+            />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input
+              style={{ width: 180 }}
+              value={cfg.sap_oauth_scope || ""}
+              onChange={(e) => updateCfg({ sap_oauth_scope: e.target.value })}
+              placeholder="OAuth Scope (opz.)"
+              aria-label="SAP OAuth Scope"
+            />
+            <input
+              style={{ width: 180 }}
+              value={cfg.sap_company_id || ""}
+              onChange={(e) => updateCfg({ sap_company_id: e.target.value })}
+              placeholder="SuccessFactors Company ID (opz.)"
+              aria-label="SAP SuccessFactors Company ID"
+            />
+          </div>
+          {renderConnectorActions("sap", "Configurazione SAP salvata.")}
+          {sapStatusMsg && <div className="ok">{sapStatusMsg}</div>}
+          <div className="connector-loadingbar" aria-hidden="true">
+            <div className={`connector-loadingbar__fill${(sapLoading || cfgSaving) ? " is-active" : ""}`} />
+          </div>
         </div>
-
-        {statusMsg && <div className="ok">{statusMsg}</div>}
-        {err && <div className="err">{err}</div>}
-        <div className="connector-loadingbar" aria-hidden="true">
-          <div className={`connector-loadingbar__fill${(adLoading || adExporting) ? " is-active" : ""}`} />
         </div>
-      </div>
+      </details>
 
-      <div style={{ height: 12 }} />
-
-      {/* CARD 2: SAP Connector */}
-      <div className="panel">
-        <h3 style={{ marginTop: 0 }}>SAP Connector</h3>
-
-        <div className="row">
-          <input
-            style={{ width: 360 }}
-            value={cfg.sap_base_url || ""}
-            onChange={e => setCfg({ ...cfg, sap_base_url: e.target.value })}
-            placeholder="SAP Base URL (es: https://sap.company.local)"
-            aria-label="SAP Base URL"
-          />
-          <select
-            style={{ width: 140 }}
-            value={cfg.sap_auth_mode || "AUTO"}
-            onChange={e => setCfg({ ...cfg, sap_auth_mode: e.target.value })}
-            aria-label="SAP Auth Mode"
-          >
-            <option value="AUTO">AUTO</option>
-            <option value="OAUTH2">OAUTH2</option>
-            <option value="APIKEY">APIKEY</option>
-            <option value="BASIC">BASIC</option>
-          </select>
-          <input
-            style={{ width: 120 }}
-            value={cfg.sap_client || ""}
-            onChange={e => setCfg({ ...cfg, sap_client: e.target.value })}
-            placeholder="Client (es: 100)"
-            aria-label="SAP Client"
-          />
-          <input
-            style={{ width: 180 }}
-            value={cfg.sap_system || ""}
-            onChange={e => setCfg({ ...cfg, sap_system: e.target.value })}
-            placeholder="System (es: ECC)"
-            aria-label="SAP System"
-          />
+      <details className="connector-category" open>
+        <summary>
+          <span>IDP</span>
+        </summary>
+        <div className="connector-category__content">
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Azure AD Connector</h3>
+          <div className="row">
+            <input style={{ width: 320 }} value={cfg.azure_base_url || ""} onChange={(e) => updateCfg({ azure_base_url: e.target.value })} placeholder="Base URL (es: https://graph.microsoft.com)" />
+            <input style={{ width: 220 }} value={cfg.azure_tenant_id || ""} onChange={(e) => updateCfg({ azure_tenant_id: e.target.value })} placeholder="Tenant ID" />
+            <input style={{ width: 220 }} value={cfg.azure_client_id || ""} onChange={(e) => updateCfg({ azure_client_id: e.target.value })} placeholder="Client ID" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 320 }} value={cfg.azure_client_secret || ""} onChange={(e) => updateCfg({ azure_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+            <input style={{ width: 540 }} value={cfg.azure_users_path || ""} onChange={(e) => updateCfg({ azure_users_path: e.target.value })} placeholder="Users Path (es: /v1.0/users?$select=...)" />
+          </div>
+          {renderConnectorActions("azure", "Configurazione Azure AD salvata.")}
         </div>
-
-        <div className="row" style={{ marginTop: 10 }}>
-          <input
-            style={{ width: 540 }}
-            value={cfg.sap_users_path || ""}
-            onChange={e => setCfg({ ...cfg, sap_users_path: e.target.value })}
-            placeholder="Users API Path (es: /sap/opu/odata/sap/ZROLE_MINING_SRV/Users)"
-            aria-label="SAP Users API Path"
-          />
         </div>
+      </details>
 
-        <div className="row" style={{ marginTop: 10 }}>
-          <input
-            style={{ width: 260 }}
-            value={cfg.sap_username || ""}
-            onChange={e => setCfg({ ...cfg, sap_username: e.target.value })}
-            placeholder="SAP Username"
-            aria-label="SAP Username"
-          />
-          <input
-            style={{ width: 260 }}
-            value={cfg.sap_password || ""}
-            onChange={e => setCfg({ ...cfg, sap_password: e.target.value })}
-            placeholder="SAP Password"
-            type="password"
-            aria-label="SAP Password"
-          />
-          <input
-            style={{ width: 260 }}
-            value={cfg.sap_api_key || ""}
-            onChange={e => setCfg({ ...cfg, sap_api_key: e.target.value })}
-            placeholder="SAP API Key (opzionale)"
-            type="password"
-            aria-label="SAP API Key"
-          />
+      <details className="connector-category" open>
+        <summary>
+          <span>IGA</span>
+        </summary>
+        <div className="connector-category__content">
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>One Identity Connector</h3>
+          <div className="row">
+            <input style={{ width: 360 }} value={cfg.one_identity_base_url || ""} onChange={(e) => updateCfg({ one_identity_base_url: e.target.value })} placeholder="Base URL (es: https://<host>/AppServer)" />
+            <input style={{ width: 320 }} value={cfg.one_identity_token_url || ""} onChange={(e) => updateCfg({ one_identity_token_url: e.target.value })} placeholder="Token URL (opzionale/OIDC)" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 220 }} value={cfg.one_identity_client_id || ""} onChange={(e) => updateCfg({ one_identity_client_id: e.target.value })} placeholder="Client ID" />
+            <input style={{ width: 220 }} value={cfg.one_identity_client_secret || ""} onChange={(e) => updateCfg({ one_identity_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+            <input style={{ width: 220 }} value={cfg.one_identity_username || ""} onChange={(e) => updateCfg({ one_identity_username: e.target.value })} placeholder="Username (opzionale)" />
+            <input style={{ width: 220 }} value={cfg.one_identity_password || ""} onChange={(e) => updateCfg({ one_identity_password: e.target.value })} placeholder="Password (opzionale)" type="password" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 620 }} value={cfg.one_identity_users_path || ""} onChange={(e) => updateCfg({ one_identity_users_path: e.target.value })} placeholder="Users Path (es: /api/entities/person?limit=100)" />
+          </div>
+          {renderConnectorActions("one_identity", "Configurazione One Identity salvata.")}
+
+          <hr className="sep" />
+
+          <h3 style={{ marginTop: 0 }}>SailPoint Connector</h3>
+          <div className="row">
+            <input style={{ width: 360 }} value={cfg.sailpoint_base_url || ""} onChange={(e) => updateCfg({ sailpoint_base_url: e.target.value })} placeholder="Base URL (es: https://<tenant>.api.identitynow.com/v3)" />
+            <input style={{ width: 320 }} value={cfg.sailpoint_token_url || ""} onChange={(e) => updateCfg({ sailpoint_token_url: e.target.value })} placeholder="Token URL (es: https://<tenant>.api.identitynow.com/oauth/token)" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 220 }} value={cfg.sailpoint_client_id || ""} onChange={(e) => updateCfg({ sailpoint_client_id: e.target.value })} placeholder="Client ID" />
+            <input style={{ width: 220 }} value={cfg.sailpoint_client_secret || ""} onChange={(e) => updateCfg({ sailpoint_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+            <input style={{ width: 420 }} value={cfg.sailpoint_users_path || ""} onChange={(e) => updateCfg({ sailpoint_users_path: e.target.value })} placeholder="Users Path (es: /accounts)" />
+          </div>
+          {renderConnectorActions("sailpoint", "Configurazione SailPoint salvata.")}
+
+          <hr className="sep" />
+
+          <h3 style={{ marginTop: 0 }}>Saviynt Connector</h3>
+          <div className="row">
+            <input style={{ width: 360 }} value={cfg.saviynt_base_url || ""} onChange={(e) => updateCfg({ saviynt_base_url: e.target.value })} placeholder="Base URL (tenant-specific Saviynt API)" />
+            <input style={{ width: 320 }} value={cfg.saviynt_token_url || ""} onChange={(e) => updateCfg({ saviynt_token_url: e.target.value })} placeholder="Token URL (tenant-specific, se previsto)" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 220 }} value={cfg.saviynt_client_id || ""} onChange={(e) => updateCfg({ saviynt_client_id: e.target.value })} placeholder="Client ID" />
+            <input style={{ width: 220 }} value={cfg.saviynt_client_secret || ""} onChange={(e) => updateCfg({ saviynt_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+            <input style={{ width: 220 }} value={cfg.saviynt_username || ""} onChange={(e) => updateCfg({ saviynt_username: e.target.value })} placeholder="Service Username" />
+            <input style={{ width: 220 }} value={cfg.saviynt_password || ""} onChange={(e) => updateCfg({ saviynt_password: e.target.value })} placeholder="Service Password" type="password" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 620 }} value={cfg.saviynt_users_path || ""} onChange={(e) => updateCfg({ saviynt_users_path: e.target.value })} placeholder="Users Path (tenant-specific, vedi doc Saviynt)" />
+          </div>
+          {renderConnectorActions("saviynt", "Configurazione Saviynt salvata.")}
         </div>
-
-        <div className="row" style={{ marginTop: 10 }}>
-          <input
-            style={{ width: 360 }}
-            value={cfg.sap_token_url || ""}
-            onChange={e => setCfg({ ...cfg, sap_token_url: e.target.value })}
-            placeholder="OAuth Token URL (es: https://<host>/oauth/token)"
-            aria-label="SAP OAuth Token URL"
-          />
-          <input
-            style={{ width: 180 }}
-            value={cfg.sap_client_id || ""}
-            onChange={e => setCfg({ ...cfg, sap_client_id: e.target.value })}
-            placeholder="OAuth Client ID"
-            aria-label="SAP OAuth Client ID"
-          />
-          <input
-            style={{ width: 180 }}
-            value={cfg.sap_client_secret || ""}
-            onChange={e => setCfg({ ...cfg, sap_client_secret: e.target.value })}
-            placeholder="OAuth Client Secret"
-            type="password"
-            aria-label="SAP OAuth Client Secret"
-          />
         </div>
+      </details>
 
-        <div className="row" style={{ marginTop: 10 }}>
-          <input
-            style={{ width: 180 }}
-            value={cfg.sap_oauth_scope || ""}
-            onChange={e => setCfg({ ...cfg, sap_oauth_scope: e.target.value })}
-            placeholder="OAuth Scope (opz.)"
-            aria-label="SAP OAuth Scope"
-          />
-          <input
-            style={{ width: 180 }}
-            value={cfg.sap_company_id || ""}
-            onChange={e => setCfg({ ...cfg, sap_company_id: e.target.value })}
-            placeholder="SuccessFactors Company ID (opz.)"
-            aria-label="SAP SuccessFactors Company ID"
-          />
-          <button className="primary" onClick={saveCfg}>Salva</button>
-          <button className="primary" onClick={doSapExtract}>SAP Import</button>
+      <details className="connector-category" open>
+        <summary>
+          <span>Directories</span>
+        </summary>
+        <div className="connector-category__content">
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Active Directory Connector</h3>
+          <div className="row">
+            <input
+              style={{ width: 260 }}
+              value={cfg.server}
+              onChange={(e) => updateCfg({ server: e.target.value })}
+              placeholder="server (es: ad.local o mock)"
+              aria-label="AD Server Address"
+            />
+            <select value={cfg.auth} onChange={(e) => updateCfg({ auth: e.target.value })}>
+              <option value="SIMPLE">SIMPLE</option>
+              <option value="NTLM">NTLM</option>
+            </select>
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input
+              type="number"
+              style={{ width: 120 }}
+              value={cfg.port || ""}
+              onChange={(e) => updateCfg({ port: e.target.value })}
+              placeholder="Port (389)"
+            />
+            <label style={{ display: "flex", alignItems: "center", marginLeft: 10, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={!!cfg.use_ssl}
+                onChange={(e) => updateCfg({ use_ssl: e.target.checked })}
+                style={{ marginRight: 6 }}
+              />
+              Usa SSL
+            </label>
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 260 }} value={cfg.bind_user} onChange={(e) => updateCfg({ bind_user: e.target.value })} placeholder="bind_user" />
+            <input style={{ width: 260 }} value={cfg.bind_password} onChange={(e) => updateCfg({ bind_password: e.target.value })} placeholder="bind_password" type="password" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 540 }} value={cfg.base_dn} onChange={(e) => updateCfg({ base_dn: e.target.value })} placeholder="base_dn (opzionale qui)" />
+          </div>
+          {renderConnectorActions("ad", "Configurazione AD salvata.")}
+          <hr className="sep" />
+          <div className="row">
+            <input style={{ width: 540 }} value={ou} onChange={(e) => setOu(e.target.value)} placeholder="OU DN" />
+            <button
+              className="primary"
+              title="Scarica ultima estrazione AD (CSV)"
+              aria-label="Scarica ultima estrazione AD in CSV"
+              onClick={downloadLastAdExtractCsv}
+              disabled={adExporting}
+              style={{ padding: "10px 12px", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 44 }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v11" />
+                <path d="m7 10 5 5 5-5" />
+                <path d="M4 21h16" />
+              </svg>
+            </button>
+          </div>
+          {statusMsg && <div className="ok">{statusMsg}</div>}
+          <div className="connector-loadingbar" aria-hidden="true">
+            <div className={`connector-loadingbar__fill${(adLoading || adExporting || cfgSaving) ? " is-active" : ""}`} />
+          </div>
         </div>
-
-        {sapStatusMsg && <div className="ok">{sapStatusMsg}</div>}
-        {err && <div className="err">{err}</div>}
-        <div className="connector-loadingbar" aria-hidden="true">
-          <div className={`connector-loadingbar__fill${sapLoading ? " is-active" : ""}`} />
         </div>
-      </div>
+      </details>
 
-      <div style={{ height: 12 }} />
-
-      {/* CARD 3: CSV Import */}
-      <div className="panel">
-        <h3 style={{ marginTop: 0 }}>Connettore CSV</h3>
-
-        <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
-          Atteso: DisplayName;Dipartimento;Ruoli (con Ruoli separati da virgola)
+      <details className="connector-category" open>
+        <summary>
+          <span>ITSM</span>
+        </summary>
+        <div className="connector-category__content">
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>ServiceNow Connector</h3>
+          <div className="row">
+            <input style={{ width: 420 }} value={cfg.servicenow_base_url || ""} onChange={(e) => updateCfg({ servicenow_base_url: e.target.value })} placeholder="Base URL (es: https://instance.service-now.com)" />
+            <input style={{ width: 220 }} value={cfg.servicenow_username || ""} onChange={(e) => updateCfg({ servicenow_username: e.target.value })} placeholder="Username" />
+            <input style={{ width: 220 }} value={cfg.servicenow_password || ""} onChange={(e) => updateCfg({ servicenow_password: e.target.value })} placeholder="Password" type="password" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 620 }} value={cfg.servicenow_users_path || ""} onChange={(e) => updateCfg({ servicenow_users_path: e.target.value })} placeholder="Users Path (es: /api/now/table/sys_user?sysparm_fields=...)" />
+          </div>
+          {renderConnectorActions("servicenow", "Configurazione ServiceNow salvata.")}
         </div>
-
-        <div className="row">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-          />
-
-          <button
-            className="primary"
-            disabled={!csvFile}
-            onClick={async () => {
-              if (!csvFile) return;
-              setCsvLoading(true);
-              try {
-                setImportMsg("");
-
-                const out = await importBusinessRolesCsv(csvFile);
-
-                const n = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
-                const parts = [
-                  ["Righe importate", n(out.rowsTotal ?? out.csvRowsTotal)],
-                  ["Nuovi utenti", n(out.addedUsers ?? out.rowsKept)],
-                  ["Aggiornati per displayName", n(out.updatedByDisplayName ?? out.updatedUsers)],
-                  ["Valori duplicati", n(out.csvDuplicateDisplayNameRows ?? out.duplicateDisplayName)],
-                  ["Valori incompleti", n(out.csvRowsMissingBR ?? out.missingBusinessRole)],
-                ]
-                  .filter(([, value]) => value > 0)
-                  .map(([label, value]) => `${label}: ${value}`);
-
-                setImportMsg(
-                  `Snapshot CSV completato.` +
-                  `${parts.length ? ` ${parts.join(", ")}.` : ""}` +
-                  `${out.processingInBackground ? " Logiche in background in esecuzione." : ""}`
-                );
-
-              } catch (e) {
-                setImportMsg(`Import KO: ${e?.message ?? String(e)}`);
-              } finally {
-                setCsvLoading(false);
-              }
-            }}
-
-          >
-            CSV Import
-          </button>
         </div>
+      </details>
 
-        {importMsg && <div style={{ marginTop: 10 }}>{importMsg}</div>}
-        <div className="connector-loadingbar" aria-hidden="true">
-          <div className={`connector-loadingbar__fill${csvLoading ? " is-active" : ""}`} />
+      <details className="connector-category">
+        <summary>
+          <span>CRM</span>
+        </summary>
+        <div className="connector-category__content">
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Salesforce Connector</h3>
+          <div className="row">
+            <input style={{ width: 320 }} value={cfg.salesforce_base_url || ""} onChange={(e) => updateCfg({ salesforce_base_url: e.target.value })} placeholder="Instance URL" />
+            <input style={{ width: 320 }} value={cfg.salesforce_token_url || ""} onChange={(e) => updateCfg({ salesforce_token_url: e.target.value })} placeholder="Token URL (es: https://login.salesforce.com/services/oauth2/token)" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 240 }} value={cfg.salesforce_client_id || ""} onChange={(e) => updateCfg({ salesforce_client_id: e.target.value })} placeholder="Client ID" />
+            <input style={{ width: 240 }} value={cfg.salesforce_client_secret || ""} onChange={(e) => updateCfg({ salesforce_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+            <input style={{ width: 420 }} value={cfg.salesforce_users_path || ""} onChange={(e) => updateCfg({ salesforce_users_path: e.target.value })} placeholder="Users Query Path (es: /services/data/v60.0/query?q=...)" />
+          </div>
+          {renderConnectorActions("salesforce", "Configurazione Salesforce salvata.")}
         </div>
-      </div>
+        </div>
+      </details>
+
+      <details className="connector-category">
+        <summary>
+          <span>Collaboration</span>
+        </summary>
+        <div className="connector-category__content">
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Microsoft 365 Connector</h3>
+          <div className="row">
+            <input style={{ width: 320 }} value={cfg.m365_base_url || ""} onChange={(e) => updateCfg({ m365_base_url: e.target.value })} placeholder="Base URL (es: https://graph.microsoft.com)" />
+            <input style={{ width: 220 }} value={cfg.m365_tenant_id || ""} onChange={(e) => updateCfg({ m365_tenant_id: e.target.value })} placeholder="Tenant ID" />
+            <input style={{ width: 220 }} value={cfg.m365_client_id || ""} onChange={(e) => updateCfg({ m365_client_id: e.target.value })} placeholder="Client ID" />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <input style={{ width: 320 }} value={cfg.m365_client_secret || ""} onChange={(e) => updateCfg({ m365_client_secret: e.target.value })} placeholder="Client Secret" type="password" />
+            <input style={{ width: 540 }} value={cfg.m365_users_path || ""} onChange={(e) => updateCfg({ m365_users_path: e.target.value })} placeholder="Users Path (es: /v1.0/users?$select=...)" />
+          </div>
+          {renderConnectorActions("m365", "Configurazione Microsoft 365 salvata.")}
+        </div>
+        </div>
+      </details>
+
+      <details className="connector-category" open>
+        <summary>
+          <span>File-based</span>
+        </summary>
+        <div className="connector-category__content">
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Connettore CSV</h3>
+          <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
+            Atteso: DisplayName;Dipartimento;Ruoli (con Ruoli separati da virgola)
+          </div>
+          <div className="row">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+            />
+          </div>
+          <div className="row connector-form-actions" style={{ marginTop: 10 }}>
+            <button
+              className="primary"
+              disabled={!csvFile}
+              onClick={() => runDiscovery("csv")}
+            >
+              {csvLoading ? "Discovery..." : "Discovery"}
+            </button>
+            <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading}>Schedule</button>
+            <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
+          </div>
+          {importMsg && <div style={{ marginTop: 10 }}>{importMsg}</div>}
+          <div className="connector-loadingbar" aria-hidden="true">
+            <div className={`connector-loadingbar__fill${csvLoading ? " is-active" : ""}`} />
+          </div>
+        </div>
+        </div>
+      </details>
+
+      {cfgStatusMsg && <div className="ok">{cfgStatusMsg}</div>}
+      {err && <div className="err">{err}</div>}
+      {scheduleModal.open && (
+        <div className="connector-schedule-overlay" onClick={closeScheduleModal}>
+          <div className="panel connector-schedule-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Schedule Discovery - {connectorLabels[scheduleModal.target] || scheduleModal.target}</h3>
+            <form onSubmit={saveSchedule}>
+              <div className="row">
+                <select
+                  value={scheduleForm.frequency}
+                  onChange={(e) => setScheduleForm((prev) => ({ ...prev, frequency: e.target.value }))}
+                >
+                  <option value="HOURLY">Every Hour</option>
+                  <option value="DAILY">Daily</option>
+                  <option value="WEEKLY">Weekly</option>
+                </select>
+                {scheduleForm.frequency === "WEEKLY" && (
+                  <select
+                    value={scheduleForm.day}
+                    onChange={(e) => setScheduleForm((prev) => ({ ...prev, day: e.target.value }))}
+                  >
+                    <option value="MON">Monday</option>
+                    <option value="TUE">Tuesday</option>
+                    <option value="WED">Wednesday</option>
+                    <option value="THU">Thursday</option>
+                    <option value="FRI">Friday</option>
+                    <option value="SAT">Saturday</option>
+                    <option value="SUN">Sunday</option>
+                  </select>
+                )}
+                <input
+                  type="time"
+                  value={scheduleForm.time}
+                  onChange={(e) => setScheduleForm((prev) => ({ ...prev, time: e.target.value }))}
+                />
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!scheduleForm.enabled}
+                    onChange={(e) => setScheduleForm((prev) => ({ ...prev, enabled: e.target.checked }))}
+                  />
+                  Enabled
+                </label>
+              </div>
+              <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 8 }}>
+                La Discovery pianificata viene eseguita automaticamente dal backend, anche a pagina chiusa.
+              </div>
+              <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
+                <button type="button" onClick={closeScheduleModal}>Annulla</button>
+                <button className="primary" type="submit">Salva Schedule</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {resultModal.open && (
+        <div className="connector-schedule-overlay" onClick={closeResultModal}>
+          <div className="panel connector-schedule-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Esito Ultima Discovery - {connectorLabels[resultModal.target] || resultModal.target}</h3>
+            {(() => {
+              const res = (cfg.discovery_results || {})[resultModal.target] || {};
+              const sch = (cfg.discovery_schedules || {})[resultModal.target] || {};
+              const status = String(res.status || sch.last_status || "n/a");
+              const message = String(res.message || sch.last_message || "Nessuna discovery eseguita.");
+              const source = String(res.source || (sch.last_run_at ? "schedule" : "n/a"));
+              const ts = String(res.last_run_at || sch.last_run_at || "");
+              const summary = (res && typeof res.summary === "object" && res.summary) ? res.summary : {};
+              const summaryLabels = {
+                users: "Users",
+                groups: "Groups",
+                new_users: "Nuovi utenti",
+                updated_users: "Utenti aggiornati",
+                updated_by_displayname: "Aggiornati per displayName",
+                new_groups: "Nuovi gruppi",
+                updated_groups: "Gruppi aggiornati",
+                rows_imported: "Righe importate",
+                duplicate_values: "Valori duplicati",
+                incomplete_values: "Valori incompleti",
+              };
+              const summaryItems = Object.entries(summary)
+                .filter(([, v]) => Number.isFinite(Number(v)))
+                .map(([k, v]) => ({ k, label: summaryLabels[k] || k, value: Number(v) }));
+              return (
+                <div>
+                  {summaryItems.length > 0 && (
+                    <div className="row" style={{ marginBottom: 10 }}>
+                      {summaryItems.map((x) => (
+                        <div key={x.k} className="card" style={{ minWidth: 160 }}>
+                          <div className="k">{x.label}</div>
+                          <div className="v" style={{ fontSize: 20 }}>{x.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="row">
+                    <div className="card" style={{ minWidth: 130 }}>
+                      <div className="k">Status</div>
+                      <div className="v" style={{ fontSize: 18 }}>{status}</div>
+                    </div>
+                    <div className="card" style={{ minWidth: 130 }}>
+                      <div className="k">Source</div>
+                      <div className="v" style={{ fontSize: 18 }}>{source}</div>
+                    </div>
+                    <div className="card" style={{ minWidth: 240 }}>
+                      <div className="k">Last Run</div>
+                      <div className="v" style={{ fontSize: 16 }}>{ts || "n/a"}</div>
+                    </div>
+                  </div>
+                  <div className="panel" style={{ marginTop: 12, background: "rgba(0,0,0,0.12)" }}>
+                    <div className="k" style={{ color: "var(--muted)", marginBottom: 6 }}>Messaggio</div>
+                    <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.35 }}>{message}</div>
+                  </div>
+                  <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
+                    <button className="primary" onClick={downloadLastAdExtractCsv}>Scarica CSV completo import</button>
+                    <button onClick={closeResultModal}>Chiudi</button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
-
-
-
 }
 
 function Utenti() {
@@ -2511,7 +2988,7 @@ function BusinessRolesHome() {
                 setImportMsg("");
                 setCsvImporting(true);
                 await importBusinessRolesCsv(file);
-                setImportMsg("Snapshot CSV completato.");
+                setImportMsg("Import CSV completato.");
                 await refreshRoles();
               } catch (e2) {
                 setErr(String(e2?.message || e2));
@@ -2523,8 +3000,8 @@ function BusinessRolesHome() {
           />
           <button
             className="primary"
-            title="Extract CSV"
-            aria-label="Extract CSV"
+            title="Import CSV"
+            aria-label="Import CSV"
             onClick={() => csvInputRef.current?.click()}
             disabled={csvImporting}
             style={{ width: 42, height: 42, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
