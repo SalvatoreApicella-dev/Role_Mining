@@ -183,7 +183,15 @@ function Analytics() {
 
   const [kpi, setKpi] = useState({ totalUsers: 0, clusterQuality: 0, modelQuality: 0, aiDetection: 0 });
   const [connectorCfg, setConnectorCfg] = useState({ discovery_results: {} });
+  const [animatedView, setAnimatedView] = useState({
+    totalUsers: 0,
+    clusterPct: 0,
+    modelPct: 0,
+    aiPct: 0,
+    overall: 0,
+  });
   const [err, setErr] = useState("");
+  const rafRef = useRef(0);
 
   const navigate = useNavigate();
 
@@ -215,10 +223,62 @@ function Analytics() {
   );
   const modelPct = pct(kpi.modelQuality ?? kpi.model_quality);
   const aiPct = pct(kpi.aiDetection ?? kpi.ai_detection);
+  const rawTotalUsers = Number(kpi.totalUsers ?? 0);
+
+  useEffect(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduceMotion) {
+      const overallInstant = Math.round((clusterPct + modelPct + aiPct) / 3);
+      setAnimatedView({
+        totalUsers: rawTotalUsers,
+        clusterPct,
+        modelPct,
+        aiPct,
+        overall: overallInstant,
+      });
+      return;
+    }
+
+    const from = { ...animatedView };
+    const to = {
+      totalUsers: rawTotalUsers,
+      clusterPct,
+      modelPct,
+      aiPct,
+      overall: Math.round((clusterPct + modelPct + aiPct) / 3),
+    };
+    const durationMs = 900;
+    const start = performance.now();
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+    const step = (ts) => {
+      const t = Math.min(1, (ts - start) / durationMs);
+      const e = easeOutCubic(t);
+      setAnimatedView({
+        totalUsers: Math.round(from.totalUsers + (to.totalUsers - from.totalUsers) * e),
+        clusterPct: from.clusterPct + (to.clusterPct - from.clusterPct) * e,
+        modelPct: from.modelPct + (to.modelPct - from.modelPct) * e,
+        aiPct: from.aiPct + (to.aiPct - from.aiPct) * e,
+        overall: Math.round(from.overall + (to.overall - from.overall) * e),
+      });
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [rawTotalUsers, clusterPct, modelPct, aiPct]);
+
+  const animatedClusterPct = pct(animatedView.clusterPct);
+  const animatedModelPct = pct(animatedView.modelPct);
+  const animatedAiPct = pct(animatedView.aiPct);
   const kpiItems = [
     {
       label: "Cluster Quality",
-      value: clusterPct,
+      value: animatedClusterPct,
       target: 100,
       color: "#75adff",
       route: "/kpi/cluster-quality",
@@ -226,7 +286,7 @@ function Analytics() {
     },
     {
       label: "Model Score",
-      value: modelPct,
+      value: animatedModelPct,
       target: 100,
       color: "#ff8ea7",
       route: "/model-quality",
@@ -234,7 +294,7 @@ function Analytics() {
     },
     {
       label: "AI Detection",
-      value: aiPct,
+      value: animatedAiPct,
       target: 0,
       color: "#7effc2",
       route: "/ai-detection",
@@ -252,7 +312,7 @@ function Analytics() {
   const railItems = [...rankedByGap];
   const biggestGap = rankedByGap[0];
   const focusItem = biggestGap || kpiItems[0];
-  const overall = Math.round((clusterPct + modelPct + aiPct) / 3);
+  const overall = animatedView.overall;
   const discoveryResults = connectorCfg?.discovery_results || {};
   const connectorMeta = {
     sap: "SAP",
@@ -318,9 +378,9 @@ function Analytics() {
       </div>
 
       <div className="analytics-hero">
-        <div className="analytics-widget analytics-widget--hero">
+        <div className="analytics-widget analytics-widget--hero analytics-card-enter" style={{ "--reveal-delay": "40ms" }}>
           <div className="analytics-widget__label">Total Users</div>
-          <div className="analytics-widget__value">{kpi.totalUsers ?? 0}</div>
+          <div className="analytics-widget__value analytics-widget__value--animated">{animatedView.totalUsers}</div>
           <div className="analytics-hero-meta">
             <span>Overall Score {overall}%</span>
             {connectorUsage.map((c) => (
@@ -329,7 +389,7 @@ function Analytics() {
             <span style={{ color: focusItem.color }}>Focus Area: {focusItem.label} (target {focusItem.target}%)</span>
           </div>
         </div>
-        <div className="analytics-widget analytics-widget--focus">
+        <div className="analytics-widget analytics-widget--focus analytics-card-enter" style={{ "--reveal-delay": "120ms" }}>
           <div className="analytics-widget__label">Current Focus</div>
           <div className="analytics-focus-title">{focusItem.label}</div>
           <div className="analytics-focus-helper">Target operativo: portare il valore verso {focusItem.target}%.</div>
@@ -345,7 +405,7 @@ function Analytics() {
       </div>
 
       <div className="analytics-chart-layout">
-        <div className="panel analytics-plot-panel">
+        <div className="panel analytics-plot-panel analytics-card-enter" style={{ "--reveal-delay": "200ms" }}>
           <div className="analytics-plot-head">
             <div className="analytics-plot-title">KPI Landscape</div>
             <div className="analytics-plot-subtitle">Radar interattivo: hover per dettagli, click sul punto per drill-down.</div>
@@ -372,7 +432,9 @@ function Analytics() {
                   },
                 },
                 showlegend: false,
+                transition: { duration: 520, easing: "cubic-in-out" },
               }}
+              useResizeHandler
               config={{ displayModeBar: false, responsive: true }}
               style={{ width: "100%", height: 310 }}
               onClick={(ev) => {
@@ -384,7 +446,7 @@ function Analytics() {
           </Suspense>
         </div>
 
-        <div className="panel analytics-plot-panel">
+        <div className="panel analytics-plot-panel analytics-card-enter" style={{ "--reveal-delay": "280ms" }}>
           <div className="analytics-plot-head">
             <div className="analytics-plot-title">Target Gap Ranking</div>
             <div className="analytics-plot-subtitle">Classifica aree per distanza dal target; priorita in alto.</div>
@@ -412,7 +474,9 @@ function Analytics() {
                   tickfont: { size: 12 },
                 },
                 showlegend: false,
+                transition: { duration: 520, easing: "cubic-in-out" },
               }}
+              useResizeHandler
               config={{ displayModeBar: false, responsive: true }}
               style={{ width: "100%", height: 310 }}
               onClick={(ev) => {
@@ -429,7 +493,8 @@ function Analytics() {
         {railItems.map((item, idx) => (
           <button
             key={item.label}
-            className="analytics-rail-card analytics-widget--clickable"
+            className="analytics-rail-card analytics-widget--clickable analytics-card-enter"
+            style={{ "--reveal-delay": `${320 + idx * 70}ms` }}
             onClick={() => navigate(item.route)}
           >
             <div className="analytics-rail-rank">#{idx + 1}</div>
@@ -525,6 +590,8 @@ function Connettori() {
   const [importMsg, setImportMsg] = useState("");
   const [csvLoading, setCsvLoading] = useState(false);
   const [discoveryLoadingTarget, setDiscoveryLoadingTarget] = useState("");
+  const [provisioningLoadingTarget, setProvisioningLoadingTarget] = useState("");
+  const [provisioningMsg, setProvisioningMsg] = useState("");
   const [scheduleModal, setScheduleModal] = useState({ open: false, target: "" });
   const [resultModal, setResultModal] = useState({ open: false, target: "" });
   const [scheduleForm, setScheduleForm] = useState({
@@ -780,6 +847,31 @@ function Connettori() {
     }
   }
 
+  async function runProvisioning(target) {
+    setProvisioningLoadingTarget(target);
+    try {
+      setErr("");
+      setProvisioningMsg("");
+      const out = await api.connectorProvision(target);
+      const changed = Number(out?.changed_users || 0);
+      const removed = Number(out?.removed_users || 0);
+      const total = Number(out?.total_users || 0);
+      const ds = out?.datasource || (connectorLabels[target] || target);
+      const summary = [
+        `DataSource ${ds}`,
+        `Users in scope: ${total}`,
+        `Changed: ${changed}`,
+        `Removed: ${removed}`,
+      ].join(" | ");
+      const msg = out?.message ? `${out.message} ${summary}` : summary;
+      setProvisioningMsg(msg);
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setProvisioningLoadingTarget("");
+    }
+  }
+
   function openScheduleModal(target) {
     const current = (cfg.discovery_schedules || {})[target] || {};
     setScheduleForm({
@@ -824,11 +916,19 @@ function Connettori() {
 
   function renderConnectorActions(target, saveMessage) {
     const loading = discoveryLoadingTarget === target;
+    const provisioningLoading = provisioningLoadingTarget === target;
     return (
       <div className="row connector-form-actions" style={{ marginTop: 10 }}>
         <button className="primary" onClick={() => saveCfg(saveMessage)} disabled={cfgSaving}>Salva</button>
         <button className="primary" onClick={() => runDiscovery(target)} disabled={cfgSaving || loading}>
           {loading ? "Discovery..." : "Discovery"}
+        </button>
+        <button
+          className="primary"
+          onClick={() => runProvisioning(target)}
+          disabled={cfgSaving || loading || provisioningLoading}
+        >
+          {provisioningLoading ? "Provisioning..." : "Provision"}
         </button>
         <button className="primary" onClick={() => openScheduleModal(target)} disabled={cfgSaving || loading}>Schedule</button>
         <button className="primary" onClick={() => openResultModal(target)} disabled={cfgSaving}>Esito</button>
@@ -1236,6 +1336,13 @@ function Connettori() {
               >
                 {csvLoading ? "Discovery..." : "Discovery"}
               </button>
+              <button
+                className="primary"
+                disabled={csvLoading || provisioningLoadingTarget === "csv"}
+                onClick={() => runProvisioning("csv")}
+              >
+                {provisioningLoadingTarget === "csv" ? "Provisioning..." : "Provision"}
+              </button>
               <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading}>Schedule</button>
               <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
             </div>
@@ -1248,6 +1355,7 @@ function Connettori() {
       </details>
 
       {cfgStatusMsg && <div className="ok">{cfgStatusMsg}</div>}
+      {provisioningMsg && <div className="ok">{provisioningMsg}</div>}
       {err && <div className="err">{err}</div>}
       {scheduleModal.open && (
         <div className="connector-schedule-overlay" onClick={closeScheduleModal}>

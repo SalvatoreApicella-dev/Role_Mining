@@ -19,3 +19,9 @@ Error: connect ECONNREFUSED 127.0.0.1:8000
 9:38:37 PM [vite] http proxy error: /api/businessroles
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+9:57:31 PM [vite] hmr update /src/app.jsx
+9:57:44 PM [vite] hmr update /src/styles.css
+10:19:05 PM [vite] hmr update /src/app.jsx, /src/pages/AiDetectionPage.jsx, /src/pages/AiTrainingPage.jsx
+10:19:18 PM [vite] hmr update /src/app.jsx
+10:19:23 PM [vite] hmr update /src/app.jsx
+10:19:26 PM [vite] hmr update /src/app.jsx

@@ -1101,12 +1101,13 @@ hr.sep {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(17, 26, 46, 0.62);
   padding: 18px;
-  transition: transform 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
 }
 
 .analytics-widget--clickable:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: rgba(255, 255, 255, 0.26);
+  box-shadow: 0 12px 24px rgba(6, 12, 22, 0.36);
 }
 
 .analytics-widget__label {
@@ -1121,6 +1122,11 @@ hr.sep {
   font-size: 34px;
   font-weight: 700;
   letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-widget__value--animated {
+  text-shadow: 0 0 18px rgba(122, 181, 255, 0.18);
 }
 
 .analytics-widget--users {
@@ -1192,6 +1198,7 @@ hr.sep {
   background: rgba(17, 26, 46, 0.74);
   border-radius: 18px;
   padding: 20px 18px 18px;
+  overflow: hidden;
 }
 
 .analytics-plot-head {
@@ -1226,6 +1233,13 @@ hr.sep {
   align-items: center;
   gap: 12px;
   text-align: left;
+  transition: transform 0.24s ease, border-color 0.24s ease, background 0.24s ease;
+}
+
+.analytics-rail-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .analytics-rail-rank {
@@ -1256,6 +1270,25 @@ hr.sep {
   margin-left: auto;
   font-size: 12px;
   font-weight: 600;
+}
+
+@keyframes analytics-card-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+    filter: saturate(0.9) blur(0.3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: saturate(1) blur(0);
+  }
+}
+
+.analytics-card-enter {
+  opacity: 0;
+  animation: analytics-card-fade-up 560ms cubic-bezier(0.2, 0.65, 0.2, 1) forwards;
+  animation-delay: var(--reveal-delay, 0ms);
 }
 
 @media (max-width: 1100px) {

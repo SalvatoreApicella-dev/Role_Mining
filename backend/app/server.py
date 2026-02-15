@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1418,8 +1419,168 @@ def pick_best_user(cands: List[Dict[str, Any]]) -> Dict[str, Any]:
     # `max` avoids sorting the full list and preserves behavior for tie cases.
     return max(cands, key=score)
 
+
+# Canonical DataSource labels used on imported users.
+CONNECTOR_TO_DATASOURCE: Dict[str, str] = {
+    "ad": "AD",
+    "sap": "SAP",
+    "csv": "CSV",
+    "xlsx": "XLSX",
+    "azure": "AZURE",
+    "one_identity": "ONE_IDENTITY",
+    "sailpoint": "SAILPOINT",
+    "saviynt": "SAVIYNT",
+    "servicenow": "SERVICENOW",
+    "salesforce": "SALESFORCE",
+    "m365": "M365",
+}
+
+CONNECTOR_TARGET_ALIASES: Dict[str, str] = {
+    "active_directory": "ad",
+    "activedirectory": "ad",
+    "microsoft365": "m365",
+    "oneidentity": "one_identity",
+}
+
+# Stable shape used to detect provisioning deltas per user.
+PROVISIONING_FIELDS = (
+    "displayName",
+    "department",
+    "businessRole",
+    "accountType",
+    "email",
+    "upn",
+    "employeeId",
+    "manager",
+    "statusAd",
+    "statusHr",
+    "excluded",
+    "DataSource",
+)
+
+
+def normalize_connector_target(target: str) -> str:
+    normalized = str(target or "").strip().lower()
+    return CONNECTOR_TARGET_ALIASES.get(normalized, normalized)
+
+
+def datasource_from_source(source: str) -> str:
+    normalized = normalize_connector_target(source)
+    if normalized in CONNECTOR_TO_DATASOURCE:
+        return CONNECTOR_TO_DATASOURCE[normalized]
+    return normalized.upper() if normalized else "UNKNOWN"
+
+
+def stamp_user_datasource(user: Dict[str, Any], source: str) -> Dict[str, Any]:
+    # We keep the field name exactly as requested by product: `DataSource`.
+    user["DataSource"] = datasource_from_source(source)
+    return user
+
+
+def stamp_users_datasource(users: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
+    for user in (users or []):
+        stamp_user_datasource(user, source)
+    return users
+
+
+def _provision_payload_for_user(user: Dict[str, Any], datasource: str) -> Dict[str, Any]:
+    # Keep payload canonical so we can hash and detect true changes reliably.
+    groups = sorted({str(g).strip() for g in (user.get("groups") or []) if str(g).strip()})
+    payload: Dict[str, Any] = {
+        "username": str(user.get("username") or "").strip(),
+        "groups": groups,
+        "DataSource": datasource,
+    }
+    for field in PROVISIONING_FIELDS:
+        if field == "DataSource":
+            continue
+        payload[field] = user.get(field)
+    return payload
+
+
+def _provision_fingerprint(payload: Dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _get_users_by_datasource(datasource: str) -> List[Dict[str, Any]]:
+    users = (state.get("last_extract") or {}).get("users") or []
+    selected = []
+    for user in users:
+        uname = str(user.get("username") or "").strip()
+        if not uname:
+            continue
+        if str(user.get("DataSource") or "").strip().upper() != datasource:
+            continue
+        selected.append(user)
+    return selected
+
+
+def run_connector_provisioning(target: str, actor: str) -> Dict[str, Any]:
+    connector = normalize_connector_target(target)
+    if connector not in CONNECTOR_TO_DATASOURCE:
+        raise HTTPException(status_code=400, detail=f"Connector target '{target}' is not supported")
+
+    datasource = CONNECTOR_TO_DATASOURCE[connector]
+    users = _get_users_by_datasource(datasource)
+
+    previous_state = state.get("connector_provisioning") or {}
+    previous_snapshots = previous_state.get("snapshots") or {}
+    previous_snapshot = previous_snapshots.get(datasource) or {}
+
+    current_snapshot: Dict[str, str] = {}
+    changed_usernames: List[str] = []
+    for user in users:
+        payload = _provision_payload_for_user(user, datasource)
+        username = payload["username"]
+        fingerprint = _provision_fingerprint(payload)
+        current_snapshot[username] = fingerprint
+        if previous_snapshot.get(username) != fingerprint:
+            changed_usernames.append(username)
+
+    removed_usernames = sorted([u for u in previous_snapshot.keys() if u not in current_snapshot])
+    provisioned_at = datetime.now(timezone.utc).isoformat()
+    message = (
+        f"Provisioned {len(changed_usernames)} changed users and {len(removed_usernames)} removals for {datasource}."
+        if changed_usernames or removed_usernames
+        else f"No changes to provision for {datasource}."
+    )
+
+    run_summary = {
+        "target": connector,
+        "datasource": datasource,
+        "total_users": len(users),
+        "changed_users": len(changed_usernames),
+        "removed_users": len(removed_usernames),
+        "changed_usernames": changed_usernames[:200],
+        "removed_usernames": removed_usernames[:200],
+        "provisioned_at": provisioned_at,
+        "by": actor,
+        "message": message,
+    }
+
+    with state.batch():
+        provisioning_state = dict(state.get("connector_provisioning") or {})
+        snapshots = dict(provisioning_state.get("snapshots") or {})
+        snapshots[datasource] = current_snapshot
+        provisioning_state["snapshots"] = snapshots
+        provisioning_state["last_run"] = run_summary
+        last_by_source = dict(provisioning_state.get("last_run_by_datasource") or {})
+        last_by_source[datasource] = run_summary
+        provisioning_state["last_run_by_datasource"] = last_by_source
+        state["connector_provisioning"] = provisioning_state
+
+        history = list(state.get("connector_provisioning_history") or [])
+        history.append(run_summary)
+        state["connector_provisioning_history"] = history[-500:]
+
+    log("INFO", f"Connector provisioning executed target={connector} datasource={datasource} changed={len(changed_usernames)} removed={len(removed_usernames)} by={actor}")
+    return run_summary
+
+
 def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
     rejects = []
+    stamp_users_datasource(raw_users or [], source)
     stats = state.setdefault("last_ingest_stats", {})
     stats.update({
         "source": source,
@@ -1447,6 +1608,7 @@ def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: s
     chosen = []
     for dn, cands in by_dn.items():
         u = pick_best_user(cands)
+        stamp_user_datasource(u, source)
 
         if len(cands) > 1:
             stats["duplicateDisplayName"] += (len(cands) - 1)
@@ -1560,6 +1722,7 @@ def replace_from_connector_pool(new_users: List[Dict[str, Any]], ou: str, source
         normalized["department"] = (u.get("department") or "").strip() or None
         normalized["businessRole"] = (u.get("businessRole") or "").strip() or None
         normalized["excluded"] = False
+        normalized["DataSource"] = datasource_from_source(source)
         clean_users.append(normalized)
 
         dn_key = normalized["displayName"].lower()
@@ -1679,6 +1842,7 @@ def merge_from_connector_by_displayname(new_users: List[Dict[str, Any]], ou: str
                 if u.get(k) is not None:
                     existing_user[k] = u.get(k)
             existing_user["excluded"] = False
+            existing_user["DataSource"] = datasource_from_source(source)
 
             changed = (
                 prev_username != str(existing_user.get("username") or "").strip()
@@ -1709,6 +1873,7 @@ def merge_from_connector_by_displayname(new_users: List[Dict[str, Any]], ou: str
             "statusAd": u.get("statusAd"),
             "statusHr": u.get("statusHr"),
             "attributes": u.get("attributes"),
+            "DataSource": datasource_from_source(source),
         }
         base_users.append(new_user)
         by_displayname[dn_key] = new_user
@@ -1795,6 +1960,7 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
             "department": (u.get("department") or "").strip() or None,
             "businessRole": (u.get("businessRole") or "").strip() or None,
             "excluded": False,
+            "DataSource": datasource_from_source(source),
         })
 
     for nu in clean_new_users:
@@ -1822,6 +1988,7 @@ def merge_from_connector(new_users: List[Dict[str, Any]], ou: str, source: str) 
             existing_user["groups"] = nu.get("groups") or []
             if nu.get("businessRole"):
                 existing_user["businessRole"] = nu["businessRole"]
+            existing_user["DataSource"] = datasource_from_source(source)
             # Update username if it changed (displayName matched but username different)
             if existing_user.get("username") != uname:
                 old_uname = existing_user.get("username")
@@ -2271,6 +2438,19 @@ class ExtractResponse(BaseModel):
     updated_groups: int = 0
     users: List[Dict[str, Any]]
     groups: List[str]
+
+
+class ConnectorProvisionResponse(BaseModel):
+    target: str
+    datasource: str
+    total_users: int
+    changed_users: int
+    removed_users: int
+    changed_usernames: List[str] = Field(default_factory=list)
+    removed_usernames: List[str] = Field(default_factory=list)
+    provisioned_at: str
+    by: str
+    message: str
 
 
 class RoleMiningRequest(BaseModel):
@@ -4124,6 +4304,11 @@ def extract_sap(req: ExtractRequest, background_tasks: BackgroundTasks, username
     )
 
 
+@app.post("/api/connectors/{target}/provision", response_model=ConnectorProvisionResponse)
+def provision_connector(target: str, username: str = Depends(require_auth)):
+    return ConnectorProvisionResponse(**run_connector_provisioning(target, actor=username))
+
+
 @app.get("/api/ad/extract/export-csv")
 def export_last_extract_csv(username: str = Depends(require_auth)):
     users = (state.get("last_extract") or {}).get("users") or []
@@ -5677,6 +5862,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             "department": dept or None,
             "businessRole": br or None,
             "excluded": False,
+            "DataSource": datasource_from_source("csv"),
             "lastLogin": last_login,
             "accountType": final_type,
             "preferredUsername": preferred_username or None,
@@ -5824,6 +6010,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             for k in ("email", "upn", "employeeId", "manager", "statusAd", "statusHr"):
                 if user.get(k) is not None:
                     existing_user[k] = user.get(k)
+            existing_user["DataSource"] = datasource_from_source("csv")
             
             # Update username if it changed
             if existing_user.get("username") != uname:
@@ -5947,7 +6134,7 @@ def apply_all_choices_to_last_extract() -> None:
 # (_slug_username already defined at line 2299)
 # (datetime import already at top of file)
 
-def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: str = ""):
+def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: str = "", source: str = "xlsx"):
     displayname = (displayname or "").strip()
     businessrole = (businessrole or "").strip()
     ruoli = (ruoli or "").strip()
@@ -5970,6 +6157,7 @@ def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: 
         "department": department or None,
         "businessRole": businessrole or None,
         "excluded": False,
+        "DataSource": datasource_from_source(source),
     }
     
     # Merge logic (simplified for single row)
@@ -5990,6 +6178,7 @@ def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: 
             existing["businessRole"] = businessrole
         if department:
             existing["department"] = department
+        existing["DataSource"] = datasource_from_source(source)
     else:
         users.append(user)
         created_user = True
@@ -6037,7 +6226,7 @@ async def import_xlsx(file: UploadFile = File(...), username: str = Depends(requ
         br = r[cols["BusinessRole"]] if cols["BusinessRole"] < len(r) else ""
         ru = r[cols["Ruoli"]] if cols["Ruoli"] < len(r) else ""
 
-        out = applyimportrow(str(dn or ""), str(br or ""), str(ru or ""))
+        out = applyimportrow(str(dn or ""), str(br or ""), str(ru or ""), source="xlsx")
         if out.get("skipped"):
             continue
         created_users += 1 if out.get("created_user") else 0
