@@ -14,6 +14,8 @@ import tempfile
 
 class JsonFileStore:
     """Thread-safe JSON file storage for application state."""
+    # Keys that are persisted as lists but restored in-memory as sets.
+    _SET_FIELDS = {"business_roles", "businessroles"}
     
     def __init__(self, filepath: str = "data/storage.json"):
         self.filepath = Path(filepath)
@@ -30,6 +32,19 @@ class JsonFileStore:
             self._dirty = True
             return
         self.save()
+
+    @staticmethod
+    def _normalize_json_key(key: Any) -> str:
+        """
+        Ensure JSON object keys are always strings.
+        Bytes keys are decoded when possible, otherwise represented as hex.
+        """
+        if isinstance(key, bytes):
+            try:
+                return key.decode("utf-8")
+            except UnicodeDecodeError:
+                return key.hex()
+        return key if isinstance(key, str) else str(key)
     
     def _ensure_file(self):
         """Create storage file and directory if they don't exist."""
@@ -131,13 +146,7 @@ class JsonFileStore:
         elif isinstance(obj, dict):
             prepared = {}
             for k, v in obj.items():
-                if isinstance(k, bytes):
-                    try:
-                        key = k.decode("utf-8")
-                    except UnicodeDecodeError:
-                        key = k.hex()
-                else:
-                    key = str(k) if not isinstance(k, str) else k
+                key = self._normalize_json_key(k)
                 prepared[key] = self._prepare_for_json(v)
             return prepared
         elif isinstance(obj, list):
@@ -146,12 +155,9 @@ class JsonFileStore:
     
     def _restore_from_json(self, obj: Any, key: str = "") -> Any:
         """Restore sets from lists where appropriate."""
-        # Known set fields
-        set_fields = {"business_roles", "businessroles"}
-        
         if isinstance(obj, dict):
             return {k: self._restore_from_json(v, k) for k, v in obj.items()}
-        elif isinstance(obj, list) and key in set_fields:
+        elif isinstance(obj, list) and key in self._SET_FIELDS:
             return set(obj)
         elif isinstance(obj, list):
             return [self._restore_from_json(item, key) for item in obj]

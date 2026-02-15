@@ -75,48 +75,90 @@ class ResponseCache:
         self._cache: Dict[str, tuple] = {}  # key -> (value, expire_time)
         self._hits = 0
         self._misses = 0
+        self._ops = 0
+        self._lock = threading.RLock()
+        # Guard memory growth under high-cardinality cache keys.
+        self._max_keys = max(128, int(os.getenv("RESPONSE_CACHE_MAX_KEYS", "2048")))
+        self._sweep_every = max(16, int(os.getenv("RESPONSE_CACHE_SWEEP_EVERY", "256")))
+
+    def _touch_and_should_sweep_locked(self) -> bool:
+        self._ops += 1
+        return (self._ops % self._sweep_every) == 0
+
+    def _purge_expired_locked(self, now_ts: Optional[float] = None) -> None:
+        now = time.time() if now_ts is None else now_ts
+        expired = [k for k, (_, exp) in self._cache.items() if exp <= now]
+        for k in expired:
+            self._cache.pop(k, None)
+
+    def _enforce_capacity_locked(self) -> None:
+        if len(self._cache) <= self._max_keys:
+            return
+        # First reclaim naturally expired entries, then evict soonest-to-expire keys.
+        self._purge_expired_locked()
+        if len(self._cache) <= self._max_keys:
+            return
+        overflow = len(self._cache) - self._max_keys
+        for key, _ in sorted(self._cache.items(), key=lambda kv: kv[1][1])[:overflow]:
+            self._cache.pop(key, None)
     
     def get(self, key: str) -> Optional[Any]:
         """Get cached value if exists and not expired."""
-        if key in self._cache:
-            value, expire_time = self._cache[key]
-            if time.time() < expire_time:
-                self._hits += 1
-                return value
-            else:
-                del self._cache[key]
-        self._misses += 1
-        return None
+        with self._lock:
+            now = time.time()
+            item = self._cache.get(key)
+            if item is not None:
+                value, expire_time = item
+                if now < expire_time:
+                    self._hits += 1
+                    if self._touch_and_should_sweep_locked():
+                        self._purge_expired_locked(now)
+                    return value
+                self._cache.pop(key, None)
+            self._misses += 1
+            if self._touch_and_should_sweep_locked():
+                self._purge_expired_locked(now)
+            return None
     
     def set(self, key: str, value: Any, ttl_seconds: float = 30.0) -> None:
         """Store value with TTL."""
-        self._cache[key] = (value, time.time() + ttl_seconds)
+        with self._lock:
+            expire_at = time.time() + max(0.0, float(ttl_seconds))
+            self._cache[key] = (value, expire_at)
+            if self._touch_and_should_sweep_locked():
+                self._purge_expired_locked()
+            self._enforce_capacity_locked()
     
     def invalidate(self, key: str = None) -> None:
         """Invalidate specific key or all keys."""
-        if key:
-            self._cache.pop(key, None)
-        else:
-            self._cache.clear()
+        with self._lock:
+            if key:
+                self._cache.pop(key, None)
+            else:
+                self._cache.clear()
 
     def invalidate_prefix(self, prefix: str) -> None:
         """Invalidate all keys by prefix."""
         if not prefix:
             return
-        keys = [k for k in self._cache.keys() if k.startswith(prefix)]
-        for key in keys:
-            self._cache.pop(key, None)
+        with self._lock:
+            keys = [k for k in self._cache.keys() if k.startswith(prefix)]
+            for key in keys:
+                self._cache.pop(key, None)
     
     def stats(self) -> Dict[str, Any]:
         """Return cache statistics."""
-        total = self._hits + self._misses
-        hit_rate = (self._hits / total * 100) if total > 0 else 0
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "hit_rate": f"{hit_rate:.1f}%",
-            "cached_keys": len(self._cache)
-        }
+        with self._lock:
+            total = self._hits + self._misses
+            hit_rate = (self._hits / total * 100) if total > 0 else 0
+            return {
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": f"{hit_rate:.1f}%",
+                "cached_keys": len(self._cache),
+                "max_keys": self._max_keys,
+                "sweep_every": self._sweep_every,
+            }
 
 # Global cache instance
 RESPONSE_CACHE = ResponseCache()
@@ -139,6 +181,7 @@ def invalidate_hot_caches(*, users: bool = False, roles: bool = False, kpi: bool
         RESPONSE_CACHE.invalidate_prefix("role_detail_users_")
     if kpi:
         RESPONSE_CACHE.invalidate("kpi")
+        RESPONSE_CACHE.invalidate("kpi_cluster_quality_live")
         RESPONSE_CACHE.invalidate_prefix("kpi_drilldown_")
     if mining:
         RESPONSE_CACHE.invalidate_prefix("rolemining_last_")
@@ -146,6 +189,26 @@ def invalidate_hot_caches(*, users: bool = False, roles: bool = False, kpi: bool
         RESPONSE_CACHE.invalidate_prefix("ailab_")
 
 BROAD_MARKERS = ['all','tutti','tutte','full','global','everyone','any','anyone','everybody']
+IDENTITY_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
+IDENTITY_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+IDENTITY_EMPID_RE = re.compile(r"^[A-Za-z0-9_-]{4,}$")
+
+
+def _norm_identity_text(s: Any) -> str:
+    return IDENTITY_NORMALIZE_RE.sub("", str(s or "").lower())
+
+
+def _is_valid_email_address(s: str) -> bool:
+    return bool(IDENTITY_EMAIL_RE.match(str(s or "").strip()))
+
+
+def _is_valid_upn_value(s: str) -> bool:
+    v = str(s or "").strip().lower()
+    return bool(v and "@" in v and _is_valid_email_address(v))
+
+
+def _is_valid_employee_id(s: str) -> bool:
+    return bool(IDENTITY_EMPID_RE.match(str(s or "").strip()))
 
 def _tokens(s: str) -> list[str]:
     s = (s or '').lower()
@@ -1334,6 +1397,217 @@ def _duplicate_resolution_items() -> List[Dict[str, Any]]:
     return items
 
 
+def _duplicate_candidate_from_user_row(user: Dict[str, Any], display_name: str) -> Dict[str, Any]:
+    """
+    Normalize a runtime user row to the duplicate-candidate shape used by
+    /api/ingest/conflicts and cluster-quality drilldown.
+    """
+    return {
+        "candidateId": f"user:{user.get('username')}",
+        "source": "current",
+        "displayName": display_name,
+        "department": user.get("department"),
+        "businessRole": user.get("businessRole"),
+        "roles": user.get("groups") or [],
+        "lastLogin": user.get("lastLogin"),
+    }
+
+
+def _duplicate_resolution_items_from_users(users: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Build duplicate resolution items directly from current users when ingest
+    candidates are not available (e.g. after reload or older snapshots).
+    """
+    by_display_name = defaultdict(list)
+    for u in (users or []):
+        dn = str(u.get("displayName") or u.get("display_name") or "").strip()
+        if dn:
+            by_display_name[dn].append(u)
+
+    items: List[Dict[str, Any]] = []
+    for dn, rows in by_display_name.items():
+        if len(rows) <= 1:
+            continue
+        chosen = _duplicate_candidate_from_user_row(rows[0], dn)
+        alternatives = [_duplicate_candidate_from_user_row(alt, dn) for alt in rows[1:]]
+        items.append(
+            {
+                "displayName": dn,
+                "chosenCandidateId": chosen["candidateId"],
+                "autoChosenCandidateId": chosen["candidateId"],
+                "chosen": chosen,
+                "alternatives": alternatives,
+                "count": len(rows),
+                "autoReason": None,
+            }
+        )
+    return items
+
+
+def _duplicate_extra_rows(duplicate_items: List[Dict[str, Any]]) -> int:
+    # Each duplicate bucket contributes (count - 1) extra rows over unique display names.
+    return sum(max(0, int(x.get("count") or 0) - 1) for x in (duplicate_items or []))
+
+
+def _duplicate_reject_count(rejects: List[Dict[str, Any]]) -> int:
+    # Keep string match aligned with existing reject reason formatting.
+    return sum(
+        1
+        for r in (rejects or [])
+        if "Duplicate displayName" in str((r or {}).get("reason") or "")
+    )
+
+
+def _effective_duplicate_displayname_count(
+    ingest: Dict[str, Any],
+    duplicate_items: List[Dict[str, Any]],
+    rejects: List[Dict[str, Any]],
+) -> int:
+    """
+    Preserve current semantics: show the maximum duplicate signal across ingest
+    counters, in-memory duplicate groups, and reject log.
+    """
+    ingest_dup = int((ingest or {}).get("duplicateDisplayName") or 0)
+    return max(ingest_dup, _duplicate_extra_rows(duplicate_items), _duplicate_reject_count(rejects))
+
+
+def _display_name_for_user(u: Dict[str, Any]) -> str:
+    return str(u.get("displayName") or u.get("display_name") or u.get("username") or "").strip()
+
+
+def _users_missing_field(users: List[Dict[str, Any]], field_name: str) -> List[Dict[str, str]]:
+    """
+    Build drilldown rows for users missing a specific source field.
+    Output schema intentionally stays identical to previous inline list-comprehensions.
+    """
+    out: List[Dict[str, str]] = []
+    for u in (users or []):
+        if str(u.get(field_name) or "").strip():
+            continue
+        out.append({"username": str(u.get("username") or ""), "displayName": _display_name_for_user(u)})
+    return out
+
+
+def _dedupe_user_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Deduplicate user-like rows by (username, displayName), case-insensitive.
+    This keeps drilldown cards stable and avoids repeated entities.
+    """
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for r in (rows or []):
+        key = (str(r.get("username") or "").lower(), str(r.get("displayName") or "").lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
+
+def _allowed_identity_case_ids(connector_type: str, identity_cases_all: List[Dict[str, Any]]) -> set:
+    if connector_type == "sap":
+        return {
+            "invalid_identity_keys",
+            "identity_collisions",
+            "businessrole_vocab_drift",
+            "import_reject_rate",
+        }
+    if connector_type == "ad":
+        return {
+            "invalid_identity_keys",
+            "identity_collisions",
+            "invalid_lastlogon",
+            "department_vocab_drift",
+            "orphan_references",
+            "inactive_source_mismatch",
+            "import_reject_rate",
+        }
+    if connector_type == "csv":
+        return {
+            "invalid_identity_keys",
+            "identity_collisions",
+            "invalid_lastlogon",
+            "department_vocab_drift",
+            "businessrole_vocab_drift",
+            "orphan_references",
+            "inactive_source_mismatch",
+            "import_reject_rate",
+            "csv_peer_value_outlier",
+            "csv_peer_missing_critical",
+        }
+    return {c.get("id") for c in identity_cases_all}
+
+
+def _build_cluster_quality_summary_cards(
+    connector_type: str,
+    stats: Dict[str, Any],
+    identity_cases: List[Dict[str, Any]],
+) -> Tuple[set, List[Dict[str, Any]]]:
+    total_rows = {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)}
+    duplicates = {
+        "id": "duplicates",
+        "label": "Duplicates",
+        "count": int(stats.get("duplicateDisplayName") or 0),
+        "sectionType": "Duplicates",
+    }
+    missing_department = {
+        "id": "missing_department",
+        "label": "Missing Department",
+        "count": int(stats.get("missingDepartment") or 0),
+        "sectionType": "Missing Department",
+    }
+    missing_business_role = {
+        "id": "missing_business_role",
+        "label": "Missing Business Role",
+        "count": int(stats.get("missingBusinessRole") or 0),
+        "sectionType": "Missing Business Role",
+    }
+    identity_integrity = {
+        "id": "identity_integrity",
+        "label": "Identity Integrity",
+        "count": int(stats.get("identityIntegrityIssues") or 0),
+        "sectionType": "Identity Integrity",
+    }
+
+    if connector_type == "sap":
+        visible_types = {"Duplicates", "Missing Business Role", "Identity Integrity"}
+        cards = [total_rows, duplicates, missing_business_role, identity_integrity]
+        return visible_types, cards
+
+    if connector_type == "ad":
+        visible_types = {"Duplicates", "Missing Department", "Identity Integrity"}
+        cards = [total_rows, duplicates, missing_department, identity_integrity]
+        return visible_types, cards
+
+    if connector_type == "csv":
+        outlier_case = next((c for c in identity_cases if c.get("id") == "csv_peer_value_outlier"), {"count": 0})
+        missing_case = next((c for c in identity_cases if c.get("id") == "csv_peer_missing_critical"), {"count": 0})
+        visible_types = {"Duplicates", "Missing Department", "Missing Business Role", "Identity Integrity"}
+        cards = [
+            total_rows,
+            duplicates,
+            missing_department,
+            missing_business_role,
+            {
+                "id": "csv_peer_value_outlier",
+                "label": "Peer Dirty Values",
+                "count": int(outlier_case.get("count") or 0),
+                "sectionType": "Identity Integrity",
+            },
+            {
+                "id": "csv_peer_missing_critical",
+                "label": "Peer Critical Missing",
+                "count": int(missing_case.get("count") or 0),
+                "sectionType": "Identity Integrity",
+            },
+        ]
+        return visible_types, cards
+
+    visible_types = {"Duplicates", "Missing Department", "Missing Business Role", "Identity Integrity"}
+    cards = [total_rows, duplicates, missing_department, missing_business_role, identity_integrity]
+    return visible_types, cards
+
+
 def _record_duplicate_feedback(display_name: str, chosen_candidate_id: str, actor: str = "system") -> None:
     display_name = (display_name or "").strip()
     chosen_candidate_id = (chosen_candidate_id or "").strip()
@@ -1465,14 +1739,15 @@ def build_dq_rule_suggestions() -> List[Dict[str, Any]]:
 
 
 def pick_best_user(cands: List[Dict[str, Any]]) -> Dict[str, Any]:
-    # regola: preferisci lastLogin più recente (se presente), poi "completezza" (dept+br), poi più gruppi
+    # Ranking policy: prefer most recent login, then profile completeness, then number of groups.
     def score(u: Dict[str, Any]) -> tuple:
         last = u.get("lastLogin") or u.get("last_login") or ""
         has_dept = 1 if (u.get("department") or "").strip() else 0
         has_br = 1 if (u.get("businessRole") or "").strip() else 0
         ng = len(u.get("groups") or [])
         return (last, has_dept + has_br, ng)
-    return sorted(cands, key=score, reverse=True)[0]
+    # `max` avoids sorting the full list and preserves behavior for tie cases.
+    return max(cands, key=score)
 
 def filter_and_dedupe_connector_users(raw_users: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
     rejects = []
@@ -2113,7 +2388,7 @@ def recalculate_assignments_background(trigger: str, actor: str) -> None:
         sync_roles_from_users(users)
         state["mining_dirty"] = True
         RESPONSE_CACHE.invalidate("businessroles")
-        RESPONSE_CACHE.invalidate("kpi")
+        invalidate_hot_caches(kpi=True)
         state.save()
         log("INFO", f"Background assignment recalculation completed (trigger={trigger}, by={actor})")
     except Exception as exc:
@@ -2133,7 +2408,7 @@ def refresh_ai_detection_background(trigger: str, actor: str) -> None:
         users = active_users(state.get("last_extract", {}).get("users") or [])
         result = run_smart_ai_detection(users, matrix)
         state["last_ai_detection"] = result
-        RESPONSE_CACHE.invalidate("kpi")
+        invalidate_hot_caches(kpi=True)
         state.save()
         log("INFO", f"Background AI detection refresh completed (trigger={trigger}, by={actor})")
     except Exception as exc:
@@ -3120,6 +3395,11 @@ def compute_cluster_quality_live() -> float:
     Compute Cluster Quality from the currently loaded dataset, not only from the
     last ingest counters. This keeps /api/kpi aligned with cluster-quality drilldown.
     """
+    cache_key = "kpi_cluster_quality_live"
+    cached_score = RESPONSE_CACHE.get(cache_key)
+    if cached_score is not None:
+        return float(cached_score)
+
     ingest = state.get("last_ingest_stats") or {}
     last_extract = state.get("last_extract") or {}
     users = last_extract.get("users") or []
@@ -3138,14 +3418,11 @@ def compute_cluster_quality_live() -> float:
     missing_username = sum(1 for u in users if not str(u.get("username") or "").strip())
 
     duplicate_items = _duplicate_resolution_items()
-    candidate_dup_extra_rows = sum(max(0, int(x.get("count") or 0) - 1) for x in duplicate_items)
-    ingest_dup = int(ingest.get("duplicateDisplayName") or 0)
-    reject_dup_count = 0
-    for r in (state.get("last_rejects") or []):
-        reason = str((r or {}).get("reason") or "")
-        if "Duplicate displayName" in reason:
-            reject_dup_count += 1
-    duplicates = max(ingest_dup, candidate_dup_extra_rows, reject_dup_count)
+    duplicates = _effective_duplicate_displayname_count(
+        ingest=ingest,
+        duplicate_items=duplicate_items,
+        rejects=state.get("last_rejects") or [],
+    )
 
     src = str(ingest.get("source") or "").lower()
     if src.startswith("ad"):
@@ -3160,7 +3437,9 @@ def compute_cluster_quality_live() -> float:
         0.40 * (missing_username / total)
     )
     penalty = min(1.0, penalty)
-    return round(max(0.0, 100.0 * (1.0 - penalty)), 2)
+    score = round(max(0.0, 100.0 * (1.0 - penalty)), 2)
+    RESPONSE_CACHE.set(cache_key, score, CACHE_TTL_KPI)
+    return score
 
 
 def _effective_connector_type() -> str:
@@ -4531,7 +4810,7 @@ def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)
 
 @app.post("/api/kpi/clear-cache")
 def clear_kpi_cache():
-    RESPONSE_CACHE.invalidate("kpi")
+    invalidate_hot_caches(kpi=True)
     return {"status": "ok"}
 
 
@@ -4554,8 +4833,8 @@ def ai_detection_run(background_tasks: BackgroundTasks, username: str = Depends(
     result = run_smart_ai_detection(users, matrix)
     state["last_ai_detection"] = result
 
-    # Invalidate KPI cache so dashboard picks up the new aiDetection %
-    RESPONSE_CACHE.invalidate("kpi")
+    # Invalidate KPI and KPI drilldown caches so dashboard and drilldowns stay aligned.
+    invalidate_hot_caches(kpi=True)
 
     return result
 
@@ -4608,6 +4887,11 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         return out
 
     if metric == "cluster-quality":
+        cache_key = "kpi_drilldown_cluster-quality"
+        cached_out = RESPONSE_CACHE.get(cache_key)
+        if cached_out:
+            return cached_out
+
         # Cluster Quality in dashboard is Data/Ingest Quality. 
         ingest = state.get("last_ingest_stats") or {}
         last_extract = state.get("last_extract") or {}
@@ -4618,80 +4902,17 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         if not ingest and not users:
              ingest = {"rowsTotal": 0, "duplicateDisplayName": 0, "missingDepartment": 0}
 
-        # Missing fields detection
-        missing_dept = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("department") or "").strip()]
-        missing_br = [{"username": u["username"], "displayName": u.get("displayName") or u.get("display_name") or u["username"]} for u in users if not (u.get("businessRole") or "").strip()]
+        # Missing fields detection (kept explicit for drilldown payload parity).
+        missing_dept = _users_missing_field(users, "department")
+        missing_br = _users_missing_field(users, "businessRole")
         
         duplicate_items = _duplicate_resolution_items()
         if not duplicate_items:
-            by_display_name = defaultdict(list)
-            for u in users:
-                dn = (u.get("displayName") or u.get("display_name") or "").strip()
-                if dn:
-                    by_display_name[dn].append(u)
-            for dn, rows in by_display_name.items():
-                if len(rows) <= 1:
-                    continue
-                chosen_user = rows[0]
-                chosen = {
-                    "candidateId": f"user:{chosen_user.get('username')}",
-                    "source": "current",
-                    "displayName": dn,
-                    "department": chosen_user.get("department"),
-                    "businessRole": chosen_user.get("businessRole"),
-                    "roles": chosen_user.get("groups") or [],
-                    "lastLogin": chosen_user.get("lastLogin"),
-                }
-                alternatives = []
-                for alt in rows[1:]:
-                    alternatives.append(
-                        {
-                            "candidateId": f"user:{alt.get('username')}",
-                            "source": "current",
-                            "displayName": dn,
-                            "department": alt.get("department"),
-                            "businessRole": alt.get("businessRole"),
-                            "roles": alt.get("groups") or [],
-                            "lastLogin": alt.get("lastLogin"),
-                        }
-                    )
-                duplicate_items.append(
-                    {
-                        "displayName": dn,
-                        "chosenCandidateId": chosen["candidateId"],
-                        "autoChosenCandidateId": chosen["candidateId"],
-                        "chosen": chosen,
-                        "alternatives": alternatives,
-                        "count": len(rows),
-                        "autoReason": None,
-                    }
-                )
-
-        candidate_dup_extra_rows = sum(max(0, int(x.get("count") or 0) - 1) for x in duplicate_items)
-
-        # Also account for duplicate rejects from ingest filtering (metrics only)
-        rejects = state.get("last_rejects") or []
-        reject_dup_count = 0
-        for r in rejects:
-            reason = str((r or {}).get("reason") or "")
-            if "Duplicate displayName" in reason:
-                reject_dup_count += 1
+            duplicate_items = _duplicate_resolution_items_from_users(users)
+        # Copy to decouple cache payload from mutable global state list.
+        rejects = list(state.get("last_rejects") or [])
 
         # Identity integrity metrics (focused on source/identity data quality)
-        def _norm_txt(s: Any) -> str:
-            return re.sub(r"[^a-z0-9]+", "", str(s or "").lower())
-
-        def _is_valid_email(s: str) -> bool:
-            return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", str(s or "").strip()))
-
-        def _is_valid_upn(s: str) -> bool:
-            v = str(s or "").strip().lower()
-            return bool(v and "@" in v and _is_valid_email(v))
-
-        def _is_valid_empid(s: str) -> bool:
-            v = str(s or "").strip()
-            return bool(re.match(r"^[A-Za-z0-9_-]{4,}$", v))
-
         now_utc = datetime.now(timezone.utc)
         known_usernames = {str(u.get("username") or "").strip().lower() for u in users if u.get("username")}
         known_emails = {str(u.get("email") or "").strip().lower() for u in users if u.get("email")}
@@ -4736,22 +4957,22 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
                 by_empid[empid].append(row_user)
 
             if dept:
-                dnorm = _norm_txt(dept)
+                dnorm = _norm_identity_text(dept)
                 if dnorm:
                     dept_variants[dnorm].add(dept)
                     dept_users_by_variant[(dnorm, dept)].append(row_user)
             if br:
-                rnorm = _norm_txt(br)
+                rnorm = _norm_identity_text(br)
                 if rnorm:
                     role_variants[rnorm].add(br)
                     role_users_by_variant[(rnorm, br)].append(row_user)
 
             invalid_identity = False
-            if email and not _is_valid_email(email):
+            if email and not _is_valid_email_address(email):
                 invalid_identity = True
-            if upn and not _is_valid_upn(upn):
+            if upn and not _is_valid_upn_value(upn):
                 invalid_identity = True
-            if empid and not _is_valid_empid(empid):
+            if empid and not _is_valid_employee_id(empid):
                 invalid_identity = True
             if invalid_identity:
                 invalid_identity_users.append(row_user)
@@ -4798,24 +5019,13 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
                 for v in variants:
                     role_drift_users.extend(role_users_by_variant.get((norm_k, v), []))
 
-        def _dedupe_users(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-            out = []
-            seen = set()
-            for r in rows:
-                k = (str(r.get("username") or "").lower(), str(r.get("displayName") or "").lower())
-                if k in seen:
-                    continue
-                seen.add(k)
-                out.append(r)
-            return out
-
-        invalid_identity_users = _dedupe_users(invalid_identity_users)
-        invalid_lastlogon_users = _dedupe_users(invalid_lastlogon_users)
-        orphan_ref_users = _dedupe_users(orphan_ref_users)
-        inactive_mismatch_users = _dedupe_users(inactive_mismatch_users)
-        collision_users = _dedupe_users(collision_users)
-        dept_drift_users = _dedupe_users(dept_drift_users)
-        role_drift_users = _dedupe_users(role_drift_users)
+        invalid_identity_users = _dedupe_user_rows(invalid_identity_users)
+        invalid_lastlogon_users = _dedupe_user_rows(invalid_lastlogon_users)
+        orphan_ref_users = _dedupe_user_rows(orphan_ref_users)
+        inactive_mismatch_users = _dedupe_user_rows(inactive_mismatch_users)
+        collision_users = _dedupe_user_rows(collision_users)
+        dept_drift_users = _dedupe_user_rows(dept_drift_users)
+        role_drift_users = _dedupe_user_rows(role_drift_users)
 
         ingest_rejects = len(state.get("last_rejects") or [])
         import_reject_events = max(
@@ -4841,38 +5051,7 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         if connector_type == "csv":
             csv_peer_info = _csv_connector_peer_quality(users, ingest)
             identity_cases_all.extend(csv_peer_info.get("cases") or [])
-        if connector_type == "sap":
-            identity_allowed = {
-                "invalid_identity_keys",
-                "identity_collisions",
-                "businessrole_vocab_drift",
-                "import_reject_rate",
-            }
-        elif connector_type == "ad":
-            identity_allowed = {
-                "invalid_identity_keys",
-                "identity_collisions",
-                "invalid_lastlogon",
-                "department_vocab_drift",
-                "orphan_references",
-                "inactive_source_mismatch",
-                "import_reject_rate",
-            }
-        elif connector_type == "csv":
-            identity_allowed = {
-                "invalid_identity_keys",
-                "identity_collisions",
-                "invalid_lastlogon",
-                "department_vocab_drift",
-                "businessrole_vocab_drift",
-                "orphan_references",
-                "inactive_source_mismatch",
-                "import_reject_rate",
-                "csv_peer_value_outlier",
-                "csv_peer_missing_critical",
-            }
-        else:
-            identity_allowed = {c.get("id") for c in identity_cases_all}
+        identity_allowed = _allowed_identity_case_ids(connector_type, identity_cases_all)
 
         identity_cases = [c for c in identity_cases_all if c.get("id") in identity_allowed]
         identity_total = sum(int(c.get("count") or 0) for c in identity_cases)
@@ -4881,8 +5060,11 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
         stats = ingest.copy()
         stats["rowsTotal"] = len(users)
         # Keep ingest duplicate metric semantics (extra duplicate rows), but never hide detected duplicates.
-        stats_dup = int(ingest.get("duplicateDisplayName") or 0)
-        stats["duplicateDisplayName"] = max(stats_dup, candidate_dup_extra_rows, reject_dup_count)
+        stats["duplicateDisplayName"] = _effective_duplicate_displayname_count(
+            ingest=ingest,
+            duplicate_items=duplicate_items,
+            rejects=rejects,
+        )
         stats["missingDepartment"] = len(missing_dept)
         stats["missingBusinessRole"] = len(missing_br)
         stats["identityIntegrityIssues"] = identity_total
@@ -4897,54 +5079,24 @@ def kpi_drilldown(metric: str, background_tasks: BackgroundTasks): #, username: 
             {"type": "Missing Business Role", "label": "Missing Business Role", "count": len(missing_br), "users": missing_br},
             {"type": "Identity Integrity", "label": "Identity Integrity", "count": identity_total, "cases": identity_cases, "users": []},
         ]
-        if connector_type == "sap":
-            visible_types = {"Duplicates", "Missing Business Role", "Identity Integrity"}
-            summary_cards = [
-                {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)},
-                {"id": "duplicates", "label": "Duplicates", "count": int(stats.get("duplicateDisplayName") or 0), "sectionType": "Duplicates"},
-                {"id": "missing_business_role", "label": "Missing Business Role", "count": int(stats.get("missingBusinessRole") or 0), "sectionType": "Missing Business Role"},
-                {"id": "identity_integrity", "label": "Identity Integrity", "count": int(stats.get("identityIntegrityIssues") or 0), "sectionType": "Identity Integrity"},
-            ]
-        elif connector_type == "ad":
-            visible_types = {"Duplicates", "Missing Department", "Identity Integrity"}
-            summary_cards = [
-                {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)},
-                {"id": "duplicates", "label": "Duplicates", "count": int(stats.get("duplicateDisplayName") or 0), "sectionType": "Duplicates"},
-                {"id": "missing_department", "label": "Missing Department", "count": int(stats.get("missingDepartment") or 0), "sectionType": "Missing Department"},
-                {"id": "identity_integrity", "label": "Identity Integrity", "count": int(stats.get("identityIntegrityIssues") or 0), "sectionType": "Identity Integrity"},
-            ]
-        elif connector_type == "csv":
-            outlier_case = next((c for c in identity_cases if c.get("id") == "csv_peer_value_outlier"), {"count": 0})
-            missing_case = next((c for c in identity_cases if c.get("id") == "csv_peer_missing_critical"), {"count": 0})
-            visible_types = {"Duplicates", "Missing Department", "Missing Business Role", "Identity Integrity"}
-            summary_cards = [
-                {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)},
-                {"id": "duplicates", "label": "Duplicates", "count": int(stats.get("duplicateDisplayName") or 0), "sectionType": "Duplicates"},
-                {"id": "missing_department", "label": "Missing Department", "count": int(stats.get("missingDepartment") or 0), "sectionType": "Missing Department"},
-                {"id": "missing_business_role", "label": "Missing Business Role", "count": int(stats.get("missingBusinessRole") or 0), "sectionType": "Missing Business Role"},
-                {"id": "csv_peer_value_outlier", "label": "Peer Dirty Values", "count": int(outlier_case.get("count") or 0), "sectionType": "Identity Integrity"},
-                {"id": "csv_peer_missing_critical", "label": "Peer Critical Missing", "count": int(missing_case.get("count") or 0), "sectionType": "Identity Integrity"},
-            ]
-        else:
-            visible_types = {"Duplicates", "Missing Department", "Missing Business Role", "Identity Integrity"}
-            summary_cards = [
-                {"id": "rows_total", "label": "Total Rows", "count": int(stats.get("rowsTotal") or 0)},
-                {"id": "duplicates", "label": "Duplicates", "count": int(stats.get("duplicateDisplayName") or 0), "sectionType": "Duplicates"},
-                {"id": "missing_department", "label": "Missing Department", "count": int(stats.get("missingDepartment") or 0), "sectionType": "Missing Department"},
-                {"id": "missing_business_role", "label": "Missing Business Role", "count": int(stats.get("missingBusinessRole") or 0), "sectionType": "Missing Business Role"},
-                {"id": "identity_integrity", "label": "Identity Integrity", "count": int(stats.get("identityIntegrityIssues") or 0), "sectionType": "Identity Integrity"},
-            ]
+        visible_types, summary_cards = _build_cluster_quality_summary_cards(
+            connector_type=connector_type,
+            stats=stats,
+            identity_cases=identity_cases,
+        )
 
         items = [x for x in items if x.get("type") in visible_types]
 
-        return {
+        out = {
             "metric": "cluster-quality",
             "connectorType": connector_type,
             "stats": stats,
             "summaryCards": summary_cards,
             "items": items,
-            "rejects": state.get("last_rejects") or []
+            "rejects": rejects,
         }
+        RESPONSE_CACHE.set(cache_key, out, CACHE_TTL_KPI)
+        return out
 
     if metric == "model-quality":
         users = active_users(state.get("last_extract", {}).get("users") or [])
@@ -5508,7 +5660,7 @@ def apply_data_quality_model_preset(preset: str, username: str = Depends(require
         raise HTTPException(status_code=404, detail="Unknown model preset")
     state["dq_model_preset"] = p
     state["dq_model_weights"] = dict(MODEL_QUALITY_PRESETS[p])
-    RESPONSE_CACHE.invalidate("kpi")
+    invalidate_hot_caches(kpi=True)
     log("INFO", f"Model quality preset applied: {p} by {username}")
     return {"ok": True, "activePreset": p, "weights": state["dq_model_weights"]}
 
