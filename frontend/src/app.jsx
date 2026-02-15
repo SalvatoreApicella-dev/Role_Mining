@@ -2215,7 +2215,7 @@ function UserDetail() {
             {/* Suggested Roles – green */}
             {peerStats?.suggestedGroups?.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <h4 style={{ marginTop: 0, color: "#4ade80" }}>✅ Suggested Roles (present in peers, missing here)</h4>
+                <h4 style={{ marginTop: 0, color: "#4ade80" }}>✅ Suggested Roles</h4>
                 <table className="table" style={{ fontSize: 13 }}>
                   <thead>
                     <tr>
