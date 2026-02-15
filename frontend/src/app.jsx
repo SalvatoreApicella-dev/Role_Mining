@@ -1626,7 +1626,19 @@ function UserDetail() {
   }
 
   useEffect(() => {
-    load();
+    load().then(() => {
+      // Auto-run peer analysis after load to populate orbit confidence data
+      if (username) {
+        (async () => {
+          try {
+            setAnalyzingPeers(true);
+            const res = await api.peerAnalysis(username);
+            setPeerStats(res);
+          } catch (_e) { /* silent — non-blocking */ }
+          finally { setAnalyzingPeers(false); }
+        })();
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
 
@@ -1722,6 +1734,7 @@ function UserDetail() {
     const roleSet = new Set((roleGroups || []).map((g) => String(g)));
     // 1. Build a map of confidence/frequency from peerStats
     // peerStats.suggestedGroups has { group, frequency, count, peers }
+    // peerStats.groupFrequencies has { groupName: frequency } for ALL assigned groups
     const freqMap = {};
     const suggestedSet = new Set();
     if (peerStats?.suggestedGroups) {
@@ -1730,6 +1743,8 @@ function UserDetail() {
         suggestedSet.add(sg.group);
       }
     }
+    // Merge assigned group frequencies from peer analysis
+    const assignedFreqMap = peerStats?.groupFrequencies || {};
 
     // Merge suggested groups into the graph
     // We want to show: Selected Groups + Role Groups + Peer Suggested Groups
@@ -1770,8 +1785,20 @@ function UserDetail() {
         let confidence = 0;
 
         if (inUser) {
-          orbitIndex = 1; // Assigned -> Orbit 1
-          confidence = 1;
+          // Assigned groups: orbit based on peer confidence
+          const peerFreq = assignedFreqMap[group];
+          if (peerFreq !== undefined) {
+            confidence = peerFreq;
+            if (peerFreq >= 0.9) orbitIndex = 1;       // 90-100% → closest
+            else if (peerFreq >= 0.7) orbitIndex = 2;  // 70-90%
+            else if (peerFreq >= 0.5) orbitIndex = 3;  // 50-70%
+            else if (peerFreq >= 0.3) orbitIndex = 4;  // 30-50%
+            else orbitIndex = 5;                       // < 30% → farthest (anomaly)
+          } else {
+            // No peer data yet (analysis not run) → default to orbit 1
+            orbitIndex = 1;
+            confidence = 1;
+          }
         } else {
           // Unassigned
           confidence = f;
@@ -1980,16 +2007,21 @@ function UserDetail() {
     const charge = fg.d3Force("charge");
     if (charge && typeof charge.strength === "function") charge.strength(-120);
 
-    // Link: forza elastica (solo per tenere insieme, ma non troppo forte da rompere l'orbita)
+    // Link: forza elastica — distanza basata sull'orbita del nodo target
     const link = fg.d3Force("link");
     if (link) {
-      // Distanza ideale = raggio dell'orbita 1 per i link utente
-      if (typeof link.distance === "function") link.distance(130);
+      const ORBIT_RADII_MAP = { 1: 130, 2: 210, 3: 280, 4: 340, 5: 400 };
+      if (typeof link.distance === "function") link.distance((l) => {
+        if (l?.isParticle) return 0;
+        // Use the target node's orbit radius as the ideal link distance
+        const targetNode = typeof l.target === 'object' ? l.target : null;
+        if (targetNode?.orbitIndex) return ORBIT_RADII_MAP[targetNode.orbitIndex] || 130;
+        return 130;
+      });
       if (typeof link.strength === "function") link.strength((l) => {
         if (l?.isParticle) return 0;
-        // Solo i link "user" (assegnati) hanno una forza strutturale significativa
-        if (l?.type === "user") return 0.2;
-        return 0; // I link "role" (non assegnati) non devono tirare verso il centro, li gestisce la radiale
+        if (l?.type === "user") return 0.15; // Slightly lower so radial force dominates
+        return 0;
       });
     }
 
@@ -2006,11 +2038,8 @@ function UserDetail() {
 
         const pending = pendingActiveIdsRef.current.has(node?.id);
         if (pending) {
-          // Se sta diventando attivo, va verso orbita 1
-          // Se sta diventando inattivo, dovrebbe andare verso la sua confidence orbit. 
-          // (per ora non sappiamo la confidence orbit di destinazione senza ricalcolo complesso, 
-          // usiamo un fallback o lasciamo che il prossimo render lo aggiusti)
-          return ORBIT_RADII[1];
+          // Animating toward center during activation
+          return 60;
         }
 
         const idx = node.orbitIndex || 5;
@@ -2325,9 +2354,9 @@ function UserDetail() {
                     let fill = "#445566"; // default grey
                     let stroke = "rgba(255,255,255,0.1)";
 
-                    if (node.orbitIndex === 1) {
-                      // Assigned
-                      fill = "#e12337"; // Red
+                    if (node.inUser) {
+                      // Assigned (red) - color stays red regardless of orbit
+                      fill = "#e12337";
                       stroke = "rgba(255,100,100,0.5)";
                     } else if (node.isSuggested) {
                       // Suggested (Green)

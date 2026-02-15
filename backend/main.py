@@ -4380,8 +4380,11 @@ def get_peer_analysis(uname: str, username: str = Depends(require_auth)):
     target_groups = set(target.get("groups") or [])
     anomalies = []
     
+    # Build full frequency map for ALL of the user's assigned groups
+    group_frequencies = {}
     for g in target_groups:
         freq = grp_counts[g] / peers_count
+        group_frequencies[g] = round(freq, 4)
         if freq < 0.15:  # Threshold for anomaly (e.g., < 15% of peers have this group)
             anomalies.append({
                 "group": g,
@@ -4407,6 +4410,7 @@ def get_peer_analysis(uname: str, username: str = Depends(require_auth)):
         "peersCount": peers_count,
         "anomalies": sorted(anomalies, key=lambda x: x["frequency"]),
         "suggestedGroups": suggested_groups,
+        "groupFrequencies": group_frequencies,
     }
 
 
