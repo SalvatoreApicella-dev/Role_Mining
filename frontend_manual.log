@@ -3,19 +3,24 @@
 > vite --host 0.0.0.0 --port 5173 --strictPort
 
 
-  VITE v5.4.21  ready in 219 ms
+  VITE v5.4.21  ready in 165 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.46:5173/
-12:24:28 AM [vite] http proxy error: /api/me
-Error: connect ECONNREFUSED 127.0.0.1:8000
-    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-12:24:28 AM [vite] http proxy error: /api/businessroles
-Error: connect ECONNREFUSED 127.0.0.1:8000
-    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-12:24:28 AM [vite] http proxy error: /api/me
-Error: connect ECONNREFUSED 127.0.0.1:8000
-    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-12:24:28 AM [vite] http proxy error: /api/businessroles
-Error: connect ECONNREFUSED 127.0.0.1:8000
-    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+12:44:00 AM [vite] hmr update /src/app.jsx
+12:44:09 AM [vite] hmr update /src/app.jsx
+12:44:15 AM [vite] hmr update /src/styles.css
+12:44:15 AM [vite] page reload src/main.jsx
+12:44:15 AM [vite] hmr update /src/app.jsx
+12:44:15 AM [vite] page reload src/optimisticRuntime.js
+12:46:11 AM [vite] page reload src/optimisticRuntime.js
+12:46:14 AM [vite] page reload src/main.jsx
+12:46:34 AM [vite] hmr update /src/app.jsx
+12:46:41 AM [vite] hmr update /src/styles.css
+12:47:29 AM [vite] hmr update /src/styles.css
+12:47:29 AM [vite] page reload src/main.jsx
+12:47:29 AM [vite] hmr update /src/app.jsx
+12:47:29 AM [vite] page reload src/optimisticRuntime.js
+12:48:26 AM [vite] page reload src/main.jsx
+12:48:46 AM [vite] hmr update /src/app.jsx
+12:48:51 AM [vite] hmr update /src/styles.css

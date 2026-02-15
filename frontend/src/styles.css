@@ -49,6 +49,29 @@ button.primary {
   border-color: rgba(106, 166, 255, 0.35);
 }
 
+.save-loadingbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+  background: rgba(106, 166, 255, 0.16);
+  overflow: hidden;
+}
+
+.save-loadingbar__fill {
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(106, 166, 255, 0), rgba(106, 166, 255, 0.95), rgba(106, 166, 255, 0));
+  animation: save-loadingbar-slide 1s linear infinite;
+}
+
+@keyframes save-loadingbar-slide {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(420%); }
+}
+
 button.danger {
   background: rgba(255, 106, 106, 0.15);
   border-color: rgba(255, 106, 106, 0.35);

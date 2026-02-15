@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./app.jsx";
 import "./styles.css";
+import { installSaveLoadingRuntime } from "./saveLoadingRuntime.js";
+
+installSaveLoadingRuntime();
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

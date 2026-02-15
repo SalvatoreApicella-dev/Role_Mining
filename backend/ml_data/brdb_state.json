@@ -5,8 +5,6 @@
       "INF_STORAGE_VIEW": 1.0,
       "INF_VPN_ALL": 14.0,
       "INF_VPN_READ": 182.0,
-      "SYS_AWS_ALL": 15.0,
-      "SYS_AWS_READ": 98.0,
       "SYS_CONFLUENCE_READ": 182.0,
       "SYS_CONFLUENCE_VIEW": 78.0,
       "SYS_GITLAB_WRITE": 64.0,
@@ -16,12 +14,14 @@
       "SYS_AWS_WRITE": 67.0,
       "SYS_GITLAB_READ": 56.0,
       "SYS_JIRA_READ": 57.0,
+      "SYS_AWS_READ": 97.0,
       "SYS_JENKINS_READ": 53.0,
       "SYS_K8S_WRITE": 80.0,
       "SYS_JIRA_VIEW": 59.0,
       "SYS_GITLAB_VIEW": 53.0,
       "SYS_CONFLUENCE_WRITE": 48.0,
       "SYS_JENKINS_VIEW": 62.0,
+      "SYS_AWS_ALL": 14.0,
       "SYS_K8S_VIEW": 8.0,
       "SYS_JIRA_ADMIN": 11.0,
       "SYS_AWS_VIEW": 7.0,
@@ -1189,11 +1189,6 @@
       "SYS_SERVICENOW_ADMIN": 3.0,
       "SYS_WORKDAY_READ": 37.0
     },
-    "Accountant": {
-      "SAP_FI_DISPLAY": 1.0,
-      "SAP_FI_POST": 1.0,
-      "SAP_PORTAL_USER": 1.0
-    },
     "Buyer": {
       "SAP_MM_BUYER": 1.0,
       "SAP_MM_DISPLAY": 1.0,
@@ -1342,8 +1337,6 @@
     "INF_STORAGE_VIEW": "Backend Engineer",
     "INF_VPN_ALL": "IT Ops Specialist",
     "INF_VPN_READ": "Backend Engineer",
-    "SYS_AWS_ALL": "Backend Engineer",
-    "SYS_AWS_READ": "Backend Engineer",
     "SYS_CONFLUENCE_READ": "Backend Engineer",
     "SYS_CONFLUENCE_VIEW": "Backend Engineer",
     "SYS_GITLAB_WRITE": "Backend Engineer",
@@ -1353,12 +1346,14 @@
     "SYS_AWS_WRITE": "Backend Engineer",
     "SYS_GITLAB_READ": "Backend Engineer",
     "SYS_JIRA_READ": "Backend Engineer",
+    "SYS_AWS_READ": "Backend Engineer",
     "SYS_JENKINS_READ": "Backend Engineer",
     "SYS_K8S_WRITE": "Backend Engineer",
     "SYS_JIRA_VIEW": "Backend Engineer",
     "SYS_GITLAB_VIEW": "Backend Engineer",
     "SYS_CONFLUENCE_WRITE": "Backend Engineer",
     "SYS_JENKINS_VIEW": "Backend Engineer",
+    "SYS_AWS_ALL": "Backend Engineer",
     "SYS_K8S_VIEW": "Backend Engineer",
     "SYS_JIRA_ADMIN": "Frontend Engineer",
     "SYS_AWS_VIEW": "Mobile Engineer",
@@ -1529,7 +1524,6 @@
     "SYS_WORKDAY_ALL": "Payroll Specialist",
     "SYS_WORKDAY_WRITE": "Payroll Specialist",
     "SYS_WORKDAY_VIEW": "Business Apps Analyst",
-    "SAP_FI_POST": "Accountant",
     "SAP_MM_BUYER": "Buyer",
     "SAP_MM_DISPLAY": "Buyer",
     "SAP_MM_WM_WRITE": "Warehouse Operator",
@@ -1646,5 +1640,5 @@
     "SAP_BULK_GRP_100": "Analyst",
     "SAP_BULK_GRP_001": "Analyst"
   },
-  "total_assignments": 4853
+  "total_assignments": 4852
 }

@@ -179,6 +179,29 @@ function Login() {
   );
 }
 
+function SaveLoadingBar() {
+  const [pending, setPending] = useState(0);
+
+  useEffect(() => {
+    const onStart = () => setPending((n) => n + 1);
+    const onEnd = () => setPending((n) => Math.max(0, n - 1));
+
+    window.addEventListener("rm:save:start", onStart);
+    window.addEventListener("rm:save:end", onEnd);
+    return () => {
+      window.removeEventListener("rm:save:start", onStart);
+      window.removeEventListener("rm:save:end", onEnd);
+    };
+  }, []);
+
+  if (pending <= 0) return null;
+  return (
+    <div className="save-loadingbar" aria-hidden="true">
+      <div className="save-loadingbar__fill" />
+    </div>
+  );
+}
+
 function Analytics() {
 
   const [kpi, setKpi] = useState({ totalUsers: 0, clusterQuality: 0, modelQuality: 0, aiDetection: 0 });
@@ -3921,40 +3944,46 @@ export default function App() {
   const authed = Boolean(getToken());
   if (!authed) {
     return (
-      <Routes>
-        <Route path="*" element={<Login />} />
-      </Routes>
+      <>
+        <SaveLoadingBar />
+        <Routes>
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </>
     );
   }
 
   return (
-    <div className="layout">
-      <Sidebar onLogout={logout} roles={roles} />
-      <Suspense fallback={<div style={{ display: "grid", placeItems: "center", height: "100vh", color: "var(--muted)" }}>Loading...</div>}>
-        <Routes>
-          <Route path="/" element={<Analytics />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/cluster" element={<Cluster />} />
-          <Route path="/utenti" element={<Utenti />} />
-          <Route path="/utenti/:username" element={<UserDetail />} />
-          <Route path="/overprivileged-users" element={<OverprivilegedPage />} />
-          <Route path="/model-quality" element={<ModelQualityPage />} />
-          <Route path="/config/connettori" element={<Connettori />} />
-          <Route path="/config/logs" element={<Logs />} />
-          <Route path="*" element={<Analytics />} />
-          <Route path="/business-roles" element={<BusinessRolesHome />} />
-          <Route path="/business-roles/:role" element={<BusinessRoleDetail />} />
-          <Route path="/kpi/:metric" element={<KpiDrilldownPage />} />
-          <Route path="/ai-detection" element={<AiDetectionPage />} />
-          <Route path="/ai-training" element={<AiTrainingPage />} />
-          <Route path="/ai-lab/drift" element={<AiLabDriftPage />} />
-          <Route path="/ai-lab/timeline" element={<AiLabTimelinePage />} />
-          <Route path="/ai-lab/ab-playground" element={<AiLabAbPlaygroundPage />} />
-          <Route path="/ai-lab/fairness" element={<AiLabFairnessPage />} />
-          <Route path="/ai-lab/synthetic" element={<AiLabSyntheticPage />} />
-          <Route path="/ai-lab/feedback" element={<AiLabFeedbackPage />} />
-        </Routes>
-      </Suspense>
-    </div>
+    <>
+      <SaveLoadingBar />
+      <div className="layout">
+        <Sidebar onLogout={logout} roles={roles} />
+        <Suspense fallback={<div style={{ display: "grid", placeItems: "center", height: "100vh", color: "var(--muted)" }}>Loading...</div>}>
+          <Routes>
+            <Route path="/" element={<Analytics />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/cluster" element={<Cluster />} />
+            <Route path="/utenti" element={<Utenti />} />
+            <Route path="/utenti/:username" element={<UserDetail />} />
+            <Route path="/overprivileged-users" element={<OverprivilegedPage />} />
+            <Route path="/model-quality" element={<ModelQualityPage />} />
+            <Route path="/config/connettori" element={<Connettori />} />
+            <Route path="/config/logs" element={<Logs />} />
+            <Route path="*" element={<Analytics />} />
+            <Route path="/business-roles" element={<BusinessRolesHome />} />
+            <Route path="/business-roles/:role" element={<BusinessRoleDetail />} />
+            <Route path="/kpi/:metric" element={<KpiDrilldownPage />} />
+            <Route path="/ai-detection" element={<AiDetectionPage />} />
+            <Route path="/ai-training" element={<AiTrainingPage />} />
+            <Route path="/ai-lab/drift" element={<AiLabDriftPage />} />
+            <Route path="/ai-lab/timeline" element={<AiLabTimelinePage />} />
+            <Route path="/ai-lab/ab-playground" element={<AiLabAbPlaygroundPage />} />
+            <Route path="/ai-lab/fairness" element={<AiLabFairnessPage />} />
+            <Route path="/ai-lab/synthetic" element={<AiLabSyntheticPage />} />
+            <Route path="/ai-lab/feedback" element={<AiLabFeedbackPage />} />
+          </Routes>
+        </Suspense>
+      </div>
+    </>
   );
 }
