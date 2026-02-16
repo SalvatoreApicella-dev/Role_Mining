@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
@@ -30,11 +30,34 @@ const SPLIT_KEY = "cluster_assignments_height_v1";
 const ACTIVE_PARTICLE_SPEED = 0.0048;
 const MAX_GRAPH_NODES = 220;
 const OUTER_NODE_RADIUS = 27; // all non-center nodes use the same radius
+const DEFAULT_PERMISSIONS = {
+  can_view_analytics: true,
+  can_view_cluster: true,
+  can_view_users: true,
+  can_view_business_roles: true,
+  can_view_ai_training: true,
+  can_view_configurations: true,
+  can_view_logs: true,
+  can_view_system_users: true,
+  can_manage_settings: true,
+  can_manage_assignments: true,
+};
+
+function normalizePermissions(raw) {
+  const out = { ...DEFAULT_PERMISSIONS };
+  for (const key of Object.keys(DEFAULT_PERMISSIONS)) {
+    if (raw && Object.prototype.hasOwnProperty.call(raw, key)) {
+      out[key] = Boolean(raw[key]);
+    }
+  }
+  return out;
+}
 
 
-function Sidebar({ onLogout, roles }) {
+function Sidebar({ onLogout, permissions }) {
   const [openCfg, setOpenCfg] = useState(false);
   const [openAiGym, setOpenAiGym] = useState(false);
+  const can = (key) => permissions?.[key] !== false;
 
   return (
     <aside className="sidebar bip-sidebar">
@@ -52,29 +75,37 @@ function Sidebar({ onLogout, roles }) {
       <div className="menu">
         <div className="menu-block nav-section">
           <div className="menu-section">Management</div>
-          <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
-            <span className="nav-item__dot" />
-            <span className="nav-item__text">Business Roles</span>
-          </NavLink>
-          <NavLink to="/cluster" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
-            <span className="nav-item__dot" />
-            <span className="nav-item__text">Cluster</span>
-          </NavLink>
-          <NavLink to="/utenti" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
-            <span className="nav-item__dot" />
-            <span className="nav-item__text">Users</span>
-          </NavLink>
+          {can("can_view_business_roles") && (
+            <NavLink to="/business-roles" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+              <span className="nav-item__dot" />
+              <span className="nav-item__text">Business Roles</span>
+            </NavLink>
+          )}
+          {can("can_view_cluster") && (
+            <NavLink to="/cluster" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+              <span className="nav-item__dot" />
+              <span className="nav-item__text">Cluster</span>
+            </NavLink>
+          )}
+          {can("can_view_users") && (
+            <NavLink to="/utenti" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+              <span className="nav-item__dot" />
+              <span className="nav-item__text">Users</span>
+            </NavLink>
+          )}
         </div>
 
         <div className="menu-block nav-section">
           <div className="menu-section">System</div>
-          <button className={`link nav-toggle ${openAiGym ? "is-open" : ""}`} onClick={() => setOpenAiGym(v => !v)}>
-            <span className="nav-toggle__label">
-              <span className="nav-item__dot" />
-              <span className="nav-item__text">AI Training</span>
-            </span>
-          </button>
-          {openAiGym && (
+          {can("can_view_ai_training") && (
+            <button className={`link nav-toggle ${openAiGym ? "is-open" : ""}`} onClick={() => setOpenAiGym(v => !v)}>
+              <span className="nav-toggle__label">
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">AI Training</span>
+              </span>
+            </button>
+          )}
+          {can("can_view_ai_training") && openAiGym && (
             <div className="submenu nav-submenu">
               <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
                 <span className="nav-item__dot" />
@@ -106,22 +137,34 @@ function Sidebar({ onLogout, roles }) {
               </NavLink>
             </div>
           )}
-          <button className={`link nav-toggle ${openCfg ? "is-open" : ""}`} onClick={() => setOpenCfg(v => !v)}>
-            <span className="nav-toggle__label">
-              <span className="nav-item__dot" />
-              <span className="nav-item__text">Configurazioni</span>
-            </span>
-          </button>
+          {(can("can_view_configurations") || can("can_view_logs") || can("can_view_system_users")) && (
+            <button className={`link nav-toggle ${openCfg ? "is-open" : ""}`} onClick={() => setOpenCfg(v => !v)}>
+              <span className="nav-toggle__label">
+                <span className="nav-item__dot" />
+                <span className="nav-item__text">Configurazioni</span>
+              </span>
+            </button>
+          )}
           {openCfg && (
             <div className="submenu nav-submenu">
-              <NavLink to="/config/connettori" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
-                <span className="nav-item__dot" />
-                <span className="nav-item__text">Connettori</span>
-              </NavLink>
-              <NavLink to="/config/logs" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
-                <span className="nav-item__dot" />
-                <span className="nav-item__text">Logs</span>
-              </NavLink>
+              {can("can_view_configurations") && (
+                <NavLink to="/config/connettori" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                  <span className="nav-item__dot" />
+                  <span className="nav-item__text">Connettori</span>
+                </NavLink>
+              )}
+              {can("can_view_logs") && (
+                <NavLink to="/config/logs" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                  <span className="nav-item__dot" />
+                  <span className="nav-item__text">Logs</span>
+                </NavLink>
+              )}
+              {can("can_view_system_users") && (
+                <NavLink to="/config/system-users" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+                  <span className="nav-item__dot" />
+                  <span className="nav-item__text">System Users</span>
+                </NavLink>
+              )}
             </div>
           )}
         </div>
@@ -166,7 +209,7 @@ function Login() {
 
         <h2 style={{ marginTop: 0 }}>Login</h2>
         <p style={{ color: "var(--muted)", marginTop: -6 }}>
-          Mock AD: admin / admin123
+          Mock users: admin / admin123, user / user123
         </p>
         <form onSubmit={doLogin} className="row" style={{ flexDirection: "column", alignItems: "stretch" }}>
           <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" aria-label="Username" />
@@ -200,6 +243,22 @@ function SaveLoadingBar() {
       <div className="save-loadingbar__fill" />
     </div>
   );
+}
+
+function AccessDenied({ title = "Accesso negato", detail = "Non hai i permessi necessari per questa sezione." }) {
+  return (
+    <div className="main">
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>{title}</h2>
+        <div style={{ color: "var(--muted)" }}>{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function PermissionGate({ allow, children, title, detail }) {
+  if (!allow) return <AccessDenied title={title} detail={detail} />;
+  return children;
 }
 
 function Analytics() {
@@ -538,7 +597,7 @@ function Analytics() {
   );
 }
 
-function Connettori() {
+function Connettori({ permissions }) {
   const [cfg, setCfg] = useState({
     server: "mock",
     bind_user: "",
@@ -629,6 +688,7 @@ function Connettori() {
     day: "MON",
     enabled: true,
   });
+  const canManageSettings = permissions?.can_manage_settings !== false;
 
 
 
@@ -661,6 +721,10 @@ function Connettori() {
   };
 
   async function saveCfg(msg = "Configurazione salvata.", opts = {}) {
+    if (!canManageSettings) {
+      setErr("Permessi insufficienti: modifica configurazioni non consentita.");
+      return;
+    }
     const { silent = false, overrideCfg = null } = opts;
     setCfgSaving(true);
     try {
@@ -792,6 +856,10 @@ function Connettori() {
   }
 
   async function runDiscovery(target) {
+    if (!canManageSettings) {
+      setErr("Permessi insufficienti: discovery non consentita.");
+      return;
+    }
     setDiscoveryLoadingTarget(target);
     try {
       setErr("");
@@ -894,6 +962,10 @@ function Connettori() {
   }
 
   async function runProvisioning(target) {
+    if (!canManageSettings) {
+      setErr("Permessi insufficienti: provisioning non consentito.");
+      return;
+    }
     setProvisioningLoadingTarget(target);
     try {
       setErr("");
@@ -919,6 +991,10 @@ function Connettori() {
   }
 
   async function runSapBulkProvision() {
+    if (!canManageSettings) {
+      setErr("Permessi insufficienti: provisioning bulk non consentito.");
+      return;
+    }
     setSapBulkLoading(true);
     try {
       setErr("");
@@ -989,18 +1065,18 @@ function Connettori() {
     const provisioningLoading = provisioningLoadingTarget === target;
     return (
       <div className="row connector-form-actions" style={{ marginTop: 10 }}>
-        <button className="primary" onClick={() => saveCfg(saveMessage)} disabled={cfgSaving}>Salva</button>
-        <button className="primary" onClick={() => runDiscovery(target)} disabled={cfgSaving || loading}>
+        <button className="primary" onClick={() => saveCfg(saveMessage)} disabled={cfgSaving || !canManageSettings}>Salva</button>
+        <button className="primary" onClick={() => runDiscovery(target)} disabled={cfgSaving || loading || !canManageSettings}>
           {loading ? "Discovery..." : "Discovery"}
         </button>
         <button
           className="primary"
           onClick={() => runProvisioning(target)}
-          disabled={cfgSaving || loading || provisioningLoading}
+          disabled={cfgSaving || loading || provisioningLoading || !canManageSettings}
         >
           {provisioningLoading ? "Provisioning..." : "Provision"}
         </button>
-        <button className="primary" onClick={() => openScheduleModal(target)} disabled={cfgSaving || loading}>Schedule</button>
+        <button className="primary" onClick={() => openScheduleModal(target)} disabled={cfgSaving || loading || !canManageSettings}>Schedule</button>
         <button className="primary" onClick={() => openResultModal(target)} disabled={cfgSaving}>Esito</button>
       </div>
     );
@@ -1258,13 +1334,13 @@ function Connettori() {
 
               {card.key === "csv" ? (
                 <div className="row connector-form-actions" style={{ marginTop: 8 }}>
-                  <button className="primary" disabled={!csvFile || csvLoading} onClick={() => runDiscovery("csv")}>
+                  <button className="primary" disabled={!csvFile || csvLoading || !canManageSettings} onClick={() => runDiscovery("csv")}>
                     {csvLoading ? "Discovery..." : "Discovery"}
                   </button>
-                  <button className="primary" disabled={csvLoading || provisioningLoadingTarget === "csv"} onClick={() => runProvisioning("csv")}>
+                  <button className="primary" disabled={csvLoading || provisioningLoadingTarget === "csv" || !canManageSettings} onClick={() => runProvisioning("csv")}>
                     {provisioningLoadingTarget === "csv" ? "Provisioning..." : "Provision"}
                   </button>
-                  <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading}>Schedule</button>
+                  <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading || !canManageSettings}>Schedule</button>
                   <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
                 </div>
               ) : (
@@ -1937,7 +2013,7 @@ function Connettori() {
   );
 }
 
-function Utenti() {
+function Utenti({ permissions }) {
   const [q, setQ] = useState("");
   const [typeQ, setTypeQ] = useState("");
   const [rows, setRows] = useState([]);
@@ -1951,6 +2027,7 @@ function Utenti() {
   const [sortOrder, setSortOrder] = useState("asc");
   const csvInputRef = useRef(null);
   const nav = useNavigate();
+  const canManageAssignments = permissions?.can_manage_assignments !== false;
 
 
   async function load(currOffset = 0) {
@@ -2036,7 +2113,7 @@ function Utenti() {
             title="Extract CSV"
             aria-label="Extract CSV"
             onClick={() => csvInputRef.current?.click()}
-            disabled={csvImporting}
+            disabled={csvImporting || !canManageAssignments}
             style={{ marginLeft: 6, width: 42, height: 42, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
           >
             <svg
@@ -2058,6 +2135,11 @@ function Utenti() {
         </div>
 
         <hr className="sep" />
+        {!canManageAssignments && (
+          <div style={{ color: "var(--muted)", marginBottom: 10 }}>
+            Profilo in sola lettura: non puoi importare o modificare assegnazioni utenti.
+          </div>
+        )}
 
         <table className="table">
           <thead>
@@ -2103,7 +2185,7 @@ function Utenti() {
   );
 }
 
-function UserDetail() {
+function UserDetail({ permissions }) {
   const { username } = useParams();
   const nav = useNavigate();
 
@@ -2131,6 +2213,7 @@ function UserDetail() {
   const [ok, setOk] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const canManageAssignments = permissions?.can_manage_assignments !== false;
 
   const selectStyles = {
     control: (base, state) => ({
@@ -2207,6 +2290,7 @@ function UserDetail() {
   }, [username]);
 
   function toggleGroup(g) {
+    if (!canManageAssignments) return;
     setSelectedGroups((prev) => {
       const has = prev.includes(g);
       if (has) return prev.filter((x) => x !== g);
@@ -2230,6 +2314,10 @@ function UserDetail() {
 
   async function save() {
     if (!user?.username) return;
+    if (!canManageAssignments) {
+      setErr("Permessi insufficienti: modifica assegnazioni non consentita.");
+      return;
+    }
     try {
       setSaving(true);
       setErr("");
@@ -2696,7 +2784,10 @@ function UserDetail() {
               isSearchable={true}
               styles={selectStyles}
               value={{ value: selectedRole, label: selectedRole }}
-              onChange={(opt) => setSelectedRole(opt?.value || "Unassigned")}
+              onChange={(opt) => {
+                if (!canManageAssignments) return;
+                setSelectedRole(opt?.value || "Unassigned");
+              }}
               placeholder="Select role..."
               options={[
                 { value: "Unassigned", label: "Unassigned" },
@@ -2709,13 +2800,18 @@ function UserDetail() {
 
 
 
-          <button className="primary" onClick={save} disabled={saving}>
+          <button className="primary" onClick={save} disabled={saving || !canManageAssignments}>
             {saving ? "Saving..." : "Save"}
           </button>
         </div>
 
         {ok ? <div className="ok">{ok}</div> : null}
         {err ? <div className="err">{err}</div> : null}
+        {!canManageAssignments ? (
+          <div style={{ color: "var(--muted)" }}>
+            Profilo in sola lettura: puoi analizzare l'utente ma non modificare assegnazioni e classificazione.
+          </div>
+        ) : null}
 
         <hr className="sep" />
 
@@ -2725,7 +2821,10 @@ function UserDetail() {
             <Select
               styles={selectStyles}
               value={{ value: accountType, label: accountType }}
-              onChange={(opt) => setAccountType(opt?.value || "Internal")}
+              onChange={(opt) => {
+                if (!canManageAssignments) return;
+                setAccountType(opt?.value || "Internal");
+              }}
               options={[
                 { value: "Internal", label: "Internal" },
                 { value: "External", label: "External" },
@@ -2860,6 +2959,7 @@ function UserDetail() {
                   nodeLabel={() => ""}
                   onNodeHover={(node) => setHoveredGraphNode(node)}
                   onNodeDoubleClick={(node) => {
+                    if (!canManageAssignments) return;
                     if (!node || node.isCenter) return;
                     toggleGroup(node.group);
                   }}
@@ -3028,15 +3128,16 @@ function UserDetail() {
                   {graphGroupsList.map((g) => (
                     <div
                       key={g.name}
-                      className={`user-graph-list__item ${saving ? "is-disabled" : "is-clickable"}`}
+                      className={`user-graph-list__item ${saving || !canManageAssignments ? "is-disabled" : "is-clickable"}`}
                       role="button"
-                      tabIndex={saving ? -1 : 0}
+                      tabIndex={saving || !canManageAssignments ? -1 : 0}
                       onClick={() => {
+                        if (!canManageAssignments) return;
                         const node = forceNodeById[`group:${g.name}`];
                         if (node) handleGraphNodeClick(node);
                       }}
                       onKeyDown={(e) => {
-                        if (saving) return;
+                        if (saving || !canManageAssignments) return;
                         if (e.key !== "Enter" && e.key !== " ") return;
                         e.preventDefault();
                         const node = forceNodeById[`group:${g.name}`];
@@ -3059,7 +3160,7 @@ function UserDetail() {
         <div style={{ height: 12 }} />
 
         <div className="row">
-          <button className="primary" onClick={save} disabled={saving}>
+          <button className="primary" onClick={save} disabled={saving || !canManageAssignments}>
             {saving ? "Saving..." : "Save changes"}
           </button>
           <button
@@ -3081,11 +3182,12 @@ function UserDetail() {
 }
 
 
-function Cluster() {
+function Cluster({ permissions }) {
   const [roleMetaByRole, setRoleMetaByRole] = useState({});   // {"IT": {color, groups}, ... }
   const [groupRoleMap, setGroupRoleMap] = useState({});       // {"VPN": "IT", "Payroll": "HR", ... }
   const [usersIndex, setUsersIndex] = useState({});
   const pendingCellTogglesRef = useRef(new Set());
+  const canManageAssignments = permissions?.can_manage_assignments !== false;
 
   const containerRef = React.useRef(null);
 
@@ -3109,6 +3211,10 @@ function Cluster() {
   }
 
   async function onCellDoubleClicked(p) {
+    if (!canManageAssignments) {
+      setErr("Permessi insufficienti: modifica assegnazioni non consentita.");
+      return;
+    }
     try {
       setErr("");
 
@@ -3688,7 +3794,540 @@ function Logs() {
   );
 }
 
-function BusinessRolesHome() {
+function SystemUsersPage({ permissions }) {
+  const nav = useNavigate();
+  const { username: routeUsername } = useParams();
+  const canManageSettings = permissions?.can_manage_settings !== false;
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [err, setErr] = useState("");
+  const [ok, setOk] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedMany, setSelectedMany] = useState(new Set());
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(25);
+  const [newUser, setNewUser] = useState({
+    username: "",
+    display_name: "",
+    password: "",
+  });
+
+  const permissionGroups = [
+    {
+      title: "Visibility",
+      hint: "Controlla quali pagine sono visibili nel menu.",
+      keys: [
+        "can_view_analytics",
+        "can_view_cluster",
+        "can_view_users",
+        "can_view_business_roles",
+        "can_view_ai_training",
+        "can_view_configurations",
+        "can_view_logs",
+        "can_view_system_users",
+      ],
+    },
+    {
+      title: "Operations",
+      hint: "Controlla modifiche dati e impostazioni.",
+      keys: ["can_manage_settings", "can_manage_assignments"],
+    },
+  ];
+
+  const labels = {
+    can_view_analytics: "Analytics",
+    can_view_cluster: "Cluster",
+    can_view_users: "Users",
+    can_view_business_roles: "Business Roles",
+    can_view_ai_training: "AI Training",
+    can_view_configurations: "Configurazioni",
+    can_view_logs: "Logs",
+    can_view_system_users: "System Users",
+    can_manage_settings: "Gestione impostazioni",
+    can_manage_assignments: "Gestione assegnazioni",
+  };
+
+  async function loadUsers(targetUsername = "") {
+    try {
+      setLoading(true);
+      setErr("");
+      const res = await api.systemUsers();
+      const list = res.items || [];
+      setItems(list);
+      if (!routeUsername && list.length === 0) setForm(null);
+      const normalizedTarget = String(targetUsername || "").trim().toLowerCase();
+      if (normalizedTarget) {
+        const match = list.find((x) => String(x.username || "").toLowerCase() === normalizedTarget);
+        if (!match) {
+          if (list[0]?.username) nav(`/config/system-users/${encodeURIComponent(list[0].username)}`, { replace: true });
+          else nav("/config/system-users", { replace: true });
+        }
+      }
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function selectUser(username) {
+    try {
+      setErr("");
+      setOk("");
+      if (!username) {
+        setForm(null);
+        return;
+      }
+      const res = await api.systemUser(username);
+      const item = res.item;
+      setForm({
+        username: item?.username || username,
+        display_name: item?.display_name || item?.username || username,
+        active: item?.active !== false,
+        password: "",
+        permissions: { ...(item?.permissions || {}) },
+      });
+    } catch (e) {
+      setErr(String(e?.message || e));
+    }
+  }
+
+  async function saveUser() {
+    if (!form?.username) return;
+    if (!canManageSettings) {
+      setErr("Permessi insufficienti: modifica system users non consentita.");
+      return;
+    }
+    try {
+      setSaving(true);
+      setErr("");
+      setOk("");
+      const payload = {
+        display_name: form.display_name || form.username,
+        active: Boolean(form.active),
+        permissions: { ...(form.permissions || {}) },
+      };
+      if (String(form.password || "").trim()) {
+        payload.password = String(form.password).trim();
+      }
+      const res = await api.updateSystemUser(form.username, payload);
+      setOk(`Utente ${res?.item?.username || form.username} aggiornato.`);
+      setForm((prev) => ({ ...(prev || {}), password: "" }));
+      await loadUsers(form.username);
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createUser() {
+    if (!canManageSettings) {
+      setErr("Permessi insufficienti: creazione system users non consentita.");
+      return;
+    }
+    const username = String(newUser.username || "").trim().toLowerCase();
+    const password = String(newUser.password || "").trim();
+    if (!username) {
+      setErr("Inserisci username.");
+      return;
+    }
+    if (password.length < 4) {
+      setErr("Password minima: 4 caratteri.");
+      return;
+    }
+    try {
+      setCreating(true);
+      setErr("");
+      setOk("");
+      await api.createSystemUser({
+        username,
+        display_name: String(newUser.display_name || "").trim() || username,
+        password,
+      });
+      setOk(`Utente ${username} creato.`);
+      setNewUser({ username: "", display_name: "", password: "" });
+      await loadUsers(username);
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function deleteSingleUser(username) {
+    if (!canManageSettings) {
+      setErr("Permessi insufficienti: eliminazione system users non consentita.");
+      return;
+    }
+    try {
+      setDeleting(true);
+      setErr("");
+      setOk("");
+      await api.deleteSystemUser(username);
+      setOk(`Utente ${username} eliminato.`);
+      setSelectedMany(new Set());
+      await loadUsers("");
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function bulkDeleteUsers() {
+    if (!canManageSettings) {
+      setErr("Permessi insufficienti: eliminazione massiva non consentita.");
+      return;
+    }
+    const usernames = Array.from(selectedMany || []);
+    if (usernames.length === 0) {
+      setErr("Seleziona almeno un utente.");
+      return;
+    }
+    try {
+      setDeleting(true);
+      setErr("");
+      setOk("");
+      const out = await api.bulkDeleteSystemUsers(usernames);
+      setOk(`Eliminati ${Number(out?.deleted_count || 0)} utenti.`);
+      setSelectedMany(new Set());
+      await loadUsers("");
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const filteredItems = useMemo(() => {
+    const q = String(searchQ || "").trim().toLowerCase();
+    if (!q) return items;
+    return (items || []).filter(
+      (u) =>
+        String(u.username || "").toLowerCase().includes(q) ||
+        String(u.display_name || "").toLowerCase().includes(q)
+    );
+  }, [items, searchQ]);
+
+  const selectedUsername = String(routeUsername || "").trim().toLowerCase();
+  const pagedItems = useMemo(
+    () => filteredItems.slice(offset, offset + limit),
+    [filteredItems, offset, limit]
+  );
+  const total = filteredItems.length;
+
+  useEffect(() => {
+    loadUsers(routeUsername || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!routeUsername) return;
+    selectUser(routeUsername);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeUsername, items.length]);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [searchQ]);
+
+  function goPrev() {
+    setOffset((prev) => Math.max(0, prev - limit));
+  }
+
+  function goNext() {
+    setOffset((prev) => {
+      if (prev + limit >= total) return prev;
+      return prev + limit;
+    });
+  }
+
+  if (!routeUsername) {
+    return (
+      <div className="main system-users-page">
+        <h2 style={{ marginTop: 0 }}>System Users ({total})</h2>
+        <div className="panel">
+          <div className="system-users-toolbar">
+            <div className="system-users-toolbar__search">
+              <label>Search username</label>
+              <input
+                type="search"
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+                placeholder="Search username..."
+                aria-label="Search username"
+              />
+            </div>
+            <div className="system-users-toolbar__actions">
+              <button className="primary system-users-btn" onClick={() => setSelectionMode((v) => !v)}>
+                <span className="system-users-btn__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="m9 11 3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                </span>
+                {selectionMode ? "Cancel Select" : "Select User"}
+              </button>
+              <button
+                className="danger system-users-btn"
+                onClick={bulkDeleteUsers}
+                disabled={!selectionMode || selectedMany.size === 0 || deleting || !canManageSettings}
+              >
+                <span className="system-users-btn__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                  </svg>
+                </span>
+                {deleting ? "Deleting..." : `Delete Selected (${selectedMany.size})`}
+              </button>
+            </div>
+          </div>
+
+          <div className="system-users-create">
+            <div className="system-users-create__title">Create Local User</div>
+            <div className="system-users-create__grid">
+              <input
+                value={newUser.username}
+                disabled={!canManageSettings}
+                placeholder="New username"
+                onChange={(e) => setNewUser((prev) => ({ ...prev, username: e.target.value }))}
+              />
+              <input
+                value={newUser.display_name}
+                disabled={!canManageSettings}
+                placeholder="Display name"
+                onChange={(e) => setNewUser((prev) => ({ ...prev, display_name: e.target.value }))}
+              />
+              <input
+                type="password"
+                value={newUser.password}
+                disabled={!canManageSettings}
+                placeholder="Password"
+                onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))}
+              />
+              <button className="primary system-users-btn" onClick={createUser} disabled={creating || !canManageSettings}>
+                <span className="system-users-btn__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 5v14" />
+                    <path d="M5 12h14" />
+                  </svg>
+                </span>
+                {creating ? "Creating..." : "Add User"}
+              </button>
+            </div>
+          </div>
+
+          <hr className="sep" />
+
+          <table className="table">
+            <thead>
+              <tr>
+                {selectionMode ? <th style={{ width: 48 }}>Sel</th> : null}
+                <th>Username</th>
+                <th>Display Name</th>
+                <th>Status</th>
+                <th>Scope</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedItems.map((u) => (
+                <tr
+                  key={u.username}
+                  onClick={() => nav(`/config/system-users/${encodeURIComponent(u.username)}`)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {selectionMode ? (
+                    <td
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedMany.has(u.username)}
+                        onChange={() =>
+                          setSelectedMany((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(u.username)) next.delete(u.username);
+                            else next.add(u.username);
+                            return next;
+                          })
+                        }
+                      />
+                    </td>
+                  ) : null}
+                  <td>{u.username}</td>
+                  <td>{u.display_name || u.username}</td>
+                  <td style={{ color: u.active ? "#71ffb2" : "#ffb4b4" }}>{u.active ? "Active" : "Disabled"}</td>
+                  <td style={{ color: "var(--muted)" }}>
+                    {u.permissions?.can_manage_settings ? "Admin" : "Viewer"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="row system-users-pagination">
+            <button disabled={offset === 0} onClick={goPrev}>Prev</button>
+            <span className="system-users-pagination__meta">
+              Page {Math.floor(offset / limit) + 1} / {Math.ceil(total / limit) || 1}
+            </span>
+            <button disabled={offset + limit >= total} onClick={goNext}>Next</button>
+          </div>
+
+          {loading && <div style={{ color: "var(--muted)", marginTop: 8 }}>Caricamento...</div>}
+          {ok && <div className="ok">{ok}</div>}
+          {err && <div className="err">{err}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="main system-users-page">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+        <h2 style={{ marginTop: 0 }}>System User {form?.username || routeUsername}</h2>
+        <button className="link system-users-btn" onClick={() => nav("/config/system-users")}>
+          <span className="system-users-btn__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </span>
+          Back
+        </button>
+      </div>
+      <div className="panel">
+        {!form ? (
+          <div style={{ color: "var(--muted)" }}>Seleziona un utente per vedere i dettagli.</div>
+        ) : (
+          <>
+            <div className="row system-users-detail-grid">
+              <div>
+                <label>Username</label>
+                <input value={form.username || ""} disabled />
+              </div>
+              <div>
+                <label>Display Name</label>
+                <input
+                  value={form.display_name || ""}
+                  disabled={!canManageSettings}
+                  onChange={(e) => setForm((prev) => ({ ...prev, display_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label>Nuova Password</label>
+                <input
+                  type="password"
+                  value={form.password || ""}
+                  disabled={!canManageSettings}
+                  placeholder="Lascia vuoto per non cambiare"
+                  onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                />
+              </div>
+              <label className="system-users-detail-active">
+                <input
+                  type="checkbox"
+                  checked={!!form.active}
+                  disabled={!canManageSettings}
+                  onChange={(e) => setForm((prev) => ({ ...prev, active: e.target.checked }))}
+                />
+                Account attivo
+              </label>
+            </div>
+
+            <hr className="sep" />
+
+            <div className="system-users-permissions-card">
+              <div className="system-users-permissions-card__head">
+                <h3 style={{ margin: 0 }}>Permessi visibilita e controllo</h3>
+                <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                  Best practice: separare visibilita pagina da permessi operativi.
+                </div>
+              </div>
+              {permissionGroups.map((group) => (
+                <div key={group.title} className="system-users-perm-group">
+                  <div className="system-users-perm-group__title">{group.title}</div>
+                  <div className="system-users-perm-group__hint">{group.hint}</div>
+                  <div className="system-users-perm-grid">
+                    {group.keys.map((key) => (
+                      <label key={key} className="system-users-perm-item">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.permissions?.[key])}
+                          disabled={!canManageSettings}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              permissions: {
+                                ...(prev?.permissions || {}),
+                                [key]: e.target.checked,
+                              },
+                            }))
+                          }
+                        />
+                        <span>{labels[key] || key}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="row system-users-detail-actions">
+              <button className="primary system-users-btn" onClick={saveUser} disabled={saving || !canManageSettings}>
+                <span className="system-users-btn__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <path d="M17 21v-8H7v8" />
+                    <path d="M7 3v5h8" />
+                  </svg>
+                </span>
+                {saving ? "Salvataggio..." : "Salva"}
+              </button>
+              <button className="system-users-btn" onClick={() => selectUser(form.username)} disabled={saving}>
+                <span className="system-users-btn__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" />
+                    <path d="M3 3v6h6" />
+                  </svg>
+                </span>
+                Reset
+              </button>
+              <button
+                className="danger system-users-btn"
+                onClick={() => deleteSingleUser(form.username)}
+                disabled={deleting || !canManageSettings}
+              >
+                <span className="system-users-btn__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                  </svg>
+                </span>
+                {deleting ? "Delete..." : "Delete User"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {loading && <div style={{ color: "var(--muted)", marginTop: 8 }}>Caricamento...</div>}
+        {ok && <div className="ok">{ok}</div>}
+        {err && <div className="err">{err}</div>}
+      </div>
+    </div>
+  );
+}
+
+function BusinessRolesHome({ permissions }) {
   const [roles, setRoles] = useState([]);
   const [searchRole, setSearchRole] = useState("");
   const [err, setErr] = useState("");
@@ -3698,6 +4337,7 @@ function BusinessRolesHome() {
   const [csvImporting, setCsvImporting] = useState(false);
   const [recalcBusy, setRecalcBusy] = useState(false);
   const csvInputRef = useRef(null);
+  const canManageAssignments = permissions?.can_manage_assignments !== false;
 
 
   async function refreshRoles() {
@@ -3748,6 +4388,7 @@ function BusinessRolesHome() {
                 setErr(String(e.message || e));
               }
             }}
+            disabled={!canManageAssignments}
           >
             + Crea
           </button>
@@ -3766,7 +4407,7 @@ function BusinessRolesHome() {
                 setRecalcBusy(false);
               }
             }}
-            disabled={recalcBusy}
+            disabled={recalcBusy || !canManageAssignments}
           >
             {recalcBusy ? "Ricalcolo..." : "Ricalcola Gruppi"}
           </button>
@@ -3798,7 +4439,7 @@ function BusinessRolesHome() {
             title="Import CSV"
             aria-label="Import CSV"
             onClick={() => csvInputRef.current?.click()}
-            disabled={csvImporting}
+            disabled={csvImporting || !canManageAssignments}
             style={{ width: 42, height: 42, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
           >
             <svg
@@ -3822,6 +4463,11 @@ function BusinessRolesHome() {
         {ok && <div className="ok">{ok}</div>}
         {importMsg && <div className="ok">{importMsg}</div>}
         {err && <div className="err">{err}</div>}
+        {!canManageAssignments && (
+          <div style={{ color: "var(--muted)" }}>
+            Profilo in sola lettura: non puoi creare ruoli o modificare assegnazioni.
+          </div>
+        )}
 
         <hr className="sep" />
 
@@ -3867,7 +4513,7 @@ function BusinessRolesHome() {
 
 }
 
-function BusinessRoleDetail() {
+function BusinessRoleDetail({ permissions }) {
   const { role } = useParams();
   const [detail, setDetail] = useState({ role, users: [] });
   const [allUsers, setAllUsers] = useState([]);
@@ -3884,6 +4530,7 @@ function BusinessRoleDetail() {
   const [suggErr, setSuggErr] = useState("");
   const [suggLoading, setSuggLoading] = useState(false);
   const [autoApplied, setAutoApplied] = useState(false); // evita loop infinito
+  const canManageAssignments = permissions?.can_manage_assignments !== false;
 
 
   const selectStyles = {
@@ -3931,6 +4578,7 @@ function BusinessRoleDetail() {
 
 
   async function autoApplyHighConfidence(role, items, currentGroups) {
+    if (!canManageAssignments) return { applied: 0 };
     const already = new Set(currentGroups || []);
 
     const toApply = (items || [])
@@ -4014,6 +4662,10 @@ function BusinessRoleDetail() {
 
   async function addUser() {
     if (!toAdd) return;
+    if (!canManageAssignments) {
+      setErr("Permessi insufficienti: modifica assegnazioni non consentita.");
+      return;
+    }
     try {
       setErr(""); setOk("");
       await api.businessRoleAddUser(role, toAdd);
@@ -4040,6 +4692,11 @@ function BusinessRoleDetail() {
 
         {ok && <div className="ok">{ok}</div>}
         {err && <div className="err">{err}</div>}
+        {!canManageAssignments && (
+          <div style={{ color: "var(--muted)" }}>
+            Profilo in sola lettura: non puoi modificare utenti, gruppi o colore del ruolo.
+          </div>
+        )}
 
         <hr className="sep" />
 
@@ -4051,6 +4708,7 @@ function BusinessRoleDetail() {
             type="color"
             value={meta.color}
             onChange={async (e) => {
+              if (!canManageAssignments) return;
               const c = e.target.value;
               setMeta(prev => ({ ...prev, color: c }));
               try {
@@ -4061,6 +4719,7 @@ function BusinessRoleDetail() {
               }
             }}
             style={{ width: 56, height: 40, padding: 2, background: "#fff" }}
+            disabled={!canManageAssignments}
           />
           <div style={{ color: "var(--muted)" }}>{meta.color}</div>
         </div>
@@ -4074,7 +4733,10 @@ function BusinessRoleDetail() {
               isSearchable={true}
               styles={selectStyles}
               value={selectedUser}
-              onChange={setSelectedUser}
+              onChange={(opt) => {
+                if (!canManageAssignments) return;
+                setSelectedUser(opt);
+              }}
               placeholder="Cerca utente..."
               options={available.map(u => ({ value: u.username, label: u.username }))}
               menuPortalTarget={document.body}
@@ -4095,6 +4757,7 @@ function BusinessRoleDetail() {
                 setErr(String(e2.message || e2));
               }
             }}
+            disabled={!canManageAssignments}
           >
             Aggiungi
           </button>
@@ -4111,7 +4774,10 @@ function BusinessRoleDetail() {
               isSearchable={true}
               styles={selectStyles}
               value={selectedGroup}
-              onChange={setSelectedGroup}
+              onChange={(opt) => {
+                if (!canManageAssignments) return;
+                setSelectedGroup(opt);
+              }}
               placeholder="Cerca gruppo..."
               options={allGroups
                 .filter(g => !(meta.groups || []).includes(g))
@@ -4132,6 +4798,7 @@ function BusinessRoleDetail() {
                 setErr(String(e2.message || e2));
               }
             }}
+            disabled={!canManageAssignments}
           >
             Aggiungi gruppo
           </button>
@@ -4158,6 +4825,7 @@ function BusinessRoleDetail() {
                         setErr(String(e2.message || e2));
                       }
                     }}
+                    disabled={!canManageAssignments}
                   >
                     Rimuovi
                   </button>
@@ -4207,6 +4875,7 @@ function BusinessRoleDetail() {
                             setErr(String(e2.message || e2));
                           }
                         }}
+                        disabled={!canManageAssignments}
                       >
                         Select
                       </button>
@@ -4266,37 +4935,44 @@ function BusinessRoleDetail() {
 export default function App() {
   const nav = useNavigate();
   const [ready, setReady] = useState(false);
-  const [roles, setRoles] = useState([]);
+  const [sessionUser, setSessionUser] = useState(null);
+  const permissions = useMemo(() => normalizePermissions(sessionUser?.permissions), [sessionUser]);
+  const token = getToken();
 
   useEffect(() => {
     (async () => {
-      try { await api.me(); }
-      catch { clearToken(); }
+      try {
+        const me = await api.me();
+        setSessionUser(me || null);
+      } catch {
+        clearToken();
+        setSessionUser(null);
+      }
       setReady(true);
     })();
   }, []);
 
-
   useEffect(() => {
     (async () => {
-      if (!getToken()) return;
+      if (!ready || !token) return;
       try {
-        const r = await api.businessRoles();
-        setRoles(r.roles || []);
+        const me = await api.me();
+        setSessionUser(me || null);
       } catch {
-        // non bloccare la UI
+        clearToken();
+        setSessionUser(null);
       }
     })();
-  }, [ready]);
-
+  }, [ready, token]);
 
   function logout() {
     clearToken();
+    setSessionUser(null);
     nav("/login");
   }
 
   if (!ready) return null;
-  const authed = Boolean(getToken());
+  const authed = Boolean(token);
   if (!authed) {
     return (
       <>
@@ -4312,30 +4988,161 @@ export default function App() {
     <>
       <SaveLoadingBar />
       <div className="layout">
-        <Sidebar onLogout={logout} roles={roles} />
+        <Sidebar onLogout={logout} permissions={permissions} />
         <Suspense fallback={<div style={{ display: "grid", placeItems: "center", height: "100vh", color: "var(--muted)" }}>Loading...</div>}>
           <Routes>
-            <Route path="/" element={<Analytics />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/cluster" element={<Cluster />} />
-            <Route path="/utenti" element={<Utenti />} />
-            <Route path="/utenti/:username" element={<UserDetail />} />
+            <Route path="/" element={<Navigate to="/analytics" replace />} />
+            <Route
+              path="/analytics"
+              element={
+                <PermissionGate allow={permissions.can_view_analytics} title="Analytics non disponibile">
+                  <Analytics />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/cluster"
+              element={
+                <PermissionGate allow={permissions.can_view_cluster} title="Cluster non disponibile">
+                  <Cluster permissions={permissions} />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/utenti"
+              element={
+                <PermissionGate allow={permissions.can_view_users} title="Users non disponibile">
+                  <Utenti permissions={permissions} />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/utenti/:username"
+              element={
+                <PermissionGate allow={permissions.can_view_users} title="Dettaglio utente non disponibile">
+                  <UserDetail permissions={permissions} />
+                </PermissionGate>
+              }
+            />
             <Route path="/overprivileged-users" element={<OverprivilegedPage />} />
             <Route path="/model-quality" element={<ModelQualityPage />} />
-            <Route path="/config/connettori" element={<Connettori />} />
-            <Route path="/config/logs" element={<Logs />} />
-            <Route path="*" element={<Analytics />} />
-            <Route path="/business-roles" element={<BusinessRolesHome />} />
-            <Route path="/business-roles/:role" element={<BusinessRoleDetail />} />
+            <Route
+              path="/config/connettori"
+              element={
+                <PermissionGate allow={permissions.can_view_configurations} title="Connettori non disponibili">
+                  <Connettori permissions={permissions} />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/config/logs"
+              element={
+                <PermissionGate allow={permissions.can_view_logs} title="Logs non disponibili">
+                  <Logs />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/config/system-users"
+              element={
+                <PermissionGate allow={permissions.can_view_system_users} title="System Users non disponibili">
+                  <SystemUsersPage permissions={permissions} />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/config/system-users/:username"
+              element={
+                <PermissionGate allow={permissions.can_view_system_users} title="System Users non disponibili">
+                  <SystemUsersPage permissions={permissions} />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/business-roles"
+              element={
+                <PermissionGate allow={permissions.can_view_business_roles} title="Business Roles non disponibili">
+                  <BusinessRolesHome permissions={permissions} />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/business-roles/:role"
+              element={
+                <PermissionGate allow={permissions.can_view_business_roles} title="Business Role non disponibile">
+                  <BusinessRoleDetail permissions={permissions} />
+                </PermissionGate>
+              }
+            />
             <Route path="/kpi/:metric" element={<KpiDrilldownPage />} />
-            <Route path="/ai-detection" element={<AiDetectionPage />} />
-            <Route path="/ai-training" element={<AiTrainingPage />} />
-            <Route path="/ai-lab/drift" element={<AiLabDriftPage />} />
-            <Route path="/ai-lab/timeline" element={<AiLabTimelinePage />} />
-            <Route path="/ai-lab/ab-playground" element={<AiLabAbPlaygroundPage />} />
-            <Route path="/ai-lab/fairness" element={<AiLabFairnessPage />} />
-            <Route path="/ai-lab/synthetic" element={<AiLabSyntheticPage />} />
-            <Route path="/ai-lab/feedback" element={<AiLabFeedbackPage />} />
+            <Route
+              path="/ai-detection"
+              element={
+                <PermissionGate allow={permissions.can_view_ai_training} title="AI Detection non disponibile">
+                  <AiDetectionPage />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/ai-training"
+              element={
+                <PermissionGate allow={permissions.can_view_ai_training} title="AI Training non disponibile">
+                  <AiTrainingPage />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/ai-lab/drift"
+              element={
+                <PermissionGate allow={permissions.can_view_ai_training} title="AI Lab non disponibile">
+                  <AiLabDriftPage />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/ai-lab/timeline"
+              element={
+                <PermissionGate allow={permissions.can_view_ai_training} title="AI Lab non disponibile">
+                  <AiLabTimelinePage />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/ai-lab/ab-playground"
+              element={
+                <PermissionGate allow={permissions.can_view_ai_training} title="AI Lab non disponibile">
+                  <AiLabAbPlaygroundPage />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/ai-lab/fairness"
+              element={
+                <PermissionGate allow={permissions.can_view_ai_training} title="AI Lab non disponibile">
+                  <AiLabFairnessPage />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/ai-lab/synthetic"
+              element={
+                <PermissionGate allow={permissions.can_view_ai_training} title="AI Lab non disponibile">
+                  <AiLabSyntheticPage />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/ai-lab/feedback"
+              element={
+                <PermissionGate allow={permissions.can_view_ai_training} title="AI Lab non disponibile">
+                  <AiLabFeedbackPage />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="*"
+              element={<Navigate to={permissions.can_view_analytics ? "/analytics" : "/cluster"} replace />}
+            />
           </Routes>
         </Suspense>
       </div>

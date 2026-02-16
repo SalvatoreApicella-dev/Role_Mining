@@ -58,6 +58,19 @@ LDAP_BASE_ATTRIBUTES = [
     "userPrincipalName",
 ]
 
+SYSTEM_USER_PERMISSION_DEFAULTS: Dict[str, bool] = {
+    "can_view_analytics": True,
+    "can_view_cluster": True,
+    "can_view_users": True,
+    "can_view_business_roles": True,
+    "can_view_ai_training": True,
+    "can_view_configurations": True,
+    "can_view_logs": True,
+    "can_view_system_users": True,
+    "can_manage_settings": True,
+    "can_manage_assignments": True,
+}
+
 
 
 from openpyxl import load_workbook
@@ -2469,6 +2482,38 @@ class TokenResponse(BaseModel):
     username: str
 
 
+class SystemUserPermissions(BaseModel):
+    can_view_analytics: bool = True
+    can_view_cluster: bool = True
+    can_view_users: bool = True
+    can_view_business_roles: bool = True
+    can_view_ai_training: bool = True
+    can_view_configurations: bool = True
+    can_view_logs: bool = True
+    can_view_system_users: bool = True
+    can_manage_settings: bool = True
+    can_manage_assignments: bool = True
+
+
+class SystemUserUpdateRequest(BaseModel):
+    display_name: Optional[str] = None
+    password: Optional[str] = None
+    active: Optional[bool] = None
+    permissions: Optional[SystemUserPermissions] = None
+
+
+class SystemUserCreateRequest(BaseModel):
+    username: str
+    display_name: Optional[str] = None
+    password: str
+    active: bool = True
+    permissions: Optional[SystemUserPermissions] = None
+
+
+class SystemUsersBulkDeleteRequest(BaseModel):
+    usernames: List[str] = Field(default_factory=list)
+
+
 class ConnectorConfig(BaseModel):
     server: str = Field(..., description="LDAP host/ip o 'mock'")
     bind_user: str = Field("", description="Utente bind (es: user@domain o DOMAIN\\user)")
@@ -2638,6 +2683,137 @@ def require_auth(creds: HTTPAuthorizationCredentials = Depends(security)) -> str
         return payload["sub"]
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
+def _normalize_permissions(raw: Optional[Dict[str, Any]]) -> Dict[str, bool]:
+    perms = dict(SYSTEM_USER_PERMISSION_DEFAULTS)
+    for key, default_val in SYSTEM_USER_PERMISSION_DEFAULTS.items():
+        if raw and key in raw:
+            perms[key] = bool(raw.get(key))
+        else:
+            perms[key] = bool(default_val)
+    return perms
+
+
+def _default_system_users() -> List[Dict[str, Any]]:
+    return [
+        {
+            "username": APP_LOGIN_USER,
+            "display_name": "Administrator",
+            "password": APP_LOGIN_PASS,
+            "active": True,
+            "permissions": dict(SYSTEM_USER_PERMISSION_DEFAULTS),
+        },
+        {
+            "username": "user",
+            "display_name": "User Viewer",
+            "password": "user123",
+            "active": True,
+            "permissions": {
+                "can_view_analytics": True,
+                "can_view_cluster": True,
+                "can_view_users": True,
+                "can_view_business_roles": True,
+                "can_view_ai_training": True,
+                "can_view_configurations": False,
+                "can_view_logs": False,
+                "can_view_system_users": False,
+                "can_manage_settings": False,
+                "can_manage_assignments": False,
+            },
+        },
+    ]
+
+
+def _ensure_system_users_state() -> None:
+    users = state.get("system_users")
+    if not isinstance(users, list) or len(users) == 0:
+        state["system_users"] = _default_system_users()
+        return
+
+    existing_by_username = {}
+    for rec in users:
+        if isinstance(rec, dict):
+            uname = str(rec.get("username") or "").strip().lower()
+            if uname:
+                existing_by_username[uname] = rec
+
+    # Migration: legacy username `users` -> `user`.
+    legacy_user = existing_by_username.get("users")
+    canonical_user = existing_by_username.get("user")
+    changed = False
+    if legacy_user and not canonical_user:
+        legacy_user["username"] = "user"
+        if not str(legacy_user.get("display_name") or "").strip():
+            legacy_user["display_name"] = "User Viewer"
+        existing_by_username["user"] = legacy_user
+        existing_by_username.pop("users", None)
+        changed = True
+    elif legacy_user and canonical_user:
+        users = [rec for rec in users if str(rec.get("username") or "").strip().lower() != "users"]
+        existing_by_username.pop("users", None)
+        changed = True
+
+    # Ensure mandatory mock users exist.
+    for seed in _default_system_users():
+        uname = str(seed.get("username") or "").strip().lower()
+        if uname not in existing_by_username:
+            users.append(seed)
+            changed = True
+
+    # Normalize shape/permissions.
+    for rec in users:
+        if not isinstance(rec, dict):
+            continue
+        rec.setdefault("display_name", rec.get("username") or "")
+        rec.setdefault("password", "")
+        rec["active"] = bool(rec.get("active", True))
+        rec["permissions"] = _normalize_permissions(rec.get("permissions"))
+    if changed:
+        state["system_users"] = users
+
+
+def _find_system_user(username: str) -> Optional[Dict[str, Any]]:
+    _ensure_system_users_state()
+    uname = str(username or "").strip().lower()
+    for rec in (state.get("system_users") or []):
+        if str(rec.get("username") or "").strip().lower() == uname:
+            return rec
+    return None
+
+
+def _permissions_for_user(username: str) -> Dict[str, bool]:
+    rec = _find_system_user(username)
+    if not rec:
+        return dict(SYSTEM_USER_PERMISSION_DEFAULTS)
+    return _normalize_permissions(rec.get("permissions"))
+
+
+def _public_system_user(rec: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "username": str(rec.get("username") or ""),
+        "display_name": str(rec.get("display_name") or rec.get("username") or ""),
+        "active": bool(rec.get("active", True)),
+        "permissions": _normalize_permissions(rec.get("permissions")),
+    }
+
+
+def _require_capability(username: str, capability: str, detail: str) -> None:
+    perms = _permissions_for_user(username)
+    if not bool(perms.get(capability, False)):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _validate_system_users_safety(users: List[Dict[str, Any]]) -> None:
+    if not any(
+        bool(u.get("active", True))
+        and _normalize_permissions(u.get("permissions")).get("can_manage_settings")
+        for u in users
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Serve almeno un system user attivo con permesso di gestione impostazioni",
+        )
 
 
 # ----------------------------
@@ -5512,6 +5688,7 @@ class ToggleUserGroupRequest(BaseModel):
 
 @app.post("/api/users/groups/toggle")
 def toggle_user_group(body: ToggleUserGroupRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni utenti")
     # 1) trova utente nello stato
     users = (state.get("last_extract") or {}).get("users") or []
     uobj = next((u for u in users if u.get("username") == body.username), None)
@@ -5552,7 +5729,16 @@ def toggle_user_group(body: ToggleUserGroupRequest, username: str = Depends(requ
 
 @app.post("/api/auth/login", response_model=TokenResponse)
 def login(body: LoginRequest):
-    if body.username != APP_LOGIN_USER or body.password != APP_LOGIN_PASS:
+    rec = _find_system_user(body.username)
+    if rec:
+        if not bool(rec.get("active", True)):
+            raise HTTPException(status_code=401, detail="Utente disattivato")
+        if str(rec.get("password") or "") != str(body.password or ""):
+            raise HTTPException(status_code=401, detail="Credenziali non valide")
+    elif body.username == APP_LOGIN_USER and body.password == APP_LOGIN_PASS:
+        # Backward compatibility when env credentials are used.
+        pass
+    else:
         raise HTTPException(status_code=401, detail="Credenziali non valide")
     token = create_access_token(body.username)
     log("INFO", f"Login OK {body.username}")
@@ -5561,7 +5747,146 @@ def login(body: LoginRequest):
 
 @app.get("/api/me")
 def me(username: str = Depends(require_auth)):
-    return {"username": username}
+    rec = _find_system_user(username)
+    permissions = _permissions_for_user(username)
+    return {
+        "username": username,
+        "display_name": (rec or {}).get("display_name") or username,
+        "permissions": permissions,
+    }
+
+
+@app.get("/api/system-users")
+def list_system_users(username: str = Depends(require_auth)):
+    _require_capability(username, "can_view_system_users", "Non autorizzato a visualizzare gli utenti di sistema")
+    _ensure_system_users_state()
+    rows = [_public_system_user(rec) for rec in (state.get("system_users") or [])]
+    rows.sort(key=lambda r: r.get("username", ""))
+    return {"items": rows}
+
+
+@app.get("/api/system-users/{target_username}")
+def get_system_user(target_username: str, username: str = Depends(require_auth)):
+    _require_capability(username, "can_view_system_users", "Non autorizzato a visualizzare gli utenti di sistema")
+    rec = _find_system_user(target_username)
+    if not rec:
+        raise HTTPException(status_code=404, detail="System user non trovato")
+    return {"item": _public_system_user(rec)}
+
+
+@app.post("/api/system-users")
+def create_system_user(body: SystemUserCreateRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a modificare gli utenti di sistema")
+    _ensure_system_users_state()
+
+    new_username = str(body.username or "").strip().lower()
+    if not new_username:
+        raise HTTPException(status_code=400, detail="Username obbligatorio")
+    if len(new_username) < 3:
+        raise HTTPException(status_code=400, detail="Username troppo corto")
+    if _find_system_user(new_username):
+        raise HTTPException(status_code=400, detail="System user gia esistente")
+
+    password = str(body.password or "").strip()
+    if len(password) < 4:
+        raise HTTPException(status_code=400, detail="Password troppo corta")
+
+    rec = {
+        "username": new_username,
+        "display_name": str(body.display_name or new_username).strip() or new_username,
+        "password": password,
+        "active": bool(body.active),
+        "permissions": _normalize_permissions(
+            body.permissions.model_dump() if body.permissions is not None else None
+        ),
+    }
+
+    users = list(state.get("system_users") or [])
+    users.append(rec)
+    _validate_system_users_safety(users)
+    state["system_users"] = users
+    log("INFO", f"System user '{new_username}' created by {username}")
+    return {"item": _public_system_user(rec)}
+
+
+@app.put("/api/system-users/{target_username}")
+def update_system_user(target_username: str, body: SystemUserUpdateRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a modificare gli utenti di sistema")
+    _ensure_system_users_state()
+    users = list(state.get("system_users") or [])
+    idx = next(
+        (i for i, rec in enumerate(users) if str(rec.get("username") or "").strip().lower() == target_username.strip().lower()),
+        -1,
+    )
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="System user non trovato")
+
+    rec = dict(users[idx])
+    if body.display_name is not None:
+        rec["display_name"] = str(body.display_name or "").strip()
+    if body.password is not None and str(body.password).strip():
+        rec["password"] = str(body.password).strip()
+    if body.active is not None:
+        rec["active"] = bool(body.active)
+    if body.permissions is not None:
+        rec["permissions"] = _normalize_permissions(body.permissions.model_dump())
+    else:
+        rec["permissions"] = _normalize_permissions(rec.get("permissions"))
+
+    users[idx] = rec
+    _validate_system_users_safety(users)
+
+    state["system_users"] = users
+    log("INFO", f"System user '{target_username}' updated by {username}")
+    return {"item": _public_system_user(rec)}
+
+
+@app.delete("/api/system-users/{target_username}")
+def delete_system_user(target_username: str, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a modificare gli utenti di sistema")
+    _ensure_system_users_state()
+    target = str(target_username or "").strip().lower()
+    if not target:
+        raise HTTPException(status_code=400, detail="Username non valido")
+    if target == str(username or "").strip().lower():
+        raise HTTPException(status_code=400, detail="Non puoi eliminare l'utente con cui sei autenticato")
+
+    users = list(state.get("system_users") or [])
+    remaining = [u for u in users if str(u.get("username") or "").strip().lower() != target]
+    if len(remaining) == len(users):
+        raise HTTPException(status_code=404, detail="System user non trovato")
+
+    _validate_system_users_safety(remaining)
+    state["system_users"] = remaining
+    log("INFO", f"System user '{target_username}' deleted by {username}")
+    return {"ok": True, "deleted": target}
+
+
+@app.post("/api/system-users/bulk-delete")
+def bulk_delete_system_users(body: SystemUsersBulkDeleteRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a modificare gli utenti di sistema")
+    _ensure_system_users_state()
+    targets = {
+        str(u or "").strip().lower()
+        for u in (body.usernames or [])
+        if str(u or "").strip()
+    }
+    if not targets:
+        raise HTTPException(status_code=400, detail="Nessun utente selezionato")
+    actor = str(username or "").strip().lower()
+    if actor in targets:
+        raise HTTPException(status_code=400, detail="Non puoi eliminare l'utente con cui sei autenticato")
+
+    users = list(state.get("system_users") or [])
+    remaining = [u for u in users if str(u.get("username") or "").strip().lower() not in targets]
+    deleted = len(users) - len(remaining)
+    if deleted <= 0:
+        raise HTTPException(status_code=404, detail="Nessun system user trovato")
+
+    _validate_system_users_safety(remaining)
+    state["system_users"] = remaining
+    log("INFO", f"Bulk delete system users by {username}: removed={deleted}")
+    return {"ok": True, "deleted_count": deleted}
 
 
 @app.get("/api/config/connector", response_model=ConnectorConfig)
@@ -5572,6 +5897,7 @@ def get_connector(username: str = Depends(require_auth)):
 
 @app.post("/api/config/connector", response_model=ConnectorConfig)
 def set_connector(cfg: ConnectorConfig, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a modificare impostazioni connettori")
     ensure_discovery_scheduler_started()
     state["connector"] = cfg.model_dump()
     log("INFO", f"Connector config updated by {username} (server={cfg.server}, auth={cfg.auth})")
@@ -5580,6 +5906,7 @@ def set_connector(cfg: ConnectorConfig, username: str = Depends(require_auth)):
 
 @app.post("/api/ad/extract", response_model=ExtractResponse)
 def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a eseguire discovery dai connettori")
     connector_cfg = state.get("connector") or {}
     ou_dn = (req.ou or "").strip() or (connector_cfg.get("base_dn") or "").strip()
     if not ou_dn:
@@ -5637,6 +5964,7 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
 
 @app.post("/api/sap/extract", response_model=ExtractResponse)
 def extract_sap(req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a eseguire discovery dai connettori")
     scope = (req.ou or "").strip() or "SAP"
     users = extract_from_sap(scope)
 
@@ -5686,6 +6014,7 @@ def extract_sap(req: ExtractRequest, background_tasks: BackgroundTasks, username
 
 @app.post("/api/connectors/{target}/extract", response_model=ExtractResponse)
 def extract_connector(target: str, req: ExtractRequest, background_tasks: BackgroundTasks, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a eseguire discovery dai connettori")
     connector_target = normalize_connector_target(target)
     if connector_target == "ad":
         return extract(req, background_tasks, username)
@@ -5710,11 +6039,13 @@ def extract_connector(target: str, req: ExtractRequest, background_tasks: Backgr
 
 @app.post("/api/connectors/{target}/provision", response_model=ConnectorProvisionResponse)
 def provision_connector(target: str, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a eseguire provisioning dei connettori")
     return ConnectorProvisionResponse(**run_connector_provisioning(target, actor=username))
 
 
 @app.post("/api/sap/provision/bulk", response_model=SapBulkProvisionResponse)
 def sap_bulk_provision(body: SapBulkProvisionRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_settings", "Non autorizzato a eseguire provisioning dei connettori")
     generated_users = _generate_sap_bulk_users(body)
     generated_payloads = [_provision_payload_for_user(user, "SAP") for user in generated_users]
 
@@ -5896,6 +6227,7 @@ class UserUpdateRequest(BaseModel):
 
 @app.post("/api/users/{uname}/update")
 def update_user(uname: str, body: UserUpdateRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni utenti")
     users = state.get("last_extract", {}).get("users") or []
     u = next((x for x in users if x.get("username") == uname), None)
     if not u:
@@ -6615,6 +6947,7 @@ def businessrole_meta(role: str, username: str = Depends(require_auth)):
 
 @app.post("/api/businessroles/{role}/color")
 def businessrole_set_color(role: str, body: RoleColorRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni e ruoli")
     state.setdefault("role_meta", {})
     state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
     state["role_meta"][role]["color"] = body.color
@@ -6625,6 +6958,7 @@ def businessrole_set_color(role: str, body: RoleColorRequest, username: str = De
 
 @app.post("/api/businessroles/{role}/groups/add")
 def businessrole_add_group(role: str, body: RoleGroupRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni e ruoli")
     state.setdefault("role_meta", {})
     state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
     gs = set(state["role_meta"][role].get("groups", []))
@@ -6683,6 +7017,7 @@ def businessrole_suggestions(role: str, limit: int = 50, min_conf: float = 0.60,
 
 @app.post("/api/businessroles/{role}/suggestions/select")
 def businessrole_suggestion_select(role: str, body: SuggestionPickRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni e ruoli")
     """
     Pulsante "Select": assegna direttamente il gruppo suggerito al role_meta del BR.
     (È equivalente a chiamare /api/businessroles/{role}/groups/add, ma comodo per UI.)
@@ -6720,6 +7055,7 @@ def businessrole_suggestion_select(role: str, body: SuggestionPickRequest, usern
 
 @app.post("/api/businessroles/{role}/groups/remove")
 def businessrole_remove_group(role: str, body: RoleGroupRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni e ruoli")
     state.setdefault("role_meta", {})
     state["role_meta"].setdefault(role, {"color": "#ffffff", "groups": []})
     gs = [g for g in state["role_meta"][role].get("groups", []) if g != body.group]
@@ -6732,6 +7068,7 @@ def businessrole_remove_group(role: str, body: RoleGroupRequest, username: str =
 
 @app.post("/api/businessroles/recalculate/groups")
 def businessroles_recalculate_groups(username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni e ruoli")
     """
     Recompute group -> Business Role assignment from current users.
     Each group is assigned to the role where it appears most frequently.
@@ -6816,6 +7153,7 @@ def businessroles_recalculate_groups(username: str = Depends(require_auth)):
 
 @app.post("/api/businessroles/create")
 def businessrole_create(body: RoleCreateRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni e ruoli")
     role = body.role.strip()
     if not role:
         raise HTTPException(status_code=400, detail="Role vuoto")
@@ -6836,6 +7174,7 @@ class ChooseCsvRowRequest(BaseModel):
 
 @app.post("/api/csv/duplicates/choose")
 def choose_csv_duplicate_row(body: ChooseCsvRowRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni utenti")
     dn_raw = body.displayNameRaw
     row_id = body.rowId
 
@@ -6913,6 +7252,7 @@ class ChooseDuplicateRequest(BaseModel):
 
 @app.post("/api/ingest/conflicts/duplicate-displayname/choose")
 def choose_duplicate(body: ChooseDuplicateRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni utenti")
     state.setdefault("choice_by_displayName", {})
     state["choice_by_displayName"][body.displayName] = body.candidateId
 
@@ -7022,6 +7362,7 @@ def choose_conflict(body: ChooseConflictRequest, username: str = Depends(require
 
 @app.post("/api/businessroles/{role}/add")
 def businessrole_add(role: str, body: RoleAssignRequest, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni e ruoli")
     # assegna (e rimuove da eventuale ruolo precedente)
     m = state.get("user_business_role", {})
     m[body.username] = role
@@ -7158,6 +7499,7 @@ def apply_department_mapping_if_missing(users: list[dict]) -> None:
 
 @app.post("/api/import/csv")
 async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundTasks = None, username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni utenti")
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="File vuoto")
@@ -7677,6 +8019,7 @@ def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: 
 
 @app.post("/api/import/xlsx")
 async def import_xlsx(file: UploadFile = File(...), username: str = Depends(require_auth)):
+    _require_capability(username, "can_manage_assignments", "Non autorizzato a modificare assegnazioni utenti")
     raw = await file.read()
     wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
     ws = wb.active  # primo foglio

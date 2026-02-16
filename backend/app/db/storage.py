@@ -381,6 +381,44 @@ def init_default_state():
         "brdb_token_stats": {},
         "brdb_cache": {},
         "brdb_ready": False,
+        "system_users": [
+            {
+                "username": "admin",
+                "display_name": "Administrator",
+                "password": "admin123",
+                "active": True,
+                "permissions": {
+                    "can_view_analytics": True,
+                    "can_view_cluster": True,
+                    "can_view_users": True,
+                    "can_view_business_roles": True,
+                    "can_view_ai_training": True,
+                    "can_view_configurations": True,
+                    "can_view_logs": True,
+                    "can_view_system_users": True,
+                    "can_manage_settings": True,
+                    "can_manage_assignments": True,
+                },
+            },
+            {
+                "username": "user",
+                "display_name": "User Viewer",
+                "password": "user123",
+                "active": True,
+                "permissions": {
+                    "can_view_analytics": True,
+                    "can_view_cluster": True,
+                    "can_view_users": True,
+                    "can_view_business_roles": True,
+                    "can_view_ai_training": True,
+                    "can_view_configurations": False,
+                    "can_view_logs": False,
+                    "can_view_system_users": False,
+                    "can_manage_settings": False,
+                    "can_manage_assignments": False,
+                },
+            },
+        ],
     }
     
     for key, value in defaults.items():

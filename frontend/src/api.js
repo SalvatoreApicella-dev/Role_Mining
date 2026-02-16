@@ -222,6 +222,15 @@ export const api = {
     request("/api/ai-lab/synthetic/generate", { method: "POST", body: { count, scenario, persist } }),
   aiLabFeedback: () => request("/api/ai-lab/feedback"),
   aiLabFeedbackAdd: (payload) => request("/api/ai-lab/feedback", { method: "POST", body: payload }),
+  systemUsers: () => request("/api/system-users"),
+  systemUser: (username) => request(`/api/system-users/${encodeURIComponent(username)}`),
+  createSystemUser: (payload) => request("/api/system-users", { method: "POST", body: payload }),
+  updateSystemUser: (username, payload) =>
+    request(`/api/system-users/${encodeURIComponent(username)}`, { method: "PUT", body: payload }),
+  deleteSystemUser: (username) =>
+    request(`/api/system-users/${encodeURIComponent(username)}`, { method: "DELETE" }),
+  bulkDeleteSystemUsers: (usernames) =>
+    request("/api/system-users/bulk-delete", { method: "POST", body: { usernames } }),
 
   async get(path) {
     return request(path, { method: "GET" });
