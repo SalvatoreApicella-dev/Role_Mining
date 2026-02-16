@@ -80,13 +80,14 @@
       "INF_STORAGE_WRITE": 1.0,
       "INF_VPN_READ": 115.0,
       "SYS_AWS_READ": 45.0,
-      "SYS_CONFLUENCE_READ": 115.0,
-      "SYS_CONFLUENCE_VIEW": 40.0,
-      "SYS_GITHUB_WRITE": 29.0,
+      "SYS_AWS_VIEW": 9.0,
       "SYS_JENKINS_WRITE": 30.0,
-      "SYS_JIRA_READ": 31.0,
+      "SYS_CONFLUENCE_READ": 114.0,
+      "SYS_CONFLUENCE_VIEW": 39.0,
       "SYS_GITHUB_VIEW": 42.0,
+      "SYS_JIRA_READ": 30.0,
       "SYS_AWS_WRITE": 52.0,
+      "SYS_GITHUB_WRITE": 28.0,
       "SYS_JENKINS_VIEW": 47.0,
       "SYS_JIRA_VIEW": 45.0,
       "INF_IAM_ADMIN": 5.0,
@@ -107,8 +108,7 @@
       "SYS_CONFLUENCE_WRITE": 32.0,
       "INF_VPN_ALL": 8.0,
       "SYS_GITHUB_READ": 31.0,
-      "SYS_JENKINS_READ": 29.0,
-      "SYS_AWS_VIEW": 8.0
+      "SYS_JENKINS_READ": 29.0
     },
     "QA Engineer": {
       "INF_MAIL_READ": 117.0,

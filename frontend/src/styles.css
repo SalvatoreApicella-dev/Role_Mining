@@ -1086,6 +1086,168 @@ hr.sep {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
 }
 
+.connectors-modern {
+  position: relative;
+  min-height: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.connectors-modern__hero {
+  margin-top: 8px;
+  margin-left: 10px;
+  margin-bottom: 10px;
+}
+
+.connectors-modern__title {
+  margin: 0;
+  font-family: inherit;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.connectors-modern__subtitle {
+  margin-top: 6px;
+  font-family: inherit;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.connectors-modern__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  padding: 10px;
+}
+
+.connectors-modern-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(17, 26, 46, 0.55);
+  padding: 8px;
+  height: 360px;
+  overflow-y: auto;
+  margin: 10px;
+}
+
+.connectors-modern-card--csv {
+  border-color: var(--border);
+}
+
+.connectors-modern-card--configured {
+  border-color: rgba(146, 226, 178, 0.72);
+}
+
+.connectors-modern-card__badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 7px;
+  border: 1px solid rgba(160, 190, 240, 0.22);
+  color: #b8c9ea;
+  font-size: 9px;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+}
+
+.connectors-modern-card--sap .connectors-modern-card__badge {
+  border-color: rgba(255, 185, 120, 0.3);
+  color: #f0c79c;
+}
+
+.connectors-modern-card--csv .connectors-modern-card__badge {
+  border-color: rgba(95, 226, 191, 0.28);
+  color: #8de8cf;
+}
+
+.connectors-modern-card__title {
+  margin: 6px 0 6px;
+  font-size: 18px;
+  line-height: 1.1;
+  letter-spacing: -0.2px;
+}
+
+.connectors-modern-card__fields {
+  display: grid;
+  gap: 4px;
+}
+
+.connectors-modern-card__fields label {
+  font-size: 10px;
+  color: #8ca3ca;
+}
+
+.connectors-modern-card__fields input {
+  width: 100%;
+  border-radius: 9px;
+  border: 1px solid rgba(98, 148, 224, 0.28);
+  background: rgba(17, 26, 46, 0.9);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.connectors-modern-card__fields select {
+  width: 100%;
+  border-radius: 9px;
+  border: 1px solid rgba(98, 148, 224, 0.28);
+  background: rgba(17, 26, 46, 0.9);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.connectors-modern-card--csv .connectors-modern-card__fields input {
+  border-color: rgba(92, 201, 176, 0.36);
+}
+
+.connectors-modern-card .connector-form-actions button {
+  padding: 5px 8px;
+  font-size: 10px;
+}
+
+.connectors-modern-card__status,
+.connectors-modern-card__status-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #84e0c6;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.connectors-modern-card__status-row {
+  justify-content: space-between;
+}
+
+.connectors-modern-card__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #57708f;
+  box-shadow: 0 0 0 5px rgba(87, 112, 143, 0.15);
+}
+
+.connectors-modern-card__dot.is-on {
+  background: #67f4c6;
+  box-shadow: 0 0 0 5px rgba(103, 244, 198, 0.18);
+}
+
+@media (max-width: 1400px) {
+  .connectors-modern__title {
+    font-size: 34px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .connectors-modern__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 @keyframes connector-loading-slide {
   0% {

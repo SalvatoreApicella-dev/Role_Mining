@@ -1028,6 +1028,361 @@ function Connettori() {
     }
   }
 
+  const useModernConnectorLayout = true;
+  const discoveryResults = cfg.discovery_results || {};
+  const alwaysVerified = new Set(["ad", "sap", "csv"]);
+  const isConnected = (target) => {
+    if (alwaysVerified.has(String(target || "").toLowerCase())) return true;
+    const status = String(discoveryResults?.[target]?.status || "").toLowerCase();
+    return status === "ok";
+  };
+  const connectorCards = [
+    {
+      key: "sap", badge: "HRIS", title: "SAP", tone: "sap",
+      fields: [
+        { kind: "input", label: "URL", value: cfg.sap_base_url || "", patch: "sap_base_url", placeholder: "https://sap.company.local" },
+        {
+          kind: "select",
+          label: "Auth Mode",
+          value: cfg.sap_auth_mode || "AUTO",
+          patch: "sap_auth_mode",
+          options: ["AUTO", "OAUTH2", "APIKEY", "BASIC"],
+        },
+        { kind: "input", label: "Client", value: cfg.sap_client || "", patch: "sap_client", placeholder: "100" },
+        { kind: "input", label: "System", value: cfg.sap_system || "", patch: "sap_system", placeholder: "ECC" },
+        { kind: "input", label: "Users Path", value: cfg.sap_users_path || "", patch: "sap_users_path", placeholder: "/sap/opu/odata/sap/ZROLE_MINING_SRV/Users" },
+        { kind: "input", label: "Username", value: cfg.sap_username || "", patch: "sap_username", placeholder: "SAP Username" },
+        { kind: "input", label: "Password", type: "password", value: cfg.sap_password || "", patch: "sap_password", placeholder: "SAP Password" },
+        { kind: "input", label: "API Key", type: "password", value: cfg.sap_api_key || "", patch: "sap_api_key", placeholder: "SAP API Key (opzionale)" },
+        { kind: "input", label: "Token URL", value: cfg.sap_token_url || "", patch: "sap_token_url", placeholder: "https://<host>/oauth/token" },
+        { kind: "input", label: "Client ID", value: cfg.sap_client_id || "", patch: "sap_client_id", placeholder: "OAuth Client ID" },
+        { kind: "input", label: "Client Secret", type: "password", value: cfg.sap_client_secret || "", patch: "sap_client_secret", placeholder: "OAuth Client Secret" },
+        { kind: "input", label: "OAuth Scope", value: cfg.sap_oauth_scope || "", patch: "sap_oauth_scope", placeholder: "OAuth Scope (opz.)" },
+        { kind: "input", label: "Company ID", value: cfg.sap_company_id || "", patch: "sap_company_id", placeholder: "SuccessFactors Company ID (opz.)" },
+      ],
+    },
+    {
+      key: "ad", badge: "IDP", title: "Active Directory", tone: "ad",
+      fields: [
+        { kind: "input", label: "LDAP URL", value: cfg.server || "", patch: "server", placeholder: "ad.local" },
+        {
+          kind: "select",
+          label: "Auth",
+          value: cfg.auth || "SIMPLE",
+          patch: "auth",
+          options: ["SIMPLE", "NTLM"],
+        },
+        { kind: "input", label: "Port", type: "number", value: cfg.port || "", patch: "port", placeholder: "389" },
+        { kind: "checkbox", label: "Usa SSL", checked: !!cfg.use_ssl, patch: "use_ssl" },
+        { kind: "input", label: "Bind User", value: cfg.bind_user || "", patch: "bind_user", placeholder: "bind_user" },
+        { kind: "input", label: "Bind Password", type: "password", value: cfg.bind_password || "", patch: "bind_password", placeholder: "bind_password" },
+        { kind: "input", label: "Base DN", value: cfg.base_dn || "", patch: "base_dn", placeholder: "OU=Users,DC=example,DC=local" },
+        { kind: "state", label: "OU DN", stateKey: "ou", value: ou || "", placeholder: "OU DN" },
+      ],
+    },
+    {
+      key: "azure", badge: "IDP", title: "Azure AD", tone: "idp",
+      fields: [
+        { kind: "input", label: "Base URL", value: cfg.azure_base_url || "", patch: "azure_base_url", placeholder: "https://graph.microsoft.com" },
+        { kind: "input", label: "Tenant ID", value: cfg.azure_tenant_id || "", patch: "azure_tenant_id", placeholder: "tenant-id" },
+        { kind: "input", label: "Client ID", value: cfg.azure_client_id || "", patch: "azure_client_id", placeholder: "client-id" },
+        { kind: "input", label: "Client Secret", type: "password", value: cfg.azure_client_secret || "", patch: "azure_client_secret", placeholder: "Client Secret" },
+        { kind: "input", label: "Users Path", value: cfg.azure_users_path || "", patch: "azure_users_path", placeholder: "/v1.0/users?$select=..." },
+      ],
+    },
+    {
+      key: "one_identity", badge: "IGA", title: "One Identity", tone: "iga",
+      fields: [
+        { kind: "input", label: "Base URL", value: cfg.one_identity_base_url || "", patch: "one_identity_base_url", placeholder: "https://<host>/AppServer" },
+        { kind: "input", label: "Token URL", value: cfg.one_identity_token_url || "", patch: "one_identity_token_url", placeholder: "optional" },
+        { kind: "input", label: "Client ID", value: cfg.one_identity_client_id || "", patch: "one_identity_client_id", placeholder: "client-id" },
+        { kind: "input", label: "Client Secret", type: "password", value: cfg.one_identity_client_secret || "", patch: "one_identity_client_secret", placeholder: "Client Secret" },
+        { kind: "input", label: "Username", value: cfg.one_identity_username || "", patch: "one_identity_username", placeholder: "Username (opzionale)" },
+        { kind: "input", label: "Password", type: "password", value: cfg.one_identity_password || "", patch: "one_identity_password", placeholder: "Password (opzionale)" },
+        { kind: "input", label: "Users Path", value: cfg.one_identity_users_path || "", patch: "one_identity_users_path", placeholder: "/api/entities/person?limit=100" },
+      ],
+    },
+    {
+      key: "sailpoint", badge: "IGA", title: "SailPoint", tone: "iga",
+      fields: [
+        { kind: "input", label: "Base URL", value: cfg.sailpoint_base_url || "", patch: "sailpoint_base_url", placeholder: "https://tenant.api.identitynow.com/v3" },
+        { kind: "input", label: "Token URL", value: cfg.sailpoint_token_url || "", patch: "sailpoint_token_url", placeholder: "oauth token url" },
+        { kind: "input", label: "Client ID", value: cfg.sailpoint_client_id || "", patch: "sailpoint_client_id", placeholder: "client-id" },
+        { kind: "input", label: "Client Secret", type: "password", value: cfg.sailpoint_client_secret || "", patch: "sailpoint_client_secret", placeholder: "Client Secret" },
+        { kind: "input", label: "Users Path", value: cfg.sailpoint_users_path || "", patch: "sailpoint_users_path", placeholder: "/accounts" },
+      ],
+    },
+    {
+      key: "saviynt", badge: "IGA", title: "Saviynt", tone: "iga",
+      fields: [
+        { kind: "input", label: "Base URL", value: cfg.saviynt_base_url || "", patch: "saviynt_base_url", placeholder: "tenant api url" },
+        { kind: "input", label: "Token URL", value: cfg.saviynt_token_url || "", patch: "saviynt_token_url", placeholder: "token endpoint" },
+        { kind: "input", label: "Client ID", value: cfg.saviynt_client_id || "", patch: "saviynt_client_id", placeholder: "client-id" },
+        { kind: "input", label: "Client Secret", type: "password", value: cfg.saviynt_client_secret || "", patch: "saviynt_client_secret", placeholder: "Client Secret" },
+        { kind: "input", label: "Service Username", value: cfg.saviynt_username || "", patch: "saviynt_username", placeholder: "Service Username" },
+        { kind: "input", label: "Service Password", type: "password", value: cfg.saviynt_password || "", patch: "saviynt_password", placeholder: "Service Password" },
+        { kind: "input", label: "Users Path", value: cfg.saviynt_users_path || "", patch: "saviynt_users_path", placeholder: "Users Path" },
+      ],
+    },
+    {
+      key: "servicenow", badge: "ITSM", title: "ServiceNow", tone: "itsm",
+      fields: [
+        { kind: "input", label: "Base URL", value: cfg.servicenow_base_url || "", patch: "servicenow_base_url", placeholder: "https://instance.service-now.com" },
+        { kind: "input", label: "Username", value: cfg.servicenow_username || "", patch: "servicenow_username", placeholder: "username" },
+        { kind: "input", label: "Password", type: "password", value: cfg.servicenow_password || "", patch: "servicenow_password", placeholder: "Password" },
+        { kind: "input", label: "Users Path", value: cfg.servicenow_users_path || "", patch: "servicenow_users_path", placeholder: "/api/now/table/sys_user?sysparm_fields=..." },
+      ],
+    },
+    {
+      key: "salesforce", badge: "CRM", title: "Salesforce", tone: "crm",
+      fields: [
+        { kind: "input", label: "Base URL", value: cfg.salesforce_base_url || "", patch: "salesforce_base_url", placeholder: "instance url" },
+        { kind: "input", label: "Token URL", value: cfg.salesforce_token_url || "", patch: "salesforce_token_url", placeholder: "oauth token url" },
+        { kind: "input", label: "Client ID", value: cfg.salesforce_client_id || "", patch: "salesforce_client_id", placeholder: "client-id" },
+        { kind: "input", label: "Client Secret", type: "password", value: cfg.salesforce_client_secret || "", patch: "salesforce_client_secret", placeholder: "Client Secret" },
+        { kind: "input", label: "Users Path", value: cfg.salesforce_users_path || "", patch: "salesforce_users_path", placeholder: "/services/data/v60.0/query?q=..." },
+      ],
+    },
+    {
+      key: "m365", badge: "COLLAB", title: "Microsoft 365", tone: "m365",
+      fields: [
+        { kind: "input", label: "Base URL", value: cfg.m365_base_url || "", patch: "m365_base_url", placeholder: "https://graph.microsoft.com" },
+        { kind: "input", label: "Tenant ID", value: cfg.m365_tenant_id || "", patch: "m365_tenant_id", placeholder: "tenant-id" },
+        { kind: "input", label: "Client ID", value: cfg.m365_client_id || "", patch: "m365_client_id", placeholder: "client-id" },
+        { kind: "input", label: "Client Secret", type: "password", value: cfg.m365_client_secret || "", patch: "m365_client_secret", placeholder: "Client Secret" },
+        { kind: "input", label: "Users Path", value: cfg.m365_users_path || "", patch: "m365_users_path", placeholder: "/v1.0/users?$select=..." },
+      ],
+    },
+    { key: "csv", badge: "FILE", title: "CSV Import", tone: "csv", fields: [] },
+  ];
+  const hasValue = (v) => String(v ?? "").trim().length > 0;
+  const isConfigured = (key) => {
+    switch (key) {
+      case "sap":
+        return hasValue(cfg.sap_base_url);
+      case "ad":
+        return hasValue(cfg.server) && hasValue(cfg.bind_user) && hasValue(cfg.base_dn);
+      case "azure":
+        return hasValue(cfg.azure_tenant_id) || hasValue(cfg.azure_client_id) || hasValue(cfg.azure_client_secret);
+      case "one_identity":
+        return hasValue(cfg.one_identity_client_id) || hasValue(cfg.one_identity_username) || hasValue(cfg.one_identity_password);
+      case "sailpoint":
+        return hasValue(cfg.sailpoint_client_id) || hasValue(cfg.sailpoint_client_secret);
+      case "saviynt":
+        return hasValue(cfg.saviynt_base_url) || hasValue(cfg.saviynt_client_id) || hasValue(cfg.saviynt_username);
+      case "servicenow":
+        return hasValue(cfg.servicenow_base_url) && hasValue(cfg.servicenow_username);
+      case "salesforce":
+        return hasValue(cfg.salesforce_base_url) && hasValue(cfg.salesforce_client_id);
+      case "m365":
+        return hasValue(cfg.m365_tenant_id) || hasValue(cfg.m365_client_id) || hasValue(cfg.m365_client_secret);
+      case "csv":
+        return Boolean(discoveryResults?.csv?.last_run_at);
+      default:
+        return false;
+    }
+  };
+  const sortedConnectorCards = [...connectorCards].sort((a, b) => Number(isConfigured(b.key)) - Number(isConfigured(a.key)));
+
+  if (useModernConnectorLayout) {
+    return (
+      <div className="main connectors-modern">
+        <div className="connectors-modern__hero">
+          <h2 style={{ margin: "0 0 2px 0" }}>Connettori</h2>
+          <p style={{ color: "var(--muted)", marginTop: 0, marginBottom: 10, fontSize: 13 }}>
+            Lista per categoria con un solo connettore per target
+          </p>
+        </div>
+
+        <div className="connectors-modern__grid">
+          {sortedConnectorCards.map((card) => (
+            <section key={card.key} className={`connectors-modern-card connectors-modern-card--${card.tone}${isConfigured(card.key) ? " connectors-modern-card--configured" : ""}`}>
+              <div className="connectors-modern-card__badge">{card.badge}</div>
+              <h3 className="connectors-modern-card__title">{card.title}</h3>
+
+              {card.key === "csv" ? (
+                <div className="connectors-modern-card__fields">
+                  <label>Filepath</label>
+                  <input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} />
+                </div>
+              ) : (
+                <div className="connectors-modern-card__fields">
+                  {card.fields.map((f) => (
+                    <React.Fragment key={`${card.key}-${f.patch}`}>
+                      {f.kind === "checkbox" ? (
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <input
+                            type="checkbox"
+                            checked={!!f.checked}
+                            onChange={(e) => updateCfg({ [f.patch]: e.target.checked })}
+                          />
+                          {f.label}
+                        </label>
+                      ) : f.kind === "select" ? (
+                        <>
+                          <label>{f.label}</label>
+                          <select
+                            value={f.value}
+                            onChange={(e) => updateCfg({ [f.patch]: e.target.value })}
+                          >
+                            {(f.options || []).map((opt) => (
+                              <option key={`${card.key}-${f.patch}-${opt}`} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </>
+                      ) : f.kind === "state" ? (
+                        <>
+                          <label>{f.label}</label>
+                          <input
+                            type="text"
+                            value={f.value}
+                            onChange={(e) => setOu(e.target.value)}
+                            placeholder={f.placeholder}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <label>{f.label}</label>
+                          <input
+                            type={f.type || "text"}
+                            value={f.value}
+                            onChange={(e) => updateCfg({ [f.patch]: e.target.value })}
+                            placeholder={f.placeholder}
+                          />
+                        </>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+
+              {card.key === "csv" ? (
+                <div className="row connector-form-actions" style={{ marginTop: 8 }}>
+                  <button className="primary" disabled={!csvFile || csvLoading} onClick={() => runDiscovery("csv")}>
+                    {csvLoading ? "Discovery..." : "Discovery"}
+                  </button>
+                  <button className="primary" disabled={csvLoading || provisioningLoadingTarget === "csv"} onClick={() => runProvisioning("csv")}>
+                    {provisioningLoadingTarget === "csv" ? "Provisioning..." : "Provision"}
+                  </button>
+                  <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading}>Schedule</button>
+                  <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
+                </div>
+              ) : (
+                renderConnectorActions(card.key, `Configurazione ${card.title} salvata.`)
+              )}
+
+              <div className="connectors-modern-card__status-row">
+                <div className="connectors-modern-card__status">
+                  <span className={`connectors-modern-card__dot${isConnected(card.key) ? " is-on" : ""}`} />
+                  <span>{isConnected(card.key) ? "Connesso" : "Non verificato"}</span>
+                </div>
+              </div>
+            </section>
+          ))}
+        </div>
+
+        {cfgStatusMsg && <div className="ok">{cfgStatusMsg}</div>}
+        {statusMsg && <div className="ok">{statusMsg}</div>}
+        {sapStatusMsg && <div className="ok">{sapStatusMsg}</div>}
+        {sapBulkMsg && <div className="ok">{sapBulkMsg}</div>}
+        {importMsg && <div className="ok">{importMsg}</div>}
+        {provisioningMsg && <div className="ok">{provisioningMsg}</div>}
+        {err && <div className="err">{err}</div>}
+
+        {scheduleModal.open && (
+          <div className="connector-schedule-overlay" onClick={closeScheduleModal}>
+            <div className="panel connector-schedule-modal" onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ marginTop: 0 }}>Schedule Discovery - {connectorLabels[scheduleModal.target] || scheduleModal.target}</h3>
+              <form onSubmit={saveSchedule}>
+                <div className="row">
+                  <select
+                    value={scheduleForm.frequency}
+                    onChange={(e) => setScheduleForm((prev) => ({ ...prev, frequency: e.target.value }))}
+                  >
+                    <option value="HOURLY">Every Hour</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="WEEKLY">Weekly</option>
+                  </select>
+                  {scheduleForm.frequency === "WEEKLY" && (
+                    <select
+                      value={scheduleForm.day}
+                      onChange={(e) => setScheduleForm((prev) => ({ ...prev, day: e.target.value }))}
+                    >
+                      <option value="MON">Monday</option>
+                      <option value="TUE">Tuesday</option>
+                      <option value="WED">Wednesday</option>
+                      <option value="THU">Thursday</option>
+                      <option value="FRI">Friday</option>
+                      <option value="SAT">Saturday</option>
+                      <option value="SUN">Sunday</option>
+                    </select>
+                  )}
+                  <input
+                    type="time"
+                    value={scheduleForm.time}
+                    onChange={(e) => setScheduleForm((prev) => ({ ...prev, time: e.target.value }))}
+                  />
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!scheduleForm.enabled}
+                      onChange={(e) => setScheduleForm((prev) => ({ ...prev, enabled: e.target.checked }))}
+                    />
+                    Enabled
+                  </label>
+                </div>
+                <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
+                  <button type="button" onClick={closeScheduleModal}>Annulla</button>
+                  <button className="primary" type="submit">Salva Schedule</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {resultModal.open && (
+          <div className="connector-schedule-overlay" onClick={closeResultModal}>
+            <div className="panel connector-schedule-modal" onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ marginTop: 0 }}>Esito Ultima Discovery - {connectorLabels[resultModal.target] || resultModal.target}</h3>
+              {(() => {
+                const res = (cfg.discovery_results || {})[resultModal.target] || {};
+                const sch = (cfg.discovery_schedules || {})[resultModal.target] || {};
+                const status = String(res.status || sch.last_status || "n/a");
+                const message = String(res.message || sch.last_message || "Nessuna discovery eseguita.");
+                const source = String(res.source || (sch.last_run_at ? "schedule" : "n/a"));
+                const ts = String(res.last_run_at || sch.last_run_at || "");
+                return (
+                  <div>
+                    <div className="row">
+                      <div className="card" style={{ minWidth: 130 }}>
+                        <div className="k">Status</div>
+                        <div className="v" style={{ fontSize: 18 }}>{status}</div>
+                      </div>
+                      <div className="card" style={{ minWidth: 130 }}>
+                        <div className="k">Source</div>
+                        <div className="v" style={{ fontSize: 18 }}>{source}</div>
+                      </div>
+                      <div className="card" style={{ minWidth: 240 }}>
+                        <div className="k">Last Run</div>
+                        <div className="v" style={{ fontSize: 16 }}>{ts || "n/a"}</div>
+                      </div>
+                    </div>
+                    <div className="panel" style={{ marginTop: 12, background: "rgba(0,0,0,0.12)" }}>
+                      <div className="k" style={{ color: "var(--muted)", marginBottom: 6 }}>Messaggio</div>
+                      <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.35 }}>{message}</div>
+                    </div>
+                    <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
+                      <button onClick={closeResultModal}>Chiudi</button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="main">
       <h2 style={{ marginTop: 0 }}>Connettori</h2>
