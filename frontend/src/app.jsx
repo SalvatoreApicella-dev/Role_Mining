@@ -23,6 +23,7 @@ const AiLabFairnessPage = lazy(() => import("./pages/AiLabFairnessPage"));
 const AiLabSyntheticPage = lazy(() => import("./pages/AiLabSyntheticPage"));
 const AiLabFeedbackPage = lazy(() => import("./pages/AiLabFeedbackPage"));
 const LogsPage = lazy(() => import("./pages/LogsPage"));
+const UsersAdvancedAnalyticsPage = lazy(() => import("./pages/UsersAdvancedAnalyticsPage"));
 const Plot = lazy(() => import("react-plotly.js"));
 
 
@@ -92,6 +93,12 @@ function Sidebar({ onLogout, permissions }) {
             <NavLink to="/utenti" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
               <span className="nav-item__dot" />
               <span className="nav-item__text">Users</span>
+            </NavLink>
+          )}
+          {can("can_view_users") && (
+            <NavLink to="/utenti/advanced-analytics" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+              <span className="nav-item__dot" />
+              <span className="nav-item__text">Advanced Analytics</span>
             </NavLink>
           )}
         </div>
@@ -2161,7 +2168,10 @@ function Utenti({ permissions }) {
 
   return (
     <div className="main">
-      <h2 style={{ marginTop: 0 }}>Utenti ({total})</h2>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+        <h2 style={{ marginTop: 0, marginBottom: 0 }}>Utenti ({total})</h2>
+        <button className="primary" onClick={() => nav("/utenti/advanced-analytics")}>Advanced Analytics</button>
+      </div>
 
       <div className="panel">
         <div className="row">
@@ -5086,6 +5096,14 @@ export default function App() {
               element={
                 <PermissionGate allow={permissions.can_view_users} title="Users non disponibile">
                   <Utenti permissions={permissions} />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/utenti/advanced-analytics"
+              element={
+                <PermissionGate allow={permissions.can_view_users} title="Advanced Analytics non disponibile">
+                  <UsersAdvancedAnalyticsPage />
                 </PermissionGate>
               }
             />
