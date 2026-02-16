@@ -682,6 +682,7 @@ function Connettori({ permissions }) {
   const [sapBulkMsg, setSapBulkMsg] = useState("");
   const [scheduleModal, setScheduleModal] = useState({ open: false, target: "" });
   const [resultModal, setResultModal] = useState({ open: false, target: "" });
+  const [flippedConnectorCards, setFlippedConnectorCards] = useState({});
   const [scheduleForm, setScheduleForm] = useState({
     frequency: "DAILY",
     time: "09:00",
@@ -689,6 +690,10 @@ function Connettori({ permissions }) {
     enabled: true,
   });
   const canManageSettings = permissions?.can_manage_settings !== false;
+
+  function toggleConnectorCard(key) {
+    setFlippedConnectorCards((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
 
 
@@ -1167,7 +1172,7 @@ function Connettori({ permissions }) {
       ],
     },
     {
-      key: "one_identity", badge: "IGA", title: "One Identity", tone: "iga",
+      key: "one_identity", badge: "IGA", title: "One Identity Manager", tone: "iga",
       fields: [
         { kind: "input", label: "Base URL", value: cfg.one_identity_base_url || "", patch: "one_identity_base_url", placeholder: "https://<host>/AppServer" },
         { kind: "input", label: "Token URL", value: cfg.one_identity_token_url || "", patch: "one_identity_token_url", placeholder: "optional" },
@@ -1179,7 +1184,7 @@ function Connettori({ permissions }) {
       ],
     },
     {
-      key: "sailpoint", badge: "IGA", title: "SailPoint", tone: "iga",
+      key: "sailpoint", badge: "IGA", title: "SailPoint", tone: "sailpoint",
       fields: [
         { kind: "input", label: "Base URL", value: cfg.sailpoint_base_url || "", patch: "sailpoint_base_url", placeholder: "https://tenant.api.identitynow.com/v3" },
         { kind: "input", label: "Token URL", value: cfg.sailpoint_token_url || "", patch: "sailpoint_token_url", placeholder: "oauth token url" },
@@ -1259,6 +1264,22 @@ function Connettori({ permissions }) {
     }
   };
   const sortedConnectorCards = [...connectorCards].sort((a, b) => Number(isConfigured(b.key)) - Number(isConfigured(a.key)));
+  const connectorLogoByKey = {
+    sap: "https://logo.svgcdn.com/logos/sap.svg",
+    ad: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Active_Directory_logo.svg/512px-Active_Directory_logo.svg.png",
+    azure: "https://logo.svgcdn.com/logos/microsoft-azure.svg",
+    one_identity: "https://images.credly.com/size/200x200/images/22d4ef99-7d85-4175-8bef-504781433779/blob.png",
+    sailpoint: "https://www.thinkdigitalpartners.com/wp-content/uploads/2024/02/SailPoint-Logo-RGB-Color.png",
+    saviynt: "https://logo.svgcdn.com/logos/saviynt.svg",
+    servicenow: "https://logo.svgcdn.com/logos/servicenow.svg",
+    salesforce: "https://logo.svgcdn.com/logos/salesforce.svg",
+    m365: "https://logo.svgcdn.com/logos/microsoft-365.svg",
+    csv: "https://logo.svgcdn.com/logos/csv.svg",
+  };
+  const connectorLogoFallbackByKey = {
+    ad: "https://e7.pngegg.com/pngimages/530/851/png-clipart-windows-active-directory-logo-active-directory-federation-services-microsoft-ado-net-data-provider-multi-factor-authentication-active-directory-blue-angle-thumbnail.png",
+    one_identity: "https://logo.clearbit.com/quest.com",
+  };
 
   if (useModernConnectorLayout) {
     return (
@@ -1271,90 +1292,138 @@ function Connettori({ permissions }) {
         </div>
 
         <div className="connectors-modern__grid">
-          {sortedConnectorCards.map((card) => (
-            <section key={card.key} className={`connectors-modern-card connectors-modern-card--${card.tone}${isConfigured(card.key) ? " connectors-modern-card--configured" : ""}`}>
-              <div className="connectors-modern-card__badge">{card.badge}</div>
-              <h3 className="connectors-modern-card__title">{card.title}</h3>
-
-              {card.key === "csv" ? (
-                <div className="connectors-modern-card__fields">
-                  <label>Filepath</label>
-                  <input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} />
-                </div>
-              ) : (
-                <div className="connectors-modern-card__fields">
-                  {card.fields.map((f) => (
-                    <React.Fragment key={`${card.key}-${f.patch}`}>
-                      {f.kind === "checkbox" ? (
-                        <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                          <input
-                            type="checkbox"
-                            checked={!!f.checked}
-                            onChange={(e) => updateCfg({ [f.patch]: e.target.checked })}
-                          />
-                          {f.label}
-                        </label>
-                      ) : f.kind === "select" ? (
-                        <>
-                          <label>{f.label}</label>
-                          <select
-                            value={f.value}
-                            onChange={(e) => updateCfg({ [f.patch]: e.target.value })}
-                          >
-                            {(f.options || []).map((opt) => (
-                              <option key={`${card.key}-${f.patch}-${opt}`} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        </>
-                      ) : f.kind === "state" ? (
-                        <>
-                          <label>{f.label}</label>
-                          <input
-                            type="text"
-                            value={f.value}
-                            onChange={(e) => setOu(e.target.value)}
-                            placeholder={f.placeholder}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <label>{f.label}</label>
-                          <input
-                            type={f.type || "text"}
-                            value={f.value}
-                            onChange={(e) => updateCfg({ [f.patch]: e.target.value })}
-                            placeholder={f.placeholder}
-                          />
-                        </>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </div>
-              )}
-
-              {card.key === "csv" ? (
-                <div className="row connector-form-actions" style={{ marginTop: 8 }}>
-                  <button className="primary" disabled={!csvFile || csvLoading || !canManageSettings} onClick={() => runDiscovery("csv")}>
-                    {csvLoading ? "Discovery..." : "Discovery"}
+          {sortedConnectorCards.map((card) => {
+            const isFlipped = Boolean(flippedConnectorCards[card.key]);
+            return (
+              <section
+                key={card.key}
+                className={`connectors-modern-card connectors-modern-card--${card.tone}${isConfigured(card.key) ? " connectors-modern-card--configured" : ""}${isFlipped ? " is-flipped" : ""}`}
+              >
+                <div className="connectors-modern-card__inner">
+                  <button
+                    type="button"
+                    className="connectors-modern-card__face connectors-modern-card__face--front"
+                    onClick={() => toggleConnectorCard(card.key)}
+                  >
+                    <div className="connectors-modern-card__badge">{card.badge}</div>
+                    <img
+                      src={connectorLogoByKey[card.key] || "/BIP-Thumbnail-RED-on-BLUE.png"}
+                      alt={`${card.title} logo`}
+                      className="connectors-modern-card__logo"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const fallback = connectorLogoFallbackByKey[card.key] || "/BIP-Thumbnail-RED-on-BLUE.png";
+                        if (!e.currentTarget.dataset.fallbackApplied) {
+                          e.currentTarget.dataset.fallbackApplied = "1";
+                          e.currentTarget.src = fallback;
+                          return;
+                        }
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "/BIP-Thumbnail-RED-on-BLUE.png";
+                      }}
+                    />
+                    <h3 className="connectors-modern-card__title">{card.title}</h3>
+                    <div className="connectors-modern-card__flip-hint">Click per aprire configurazione</div>
+                    <div className="connectors-modern-card__status-row">
+                      <div className="connectors-modern-card__status">
+                        <span className={`connectors-modern-card__dot${isConnected(card.key) ? " is-on" : ""}`} />
+                        <span>{isConnected(card.key) ? "Connesso" : "Non verificato"}</span>
+                      </div>
+                    </div>
                   </button>
-                  <button className="primary" disabled={csvLoading || provisioningLoadingTarget === "csv" || !canManageSettings} onClick={() => runProvisioning("csv")}>
-                    {provisioningLoadingTarget === "csv" ? "Provisioning..." : "Provision"}
-                  </button>
-                  <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading || !canManageSettings}>Schedule</button>
-                  <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
-                </div>
-              ) : (
-                renderConnectorActions(card.key, `Configurazione ${card.title} salvata.`)
-              )}
 
-              <div className="connectors-modern-card__status-row">
-                <div className="connectors-modern-card__status">
-                  <span className={`connectors-modern-card__dot${isConnected(card.key) ? " is-on" : ""}`} />
-                  <span>{isConnected(card.key) ? "Connesso" : "Non verificato"}</span>
+                  <div className="connectors-modern-card__face connectors-modern-card__face--back">
+                    <div className="connectors-modern-card__back-head">
+                      <div className="connectors-modern-card__badge">{card.badge}</div>
+                      <button type="button" className="connectors-modern-card__back-close" onClick={() => toggleConnectorCard(card.key)}>
+                        Torna al logo
+                      </button>
+                    </div>
+                    <h3 className="connectors-modern-card__title">{card.title}</h3>
+
+                    {card.key === "csv" ? (
+                      <div className="connectors-modern-card__fields">
+                        <label>Filepath</label>
+                        <input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} />
+                      </div>
+                    ) : (
+                      <div className="connectors-modern-card__fields">
+                        {card.fields.map((f) => (
+                          <React.Fragment key={`${card.key}-${f.patch}`}>
+                            {f.kind === "checkbox" ? (
+                              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={!!f.checked}
+                                  onChange={(e) => updateCfg({ [f.patch]: e.target.checked })}
+                                />
+                                {f.label}
+                              </label>
+                            ) : f.kind === "select" ? (
+                              <>
+                                <label>{f.label}</label>
+                                <select
+                                  value={f.value}
+                                  onChange={(e) => updateCfg({ [f.patch]: e.target.value })}
+                                >
+                                  {(f.options || []).map((opt) => (
+                                    <option key={`${card.key}-${f.patch}-${opt}`} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                              </>
+                            ) : f.kind === "state" ? (
+                              <>
+                                <label>{f.label}</label>
+                                <input
+                                  type="text"
+                                  value={f.value}
+                                  onChange={(e) => setOu(e.target.value)}
+                                  placeholder={f.placeholder}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <label>{f.label}</label>
+                                <input
+                                  type={f.type || "text"}
+                                  value={f.value}
+                                  onChange={(e) => updateCfg({ [f.patch]: e.target.value })}
+                                  placeholder={f.placeholder}
+                                />
+                              </>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    )}
+
+                    {card.key === "csv" ? (
+                      <div className="row connector-form-actions" style={{ marginTop: 8 }}>
+                        <button className="primary" disabled={!csvFile || csvLoading || !canManageSettings} onClick={() => runDiscovery("csv")}>
+                          {csvLoading ? "Discovery..." : "Discovery"}
+                        </button>
+                        <button className="primary" disabled={csvLoading || provisioningLoadingTarget === "csv" || !canManageSettings} onClick={() => runProvisioning("csv")}>
+                          {provisioningLoadingTarget === "csv" ? "Provisioning..." : "Provision"}
+                        </button>
+                        <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading || !canManageSettings}>Schedule</button>
+                        <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
+                      </div>
+                    ) : (
+                      renderConnectorActions(card.key, `Configurazione ${card.title} salvata.`)
+                    )}
+
+                    <div className="connectors-modern-card__status-row">
+                      <div className="connectors-modern-card__status">
+                        <span className={`connectors-modern-card__dot${isConnected(card.key) ? " is-on" : ""}`} />
+                        <span>{isConnected(card.key) ? "Connesso" : "Non verificato"}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </section>
-          ))}
+              </section>
+            );
+          })}
         </div>
 
         {cfgStatusMsg && <div className="ok">{cfgStatusMsg}</div>}
