@@ -22,6 +22,7 @@ const AiLabAbPlaygroundPage = lazy(() => import("./pages/AiLabAbPlaygroundPage")
 const AiLabFairnessPage = lazy(() => import("./pages/AiLabFairnessPage"));
 const AiLabSyntheticPage = lazy(() => import("./pages/AiLabSyntheticPage"));
 const AiLabFeedbackPage = lazy(() => import("./pages/AiLabFeedbackPage"));
+const LogsPage = lazy(() => import("./pages/LogsPage"));
 const Plot = lazy(() => import("react-plotly.js"));
 
 
@@ -137,7 +138,7 @@ function Sidebar({ onLogout, permissions }) {
               </NavLink>
             </div>
           )}
-          {(can("can_view_configurations") || can("can_view_logs") || can("can_view_system_users")) && (
+          {(can("can_view_configurations") || can("can_view_system_users")) && (
             <button className={`link nav-toggle ${openCfg ? "is-open" : ""}`} onClick={() => setOpenCfg(v => !v)}>
               <span className="nav-toggle__label">
                 <span className="nav-item__dot" />
@@ -153,12 +154,6 @@ function Sidebar({ onLogout, permissions }) {
                   <span className="nav-item__text">Connettori</span>
                 </NavLink>
               )}
-              {can("can_view_logs") && (
-                <NavLink to="/config/logs" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
-                  <span className="nav-item__dot" />
-                  <span className="nav-item__text">Logs</span>
-                </NavLink>
-              )}
               {can("can_view_system_users") && (
                 <NavLink to="/config/system-users" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
                   <span className="nav-item__dot" />
@@ -172,6 +167,12 @@ function Sidebar({ onLogout, permissions }) {
 
       <div className="sidebar-actions">
         <hr className="sep" />
+        {can("can_view_logs") && (
+          <NavLink to="/logs" className={({ isActive }) => (isActive ? "nav-item nav-item--logs-quick active" : "nav-item nav-item--logs-quick")}>
+            <span className="nav-item__chip" />
+            <span className="nav-item__text">Logs</span>
+          </NavLink>
+        )}
         <button className="danger" onClick={onLogout}>Logout</button>
       </div>
 
@@ -5107,13 +5108,14 @@ export default function App() {
               }
             />
             <Route
-              path="/config/logs"
+              path="/logs"
               element={
                 <PermissionGate allow={permissions.can_view_logs} title="Logs non disponibili">
-                  <Logs />
+                  <LogsPage />
                 </PermissionGate>
               }
             />
+            <Route path="/config/logs" element={<Navigate to="/logs" replace />} />
             <Route
               path="/config/system-users"
               element={
