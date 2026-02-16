@@ -2431,6 +2431,12 @@ hr.sep {
   margin-bottom: 10px;
 }
 
+.logs-detail__raw-ts {
+  color: #8fa9cf;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
 .logs-modal__close {
   width: 30px;
   height: 30px;

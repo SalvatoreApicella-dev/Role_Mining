@@ -3,6 +3,7 @@ import { api } from "../api";
 
 export default function LogsPage() {
   const PAGE_SIZE = 50;
+  const MESSAGE_PREVIEW_MAX = 110;
   const [logs, setLogs] = useState([]);
   const [levelFilter, setLevelFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
@@ -80,6 +81,26 @@ export default function LogsPage() {
 
   const selectedLog = pagedLogs.find((x) => x._id === selectedId) || null;
 
+  function formatMessagePreview(message) {
+    const text = String(message || "-");
+    if (text.length <= MESSAGE_PREVIEW_MAX) return text;
+    return `${text.slice(0, MESSAGE_PREVIEW_MAX - 3)}...`;
+  }
+
+  function formatHumanTs(ts) {
+    if (!ts) return "-";
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return String(ts);
+    return d.toLocaleString("it-IT", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+
   return (
     <div className="main logs-page">
       <h2 style={{ marginTop: 0 }}>Logs</h2>
@@ -108,7 +129,7 @@ export default function LogsPage() {
             <table className="table logs-table">
               <thead>
                 <tr>
-                  <th>Timestamp</th>
+                  <th>Time</th>
                   <th>Level</th>
                   <th>Message</th>
                 </tr>
@@ -134,11 +155,11 @@ export default function LogsPage() {
                         }
                       }}
                     >
-                      <td className="logs-ts">{log.ts || "-"}</td>
+                      <td className="logs-ts">{formatHumanTs(log.ts)}</td>
                       <td>
                         <span className={`logs-level-badge logs-level-badge--${lvl.toLowerCase()}`}>{lvl}</span>
                       </td>
-                      <td className="logs-message-cell">{log.message || "-"}</td>
+                      <td className="logs-message-cell">{formatMessagePreview(log.message)}</td>
                     </tr>
                   );
                 })}
@@ -183,17 +204,19 @@ export default function LogsPage() {
               <button className="logs-modal__close" onClick={() => setDetailOpen(false)} aria-label="Chiudi dettaglio log">x</button>
             </div>
             <div className="logs-detail__meta">
-              <span>{selectedLog.ts || "-"}</span>
+              <span>{formatHumanTs(selectedLog.ts)}</span>
               <span className={`logs-level-badge logs-level-badge--${String(selectedLog.level || "INFO").toLowerCase()}`}>
                 {String(selectedLog.level || "INFO").toUpperCase()}
               </span>
             </div>
+            <div className="logs-detail__raw-ts">Timestamp raw: {selectedLog.ts || "-"}</div>
             <div className="logs-detail__message">{selectedLog.message || "-"}</div>
             <div className="logs-detail__json-title">Payload</div>
             <pre className="logs-detail__json">
               {JSON.stringify(
                 {
                   ts: selectedLog.ts || "-",
+                  human_time: formatHumanTs(selectedLog.ts),
                   level: selectedLog.level || "INFO",
                   message: selectedLog.message || "-",
                 },
