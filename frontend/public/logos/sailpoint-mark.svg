@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img" aria-label="SailPoint mark">
+  <polygon points="0,420 300,40 415,420" fill="#153fa8"/>
+  <polygon points="300,40 600,420 415,420" fill="#c737b9"/>
+  <polygon points="0,420 415,420 445,560" fill="#1876c6"/>
+  <polygon points="415,420 600,420 445,560" fill="#c87ac7"/>
+</svg>

@@ -1184,9 +1184,15 @@ hr.sep {
 }
 
 .connectors-modern-card--sailpoint .connectors-modern-card__logo {
-  width: 250px;
-  max-width: 94%;
+  width: 175px;
+  max-width: 66%;
 }
+
+.connectors-modern-card--saviynt .connectors-modern-card__logo {
+  width: 228px;
+}
+
+
 
 .connectors-modern-card__flip-hint {
   margin-top: 2px;

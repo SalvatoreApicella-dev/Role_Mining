@@ -1194,7 +1194,7 @@ function Connettori({ permissions }) {
       ],
     },
     {
-      key: "saviynt", badge: "IGA", title: "Saviynt", tone: "iga",
+      key: "saviynt", badge: "IGA", title: "Saviynt", tone: "saviynt",
       fields: [
         { kind: "input", label: "Base URL", value: cfg.saviynt_base_url || "", patch: "saviynt_base_url", placeholder: "tenant api url" },
         { kind: "input", label: "Token URL", value: cfg.saviynt_token_url || "", patch: "saviynt_token_url", placeholder: "token endpoint" },
@@ -1264,21 +1264,22 @@ function Connettori({ permissions }) {
     }
   };
   const sortedConnectorCards = [...connectorCards].sort((a, b) => Number(isConfigured(b.key)) - Number(isConfigured(a.key)));
+  const makeTextLogoDataUri = (label) => {
+    const text = String(label || "Connector").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='640' height='220'><rect width='100%' height='100%' rx='24' fill='#0f1f3d'/><text x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' fill='#9fb8e8' font-family='Arial,sans-serif' font-size='52' font-weight='700'>${text}</text></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  };
   const connectorLogoByKey = {
     sap: "https://logo.svgcdn.com/logos/sap.svg",
-    ad: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Active_Directory_logo.svg/512px-Active_Directory_logo.svg.png",
+    ad: "/logos/active-directory.svg?v=2",
     azure: "https://logo.svgcdn.com/logos/microsoft-azure.svg",
     one_identity: "https://images.credly.com/size/200x200/images/22d4ef99-7d85-4175-8bef-504781433779/blob.png",
-    sailpoint: "https://www.thinkdigitalpartners.com/wp-content/uploads/2024/02/SailPoint-Logo-RGB-Color.png",
-    saviynt: "https://logo.svgcdn.com/logos/saviynt.svg",
-    servicenow: "https://logo.svgcdn.com/logos/servicenow.svg",
-    salesforce: "https://logo.svgcdn.com/logos/salesforce.svg",
-    m365: "https://logo.svgcdn.com/logos/microsoft-365.svg",
-    csv: "https://logo.svgcdn.com/logos/csv.svg",
-  };
-  const connectorLogoFallbackByKey = {
-    ad: "https://e7.pngegg.com/pngimages/530/851/png-clipart-windows-active-directory-logo-active-directory-federation-services-microsoft-ado-net-data-provider-multi-factor-authentication-active-directory-blue-angle-thumbnail.png",
-    one_identity: "https://logo.clearbit.com/quest.com",
+    sailpoint: "/logos/sailpoint-mark.svg?v=1",
+    saviynt: "/logos/saviynt-logo.svg?v=1",
+    servicenow: "/logos/servicenow-logo.png?v=1",
+    salesforce: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Salesforce.com_logo.svg/512px-Salesforce.com_logo.svg.png",
+    m365: "https://logosandtypes.com/wp-content/uploads/2023/02/microsoft-365.svg",
+    csv: "https://www.iconsdb.com/icons/download/icon-sets/web-2-green/csv-512.png",
   };
 
   if (useModernConnectorLayout) {
@@ -1307,20 +1308,20 @@ function Connettori({ permissions }) {
                   >
                     <div className="connectors-modern-card__badge">{card.badge}</div>
                     <img
-                      src={connectorLogoByKey[card.key] || "/BIP-Thumbnail-RED-on-BLUE.png"}
+                      src={connectorLogoByKey[card.key] || makeTextLogoDataUri(card.title)}
                       alt={`${card.title} logo`}
                       className="connectors-modern-card__logo"
                       loading="lazy"
                       referrerPolicy="no-referrer"
                       onError={(e) => {
-                        const fallback = connectorLogoFallbackByKey[card.key] || "/BIP-Thumbnail-RED-on-BLUE.png";
+                        const fallback = makeTextLogoDataUri(card.title);
                         if (!e.currentTarget.dataset.fallbackApplied) {
                           e.currentTarget.dataset.fallbackApplied = "1";
                           e.currentTarget.src = fallback;
                           return;
                         }
                         e.currentTarget.onerror = null;
-                        e.currentTarget.src = "/BIP-Thumbnail-RED-on-BLUE.png";
+                        e.currentTarget.src = makeTextLogoDataUri(card.title);
                       }}
                     />
                     <h3 className="connectors-modern-card__title">{card.title}</h3>

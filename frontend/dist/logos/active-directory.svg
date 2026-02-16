@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-label="Active Directory logo">
+  <g fill="#13a9e5">
+    <polygon points="300,190 450,170 450,350 300,350"/>
+    <polygon points="500,165 670,145 670,350 500,350"/>
+    <polygon points="300,365 450,365 450,515 300,495"/>
+    <polygon points="500,365 670,365 670,545 500,525"/>
+  </g>
+  <text x="450" y="665" text-anchor="middle" fill="#13a9e5" font-size="102" font-family="Arial, Helvetica, sans-serif" font-weight="500">
+    Active Directory
+  </text>
+</svg>
