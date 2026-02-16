@@ -1214,6 +1214,28 @@ hr.sep {
   color: #b6c8ea;
 }
 
+.connectors-modern-card__quick-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+.connectors-modern-card__quick-btn {
+  min-width: 102px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 6px 10px;
+  border-color: rgba(125, 176, 255, 0.5);
+  background: rgba(106, 166, 255, 0.22);
+}
+
+.connectors-modern-card__quick-btn:disabled {
+  opacity: 0.6;
+}
+
 .connectors-modern-card__back-head {
   display: flex;
   align-items: center;
@@ -2510,6 +2532,29 @@ hr.sep {
   background: rgba(142, 117, 42, 0.38);
 }
 
+.bip-sidebar .nav-item--audit-quick {
+  border-color: rgba(172, 182, 200, 0.34);
+  background: rgba(72, 82, 101, 0.22);
+}
+
+.bip-sidebar .nav-item--audit-quick .nav-item__chip {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #aeb9cc;
+  flex: 0 0 8px;
+}
+
+.bip-sidebar .nav-item--audit-quick:hover {
+  border-color: rgba(192, 202, 220, 0.48);
+  background: rgba(84, 96, 116, 0.30);
+}
+
+.bip-sidebar .nav-item--audit-quick.active {
+  border-color: rgba(202, 214, 233, 0.58);
+  background: rgba(94, 107, 129, 0.38);
+}
+
 @media (max-width: 1180px) {
   .logs-grid {
     grid-template-columns: 1fr;
@@ -2539,9 +2584,51 @@ hr.sep {
   gap: 8px;
 }
 
+.advanced-users-object-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px;
+}
+
+.advanced-users-object-picker__label {
+  font-size: 11px;
+  color: #c1d2ee;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 6px 0 4px;
+}
+
+.advanced-users-object-btn {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #d4e3fb;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+.advanced-users-object-btn.is-active {
+  border-color: rgba(106, 166, 255, 0.58);
+  background: rgba(106, 166, 255, 0.26);
+  color: #f3f8ff;
+  box-shadow: inset 0 0 0 1px rgba(167, 203, 255, 0.35);
+}
+
 .advanced-users-filters {
   background: rgba(11, 20, 39, 0.88);
   border-color: rgba(106, 166, 255, 0.28);
+}
+
+.advanced-users-object-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 12px;
 }
 
 .advanced-users-filter-grid {

@@ -95,7 +95,7 @@ export async function chooseCsvDuplicateRow(displayNameRaw, rowId) {
 
 
 
-async function request(path, { method = "GET", body } = {}) {
+async function request(path, { method = "GET", body, signal } = {}) {
   const headers = { "Content-Type": "application/json" };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -103,7 +103,8 @@ async function request(path, { method = "GET", body } = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined
+    body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   if (!res.ok) {
@@ -153,8 +154,8 @@ export const api = {
 
   extract: (ou) => request("/api/ad/extract", { method: "POST", body: { ou } }),
   sapExtract: (ou) => request("/api/sap/extract", { method: "POST", body: { ou } }),
-  connectorExtract: (target, ou = "") =>
-    request(`/api/connectors/${encodeURIComponent(target)}/extract`, { method: "POST", body: { ou } }),
+  connectorExtract: (target, ou = "", opts = {}) =>
+    request(`/api/connectors/${encodeURIComponent(target)}/extract`, { method: "POST", body: { ou }, signal: opts.signal }),
   connectorProvision: (target) =>
     request(`/api/connectors/${encodeURIComponent(target)}/provision`, { method: "POST" }),
   sapBulkProvision: (body) =>
