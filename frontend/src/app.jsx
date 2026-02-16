@@ -1307,23 +1307,25 @@ function Connettori({ permissions }) {
                     onClick={() => toggleConnectorCard(card.key)}
                   >
                     <div className="connectors-modern-card__badge">{card.badge}</div>
-                    <img
-                      src={connectorLogoByKey[card.key] || makeTextLogoDataUri(card.title)}
-                      alt={`${card.title} logo`}
-                      className="connectors-modern-card__logo"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        const fallback = makeTextLogoDataUri(card.title);
-                        if (!e.currentTarget.dataset.fallbackApplied) {
-                          e.currentTarget.dataset.fallbackApplied = "1";
-                          e.currentTarget.src = fallback;
-                          return;
-                        }
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = makeTextLogoDataUri(card.title);
-                      }}
-                    />
+                    <div className="connectors-modern-card__logo-container">
+                      <img
+                        src={connectorLogoByKey[card.key] || makeTextLogoDataUri(card.title)}
+                        alt={`${card.title} logo`}
+                        className="connectors-modern-card__logo"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const fallback = makeTextLogoDataUri(card.title);
+                          if (!e.currentTarget.dataset.fallbackApplied) {
+                            e.currentTarget.dataset.fallbackApplied = "1";
+                            e.currentTarget.src = fallback;
+                            return;
+                          }
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = makeTextLogoDataUri(card.title);
+                        }}
+                      />
+                    </div>
                     <h3 className="connectors-modern-card__title">{card.title}</h3>
                     <div className="connectors-modern-card__flip-hint">Click per aprire configurazione</div>
                     <div className="connectors-modern-card__status-row">
