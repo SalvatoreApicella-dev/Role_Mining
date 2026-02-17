@@ -23,6 +23,8 @@ const AiLabFairnessPage = lazy(() => import("./pages/AiLabFairnessPage"));
 const AiLabSyntheticPage = lazy(() => import("./pages/AiLabSyntheticPage"));
 const AiLabFeedbackPage = lazy(() => import("./pages/AiLabFeedbackPage"));
 const RoleModelingSandboxPage = lazy(() => import("./pages/RoleModelingSandboxPage"));
+const LogsPage = lazy(() => import("./pages/LogsPage"));
+const UsersAdvancedAnalyticsPage = lazy(() => import("./pages/UsersAdvancedAnalyticsPage"));
 const Plot = lazy(() => import("react-plotly.js"));
 
 
@@ -138,7 +140,7 @@ function Sidebar({ onLogout, permissions }) {
               </NavLink>
             </div>
           )}
-          {(can("can_view_configurations") || can("can_view_logs") || can("can_view_system_users")) && (
+          {(can("can_view_configurations") || can("can_view_system_users")) && (
             <button className={`link nav-toggle ${openCfg ? "is-open" : ""}`} onClick={() => setOpenCfg(v => !v)}>
               <span className="nav-toggle__label">
                 <span className="nav-item__dot" />
@@ -154,12 +156,6 @@ function Sidebar({ onLogout, permissions }) {
                   <span className="nav-item__text">Connettori</span>
                 </NavLink>
               )}
-              {can("can_view_logs") && (
-                <NavLink to="/config/logs" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
-                  <span className="nav-item__dot" />
-                  <span className="nav-item__text">Logs</span>
-                </NavLink>
-              )}
               {can("can_view_system_users") && (
                 <NavLink to="/config/system-users" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
                   <span className="nav-item__dot" />
@@ -173,6 +169,18 @@ function Sidebar({ onLogout, permissions }) {
 
       <div className="sidebar-actions">
         <hr className="sep" />
+        {can("can_view_logs") && (
+          <NavLink to="/logs" className={({ isActive }) => (isActive ? "nav-item nav-item--logs-quick active" : "nav-item nav-item--logs-quick")}>
+            <span className="nav-item__chip" />
+            <span className="nav-item__text">Logs</span>
+          </NavLink>
+        )}
+        {(can("can_view_logs") || can("can_view_users")) && (
+          <NavLink to="/advanced-analytics" className={({ isActive }) => (isActive ? "nav-item nav-item--audit-quick active" : "nav-item nav-item--audit-quick")}>
+            <span className="nav-item__chip" />
+            <span className="nav-item__text">Advanced Analytics</span>
+          </NavLink>
+        )}
         <button className="danger" onClick={onLogout}>Logout</button>
       </div>
 
@@ -684,6 +692,7 @@ function Connettori({ permissions }) {
   const [scheduleModal, setScheduleModal] = useState({ open: false, target: "" });
   const [resultModal, setResultModal] = useState({ open: false, target: "" });
   const [flippedConnectorCards, setFlippedConnectorCards] = useState({});
+  const discoveryAbortRef = useRef({});
   const [scheduleForm, setScheduleForm] = useState({
     frequency: "DAILY",
     time: "09:00",
@@ -866,7 +875,14 @@ function Connettori({ permissions }) {
       setErr("Permessi insufficienti: discovery non consentita.");
       return;
     }
+    if (discoveryLoadingTarget === target) {
+      const controller = discoveryAbortRef.current[target];
+      if (controller) controller.abort();
+      return;
+    }
     setDiscoveryLoadingTarget(target);
+    const controller = new AbortController();
+    discoveryAbortRef.current[target] = controller;
     try {
       setErr("");
       if (target !== "csv") {
@@ -927,7 +943,7 @@ function Connettori({ permissions }) {
         });
         return;
       }
-      const res = await api.connectorExtract(target, "");
+      const res = await api.connectorExtract(target, "", { signal: controller.signal });
       const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
       const label = connectorLabels[target] || target;
       const msg = (
@@ -954,6 +970,10 @@ function Connettori({ permissions }) {
         csv_available: true,
       });
     } catch (e) {
+      if (e?.name === "AbortError") {
+        setStatusMsg(`${connectorLabels[target] || target}: discovery interrotta manualmente.`);
+        return;
+      }
       const msg = String(e?.message || e);
       await persistDiscoveryResult(target, {
         status: "error",
@@ -963,6 +983,7 @@ function Connettori({ permissions }) {
         csv_available: false,
       });
     } finally {
+      delete discoveryAbortRef.current[target];
       setDiscoveryLoadingTarget("");
     }
   }
@@ -1066,22 +1087,27 @@ function Connettori({ permissions }) {
     closeScheduleModal();
   }
 
-  function renderConnectorActions(target, saveMessage) {
+  function renderConnectorActions(target, saveMessage, options = {}) {
+    const showRunButtons = options.showRunButtons !== false;
     const loading = discoveryLoadingTarget === target;
     const provisioningLoading = provisioningLoadingTarget === target;
     return (
       <div className="row connector-form-actions" style={{ marginTop: 10 }}>
         <button className="primary" onClick={() => saveCfg(saveMessage)} disabled={cfgSaving || !canManageSettings}>Salva</button>
-        <button className="primary" onClick={() => runDiscovery(target)} disabled={cfgSaving || loading || !canManageSettings}>
-          {loading ? "Discovery..." : "Discovery"}
-        </button>
-        <button
-          className="primary"
-          onClick={() => runProvisioning(target)}
-          disabled={cfgSaving || loading || provisioningLoading || !canManageSettings}
-        >
-          {provisioningLoading ? "Provisioning..." : "Provision"}
-        </button>
+        {showRunButtons && (
+          <button className={loading ? "danger" : "primary"} onClick={() => runDiscovery(target)} disabled={cfgSaving || !canManageSettings}>
+            {loading ? "STOP" : "Discovery"}
+          </button>
+        )}
+        {showRunButtons && (
+          <button
+            className="primary"
+            onClick={() => runProvisioning(target)}
+            disabled={cfgSaving || loading || provisioningLoading || !canManageSettings}
+          >
+            {provisioningLoading ? "Provisioning..." : "Provision"}
+          </button>
+        )}
         <button className="primary" onClick={() => openScheduleModal(target)} disabled={cfgSaving || loading || !canManageSettings}>Schedule</button>
         <button className="primary" onClick={() => openResultModal(target)} disabled={cfgSaving}>Esito</button>
       </div>
@@ -1302,10 +1328,17 @@ function Connettori({ permissions }) {
                 className={`connectors-modern-card connectors-modern-card--${card.tone}${isConfigured(card.key) ? " connectors-modern-card--configured" : ""}${isFlipped ? " is-flipped" : ""}`}
               >
                 <div className="connectors-modern-card__inner">
-                  <button
-                    type="button"
+                  <div
                     className="connectors-modern-card__face connectors-modern-card__face--front"
                     onClick={() => toggleConnectorCard(card.key)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleConnectorCard(card.key);
+                      }
+                    }}
                   >
                     <div className="connectors-modern-card__badge">{card.badge}</div>
                     <div className="connectors-modern-card__logo-container">
@@ -1329,13 +1362,39 @@ function Connettori({ permissions }) {
                     </div>
                     <h3 className="connectors-modern-card__title">{card.title}</h3>
                     <div className="connectors-modern-card__flip-hint">Click per aprire configurazione</div>
+                    {card.key !== "csv" && (
+                      <div className="connectors-modern-card__quick-actions">
+                        <button
+                          type="button"
+                          className={`${discoveryLoadingTarget === card.key ? "danger" : "primary"} connectors-modern-card__quick-btn`}
+                          disabled={cfgSaving || !canManageSettings}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            runDiscovery(card.key);
+                          }}
+                        >
+                          {discoveryLoadingTarget === card.key ? "STOP" : "Discovery"}
+                        </button>
+                        <button
+                          type="button"
+                          className="primary connectors-modern-card__quick-btn"
+                          disabled={cfgSaving || provisioningLoadingTarget === card.key || !canManageSettings}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            runProvisioning(card.key);
+                          }}
+                        >
+                          {provisioningLoadingTarget === card.key ? "Provisioning..." : "Provisioning"}
+                        </button>
+                      </div>
+                    )}
                     <div className="connectors-modern-card__status-row">
                       <div className="connectors-modern-card__status">
                         <span className={`connectors-modern-card__dot${isConnected(card.key) ? " is-on" : ""}`} />
                         <span>{isConnected(card.key) ? "Connesso" : "Non verificato"}</span>
                       </div>
                     </div>
-                  </button>
+                  </div>
 
                   <div className="connectors-modern-card__face connectors-modern-card__face--back">
                     <div className="connectors-modern-card__back-head">
@@ -1414,7 +1473,7 @@ function Connettori({ permissions }) {
                         <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
                       </div>
                     ) : (
-                      renderConnectorActions(card.key, `Configurazione ${card.title} salvata.`)
+                      renderConnectorActions(card.key, `Configurazione ${card.title} salvata.`, { showRunButtons: false })
                     )}
 
                     <div className="connectors-modern-card__status-row">
@@ -5098,6 +5157,15 @@ export default function App() {
               }
             />
             <Route
+              path="/advanced-analytics"
+              element={
+                <PermissionGate allow={permissions.can_view_users || permissions.can_view_logs} title="Advanced Analytics non disponibile">
+                  <UsersAdvancedAnalyticsPage />
+                </PermissionGate>
+              }
+            />
+            <Route path="/utenti/advanced-analytics" element={<Navigate to="/advanced-analytics" replace />} />
+            <Route
               path="/utenti/:username"
               element={
                 <PermissionGate allow={permissions.can_view_users} title="Dettaglio utente non disponibile">
@@ -5116,13 +5184,14 @@ export default function App() {
               }
             />
             <Route
-              path="/config/logs"
+              path="/logs"
               element={
                 <PermissionGate allow={permissions.can_view_logs} title="Logs non disponibili">
-                  <Logs />
+                  <LogsPage />
                 </PermissionGate>
               }
             />
+            <Route path="/config/logs" element={<Navigate to="/logs" replace />} />
             <Route
               path="/config/system-users"
               element={
