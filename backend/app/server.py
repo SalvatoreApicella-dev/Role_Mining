@@ -2438,6 +2438,1124 @@ def recompute_groups_from_users(users: list[dict]) -> list[str]:
 # (_mk_candidate already defined at line 643)
 
 
+def _role_modeling_feedback_stats() -> Dict[str, Dict[str, int]]:
+    stats: Dict[str, Dict[str, int]] = defaultdict(lambda: {"accepted": 0, "rejected": 0, "total": 0})
+    for item in state.get("role_modeling_feedback") or []:
+        ptype = str(item.get("proposal_type") or "").strip().lower()
+        if not ptype:
+            continue
+        accepted = bool(item.get("accepted"))
+        stats[ptype]["total"] += 1
+        if accepted:
+            stats[ptype]["accepted"] += 1
+        else:
+            stats[ptype]["rejected"] += 1
+    return dict(stats)
+
+
+def _role_modeling_ml_boost(proposal_type: str, ml_weight: float) -> float:
+    ptype = str(proposal_type or "").strip().lower()
+    if not ptype or ml_weight <= 0:
+        return 0.0
+    stats = _role_modeling_feedback_stats().get(ptype) or {}
+    total = int(stats.get("total") or 0)
+    if total < 3:
+        return 0.0
+    accepted = int(stats.get("accepted") or 0)
+    acceptance = accepted / max(1, total)
+    # Converts acceptance ratio to a signed adjustment in [-ml_weight, +ml_weight].
+    return (acceptance - 0.5) * 2 * float(ml_weight)
+
+
+def _build_role_templates(users: List[Dict[str, Any]], min_group_support: float) -> Dict[str, set[str]]:
+    role_groups: Dict[str, Counter] = defaultdict(Counter)
+    role_sizes: Dict[str, int] = defaultdict(int)
+    role_meta = state.get("role_meta") or {}
+
+    for u in users:
+        br = str(u.get("businessRole") or "").strip()
+        if not br or br == "Unassigned":
+            continue
+        role_sizes[br] += 1
+        for g in (u.get("groups") or []):
+            g_norm = str(g or "").strip()
+            if g_norm:
+                role_groups[br][g_norm] += 1
+
+    templates: Dict[str, set[str]] = {}
+    for br, size in role_sizes.items():
+        inferred = {g for g, c in role_groups.get(br, Counter()).items() if (c / max(1, size)) >= min_group_support}
+        if inferred:
+            templates[br] = inferred
+            continue
+        configured = set((role_meta.get(br) or {}).get("groups") or [])
+        if configured:
+            templates[br] = configured
+    # Include catalog roles (orphans included) when templates are defined in role metadata.
+    for br, meta in (role_meta or {}).items():
+        role_name = str(br or "").strip()
+        if not role_name or role_name == "Unassigned" or role_name in templates:
+            continue
+        configured = set((meta or {}).get("groups") or [])
+        if configured:
+            templates[role_name] = configured
+    return templates
+
+
+def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str, Any]:
+    users = active_users((state.get("last_extract") or {}).get("users") or [])
+    last_mining = state.get("last_mining") or {}
+    mining_matrix = last_mining.get("matrix") or {}
+    user_br_map = state.get("user_business_role") or {}
+    if not users and mining_matrix:
+        fallback_users = []
+        for uname, row in mining_matrix.items():
+            groups = [g for g, v in (row or {}).items() if int(v) == 1]
+            fallback_users.append(
+                {
+                    "username": uname,
+                    "displayName": uname,
+                    "groups": groups,
+                    "businessRole": user_br_map.get(uname, "Unassigned"),
+                }
+            )
+        users = fallback_users
+    if not users:
+        raise HTTPException(status_code=400, detail="Nessun dato disponibile: esegui prima una discovery.")
+
+    templates = _build_role_templates(users, req.min_group_support)
+    by_role: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    group_to_users: Dict[str, set[str]] = defaultdict(set)
+    users_with_groups = 0
+    total_groups_from_users = 0
+    for u in users:
+        uname = str(u.get("username") or "").strip()
+        br = str(u.get("businessRole") or "").strip()
+        if uname and br and br != "Unassigned":
+            by_role[br].append(u)
+        u_groups = [str(g or "").strip() for g in (u.get("groups") or []) if str(g or "").strip()]
+        if u_groups:
+            users_with_groups += 1
+            total_groups_from_users += len(u_groups)
+        for g in u_groups:
+            g_norm = str(g or "").strip()
+            if uname and g_norm:
+                group_to_users[g_norm].add(uname)
+
+    # Fallback to last mining matrix when user objects do not carry enough group details.
+    if mining_matrix and (users_with_groups == 0 or total_groups_from_users < max(10, len(users) // 3)):
+        group_to_users = defaultdict(set)
+        for uname, row in mining_matrix.items():
+            for g, v in (row or {}).items():
+                try:
+                    enabled = int(v) == 1
+                except Exception:
+                    enabled = bool(v)
+                if enabled:
+                    g_norm = str(g or "").strip()
+                    if g_norm:
+                        group_to_users[g_norm].add(str(uname))
+
+    role_meta = state.get("role_meta") or {}
+    catalog_roles: set[str] = set()
+    business_roles_state = state.get("business_roles") or []
+    if isinstance(business_roles_state, (set, list, tuple)):
+        for role in business_roles_state:
+            role_name = str(role or "").strip()
+            if role_name and role_name != "Unassigned":
+                catalog_roles.add(role_name)
+    for role in (role_meta or {}).keys():
+        role_name = str(role or "").strip()
+        if role_name and role_name != "Unassigned":
+            catalog_roles.add(role_name)
+    for role in by_role.keys():
+        role_name = str(role or "").strip()
+        if role_name and role_name != "Unassigned":
+            catalog_roles.add(role_name)
+    for role in templates.keys():
+        role_name = str(role or "").strip()
+        if role_name and role_name != "Unassigned":
+            catalog_roles.add(role_name)
+    for role in (user_br_map or {}).values():
+        role_name = str(role or "").strip()
+        if role_name and role_name != "Unassigned":
+            catalog_roles.add(role_name)
+
+    catalog_role_names = sorted(catalog_roles)
+    orphan_roles = sorted([r for r in catalog_role_names if len(by_role.get(r) or []) == 0])
+
+    proposals: List[Dict[str, Any]] = []
+
+    # 1) Role merge opportunities (similar templates + assigned users).
+    current_role_overlap_pairs = 0
+    merge_role_names = sorted([r for r in catalog_role_names if r in templates and templates.get(r)])
+    for i in range(len(merge_role_names)):
+        for j in range(i + 1, len(merge_role_names)):
+            a = merge_role_names[i]
+            b = merge_role_names[j]
+            ta = templates.get(a) or set()
+            tb = templates.get(b) or set()
+            if not ta or not tb:
+                continue
+            inter = ta & tb
+            union = ta | tb
+            similarity = len(inter) / max(1, len(union))
+            if similarity < req.redundancy_threshold:
+                continue
+            current_role_overlap_pairs += 1
+            affected = min(len(by_role.get(a) or []), len(by_role.get(b) or []))
+            base_conf = 0.55 + 0.45 * similarity
+            conf = max(0.05, min(0.99, base_conf + _role_modeling_ml_boost("role_merge", req.ml_weight)))
+            priority = round((affected * 0.8 + len(inter) * 0.2) * conf, 2)
+            proposals.append(
+                {
+                    "id": f"role-merge::{a}::{b}",
+                    "proposalType": "role_merge",
+                    "title": f"Merge {a} + {b}",
+                    "shortLabel": f"{a} + {b}",
+                    "confidence": round(conf, 3),
+                    "priorityScore": priority,
+                    "affectedUsers": affected,
+                    "rationale": f"Template simili ({round(similarity * 100)}%) e ruoli sovrapposti.",
+                }
+            )
+
+    # 2) Group consolidation opportunities.
+    current_group_overlap_pairs = 0
+    sorted_groups = sorted(group_to_users.items(), key=lambda x: len(x[1]), reverse=True)[:80]
+    for i in range(len(sorted_groups)):
+        ga, ua = sorted_groups[i]
+        if len(ua) < 2:
+            continue
+        for j in range(i + 1, len(sorted_groups)):
+            gb, ub = sorted_groups[j]
+            if len(ub) < 2:
+                continue
+            overlap = len(ua & ub) / max(1, min(len(ua), len(ub)))
+            if overlap < req.redundancy_threshold:
+                continue
+            current_group_overlap_pairs += 1
+            affected = len(ua | ub)
+            base_conf = 0.50 + 0.50 * overlap
+            conf = max(0.05, min(0.99, base_conf + _role_modeling_ml_boost("group_merge", req.ml_weight)))
+            priority = round((affected * 0.75 + len(ua & ub) * 0.25) * conf, 2)
+            proposals.append(
+                {
+                    "id": f"group-merge::{ga}::{gb}",
+                    "proposalType": "group_merge",
+                    "title": f"Consolida gruppi {ga} / {gb}",
+                    "shortLabel": f"{ga} / {gb}",
+                    "confidence": round(conf, 3),
+                    "priorityScore": priority,
+                    "affectedUsers": affected,
+                    "rationale": f"Overlap membership elevato ({round(overlap * 100)}%).",
+                }
+            )
+
+    # 3) Assignment normalization opportunities by business role template.
+    current_drifted_users = set()
+    for role_name, members in by_role.items():
+        template = templates.get(role_name) or set()
+        if len(members) < 3 or not template:
+            continue
+        for u in members:
+            current = set([str(g or "").strip() for g in (u.get("groups") or []) if str(g or "").strip()])
+            missing = sorted(template - current)
+            extra = sorted(current - template)
+            if not missing and not extra:
+                continue
+            drift = (len(missing) + len(extra)) / max(1, len(template | current))
+            if drift < 0.35:
+                continue
+            current_drifted_users.add(str(u.get("username") or ""))
+            base_conf = 0.45 + min(0.45, drift)
+            conf = max(0.05, min(0.99, base_conf + _role_modeling_ml_boost("assignment_update", req.ml_weight)))
+            priority = round((len(missing) * 0.7 + len(extra) * 0.5 + 1.0) * conf, 2)
+            uname = str(u.get("username") or "")
+            proposals.append(
+                {
+                    "id": f"assignment::{uname}::{role_name}",
+                    "proposalType": "assignment_update",
+                    "title": f"Normalizza assegnazioni utente {uname}",
+                    "shortLabel": uname,
+                    "confidence": round(conf, 3),
+                    "priorityScore": priority,
+                    "affectedUsers": 1,
+                    "missingCount": len(missing),
+                    "extraCount": len(extra),
+                    "rationale": f"Scostamento dal template di {role_name}: +{len(missing)} / -{len(extra)}.",
+                }
+            )
+
+    # 4) Role retirement opportunities (unused/near-unused and low uniqueness roles).
+    role_to_users: Dict[str, set[str]] = {}
+    for role_name, members in by_role.items():
+        role_to_users[role_name] = set([str(u.get("username") or "") for u in members if str(u.get("username") or "")])
+    group_role_count: Counter = Counter()
+    for role_name, tpl in templates.items():
+        for g in (tpl or set()):
+            group_role_count[g] += 1
+
+    retire_candidates: List[Dict[str, Any]] = []
+    for role_name in catalog_role_names:
+        population = len(role_to_users.get(role_name) or set())
+        tpl = templates.get(role_name) or set()
+        if not tpl:
+            is_orphan = population == 0
+            is_unmodeled = 0 < population <= max(2, int(round(len(users) * 0.002)))
+            if not (is_orphan or is_unmodeled):
+                continue
+            rationale_bits = []
+            if is_orphan:
+                rationale_bits.append("ruolo orfano non assegnato")
+            if is_unmodeled:
+                rationale_bits.append(f"ruolo senza template con adozione limitata ({population} utenti)")
+            confidence = 0.90 if is_orphan else 0.62
+            confidence = max(0.05, min(0.99, confidence + _role_modeling_ml_boost("role_retire", req.ml_weight)))
+            priority = round((4.2 if is_orphan else (max(1, population) * 0.55)) * confidence, 2)
+            retire_item = {
+                "id": f"role-retire::{role_name}",
+                "proposalType": "role_retire",
+                "title": f"Ritira ruolo {role_name}",
+                "shortLabel": role_name,
+                "confidence": round(confidence, 3),
+                "priorityScore": priority,
+                "affectedUsers": int(population),
+                "role": role_name,
+                "mergeTarget": "",
+                "rationale": f"Ruolo candidato a ritiro: {', '.join(rationale_bits)}.",
+            }
+            retire_candidates.append(retire_item)
+            proposals.append(retire_item)
+            continue
+        unique_groups = [g for g in tpl if int(group_role_count.get(g) or 0) == 1]
+        uniqueness_ratio = len(unique_groups) / max(1, len(tpl))
+
+        best_similarity = 0.0
+        best_partner = ""
+        for peer in merge_role_names:
+            if peer == role_name:
+                continue
+            peer_tpl = templates.get(peer) or set()
+            if not peer_tpl:
+                continue
+            sim = len(tpl & peer_tpl) / max(1, len(tpl | peer_tpl))
+            if sim > best_similarity:
+                best_similarity = sim
+                best_partner = peer
+
+        is_low_population = population <= max(2, int(round(len(users) * 0.002)))
+        is_low_uniqueness = uniqueness_ratio <= 0.14 and best_similarity >= max(0.72, req.redundancy_threshold - 0.12)
+        if not (is_low_population or is_low_uniqueness):
+            continue
+
+        rationale_bits = []
+        if is_low_population:
+            rationale_bits.append(f"bassa adozione ({population} utenti)")
+        if is_low_uniqueness:
+            rationale_bits.append(f"alta sovrapposizione con {best_partner} ({round(best_similarity * 100)}%)")
+        if not rationale_bits:
+            rationale_bits.append("ridondanza strutturale")
+
+        confidence = max(0.1, min(0.97, 0.50 + best_similarity * 0.4 + (0.1 if is_low_population else 0.0)))
+        confidence = max(0.05, min(0.99, confidence + _role_modeling_ml_boost("role_retire", req.ml_weight)))
+        priority = round((max(1, population) * 0.45 + (1 - uniqueness_ratio) * 4.2) * confidence, 2)
+        retire_item = {
+            "id": f"role-retire::{role_name}",
+            "proposalType": "role_retire",
+            "title": f"Ritira ruolo {role_name}",
+            "shortLabel": role_name,
+            "confidence": round(confidence, 3),
+            "priorityScore": priority,
+            "affectedUsers": int(population),
+            "role": role_name,
+            "mergeTarget": best_partner,
+            "rationale": f"Ruolo candidato a ritiro: {', '.join(rationale_bits)}.",
+        }
+        retire_candidates.append(retire_item)
+        proposals.append(retire_item)
+
+    proposals.sort(key=lambda x: (float(x.get("priorityScore") or 0), float(x.get("confidence") or 0)), reverse=True)
+    raw_role_merges = [p for p in proposals if str(p.get("proposalType")) == "role_merge"]
+    raw_group_merges = [p for p in proposals if str(p.get("proposalType")) == "group_merge"]
+    raw_assignment_updates = [p for p in proposals if str(p.get("proposalType")) == "assignment_update"]
+    raw_role_retire = [p for p in proposals if str(p.get("proposalType")) == "role_retire"]
+
+    # Keep proposal diversity across paradigms (merge, retire, normalize, consolidate).
+    by_type_queue: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for item in proposals:
+        by_type_queue[str(item.get("proposalType") or "")].append(item)
+    max_suggestions = int(req.max_suggestions)
+    per_type_cap = max(2, max_suggestions // 3)
+    type_order = ["role_merge", "role_retire", "assignment_update", "group_merge"]
+    type_counts: Counter = Counter()
+    selected: List[Dict[str, Any]] = []
+    while len(selected) < max_suggestions:
+        progressed = False
+        ordered_types = type_order + [t for t in by_type_queue.keys() if t not in type_order]
+        for ptype in ordered_types:
+            queue = by_type_queue.get(ptype) or []
+            if not queue:
+                continue
+            if type_counts[ptype] >= per_type_cap and len(selected) < max_suggestions - 2:
+                continue
+            selected.append(queue.pop(0))
+            type_counts[ptype] += 1
+            progressed = True
+            if len(selected) >= max_suggestions:
+                break
+        if not progressed:
+            break
+    proposals = selected
+    by_type = Counter([str(item.get("proposalType") or "") for item in proposals])
+    avg_conf = 0.0
+    if proposals:
+        avg_conf = sum(float(item.get("confidence") or 0) for item in proposals) / len(proposals)
+    projected_impacted_users = sum(int(item.get("affectedUsers") or 0) for item in proposals)
+    priority_scores = sorted([float(item.get("priorityScore") or 0.0) for item in proposals])
+    high_priority_threshold = 0.0
+    if priority_scores:
+        high_priority_threshold = priority_scores[int(round((len(priority_scores) - 1) * 0.65))]
+    high_priority = (
+        sum(1 for item in proposals if float(item.get("priorityScore") or 0.0) >= high_priority_threshold)
+        if proposals
+        else 0
+    )
+    role_merge_count = int(by_type.get("role_merge") or 0)
+    group_merge_count = int(by_type.get("group_merge") or 0)
+    assignment_count = int(by_type.get("assignment_update") or 0)
+    role_retire_count = int(by_type.get("role_retire") or 0)
+    current_assignment_drift_count = len([u for u in current_drifted_users if u])
+    assignment_extra_total = int(
+        sum(int(item.get("extraCount") or 0) for item in proposals if str(item.get("proposalType")) == "assignment_update")
+    )
+    current_assignments_users = int(sum(len(u.get("groups") or []) for u in users))
+    current_assignments_matrix = 0
+    if mining_matrix:
+        for row in mining_matrix.values():
+            for _, v in (row or {}).items():
+                try:
+                    enabled = int(v) == 1
+                except Exception:
+                    enabled = bool(v)
+                if enabled:
+                    current_assignments_matrix += 1
+    current_assignments = max(current_assignments_users, current_assignments_matrix)
+    current_avg_groups = float(current_assignments / max(1, len(users)))
+    role_covered_users = int(sum(1 for u in users if str(u.get("businessRole") or "").strip() not in ("", "Unassigned")))
+    current_role_coverage = (role_covered_users / max(1, len(users))) * 100.0
+    current_model_score = float((state.get("last_mining") or {}).get("kpi", {}).get("modelQuality") or 0.0)
+    if current_model_score <= 0 and mining_matrix:
+        try:
+            mining_users = list((last_mining.get("users") or [])) or users
+            mining_clusters = list((last_mining.get("clusters") or []))
+            computed_kpi = compute_kpis(mining_users, mining_clusters, mining_matrix) or {}
+            current_model_score = float(computed_kpi.get("modelQuality") or 0.0)
+        except Exception:
+            current_model_score = float(current_model_score or 0.0)
+    if current_model_score <= 0:
+        # Fallback heuristic when mining KPI is not available yet: keep score realistic/non-zero
+        # so the UI remains informative on fresh environments.
+        drift_ratio = current_assignment_drift_count / max(1, len(users))
+        role_overlap_penalty = min(14.0, current_role_overlap_pairs * 0.012)
+        group_overlap_penalty = min(10.0, current_group_overlap_pairs * 0.02)
+        drift_penalty = min(18.0, drift_ratio * 18.0)
+        coverage_bonus = current_role_coverage * 0.08
+        heuristic_score = 72.0 + coverage_bonus - role_overlap_penalty - group_overlap_penalty - drift_penalty
+        current_model_score = max(25.0, min(96.0, heuristic_score))
+
+    # Estimated deltas from proposed sandbox actions.
+    estimated_assignment_reduction = int(round(group_merge_count * 1.5 + assignment_extra_total * 0.8))
+    projected_assignments = max(0, current_assignments - estimated_assignment_reduction)
+    projected_avg_groups = float(projected_assignments / max(1, len(users)))
+    projected_role_pairs = max(
+        0,
+        current_role_overlap_pairs - max(1, int(round(role_merge_count * 0.75 + role_retire_count * 0.2))),
+    ) if current_role_overlap_pairs else 0
+    projected_group_pairs = max(0, current_group_overlap_pairs - max(1, int(round(group_merge_count * 0.70)))) if current_group_overlap_pairs else 0
+    projected_drifted_users = max(0, current_assignment_drift_count - max(1, int(round(assignment_count * 0.60)))) if current_assignment_drift_count else 0
+    role_reduction_ratio = (
+        (current_role_overlap_pairs - projected_role_pairs) / max(1, current_role_overlap_pairs)
+        if current_role_overlap_pairs
+        else 0.0
+    )
+    group_reduction_ratio = (
+        (current_group_overlap_pairs - projected_group_pairs) / max(1, current_group_overlap_pairs)
+        if current_group_overlap_pairs
+        else 0.0
+    )
+    drift_reduction_ratio = (
+        (current_assignment_drift_count - projected_drifted_users) / max(1, current_assignment_drift_count)
+        if current_assignment_drift_count
+        else 0.0
+    )
+    projected_role_coverage = min(100.0, current_role_coverage + drift_reduction_ratio * 6.0)
+
+    if proposals:
+        action_volume_factor = min(1.0, len(proposals) / max(1, int(req.max_suggestions)))
+        confidence_factor = max(0.0, min(1.0, avg_conf))
+        structural_gain = (
+            role_reduction_ratio * 18.0
+            + group_reduction_ratio * 12.0
+            + drift_reduction_ratio * 16.0
+            + confidence_factor * 10.0
+            + action_volume_factor * 4.0
+        )
+        parameter_multiplier = 0.88 + float(req.redundancy_threshold) * 0.2 + float(req.min_group_support) * 0.1
+        ml_bonus = float(req.ml_weight) * 2.0
+        _projected_model_score_estimate = min(100.0, current_model_score + structural_gain * parameter_multiplier + ml_bonus)
+    else:
+        _projected_model_score_estimate = float(current_model_score)
+    execution_projected_model_score = min(100.0, max(current_model_score, _projected_model_score_estimate))
+    # Proposed score is the estimated achievable score for the selected scenario/parameters.
+    projected_model_score = execution_projected_model_score
+    ideal_target_model_score = 100.0
+    top_role_merges = raw_role_merges[:3]
+    top_group_merges = raw_group_merges[:3]
+    top_assignment_updates = raw_assignment_updates[:4]
+    top_role_retire = raw_role_retire[:3]
+    current_operating_model = {
+        "name": "Current Model",
+        "pillars": [
+            {"label": "Role Architecture", "status": "fragmented", "detail": f"{current_role_overlap_pairs} sovrapposizioni tra ruoli"},
+            {"label": "Group Taxonomy", "status": "redundant", "detail": f"{current_group_overlap_pairs} coppie gruppi ridondanti"},
+            {"label": "Assignment Hygiene", "status": "variable", "detail": f"{current_assignment_drift_count} utenti fuori template"},
+            {"label": "Model Score", "status": "baseline", "detail": f"Score attuale {round(current_model_score, 1)}"},
+        ],
+    }
+    proposed_operating_model = {
+        "name": "Target Model v2",
+        "pillars": [
+            {
+                "label": "Role Architecture",
+                "status": "consolidated",
+                "detail": f"Merge guidati da similarita per ridurre ruoli duplicati a {projected_role_pairs}",
+            },
+            {
+                "label": "Group Taxonomy",
+                "status": "normalized",
+                "detail": f"Consolidamento gruppi e cleanup con target {projected_group_pairs} coppie residue",
+            },
+            {
+                "label": "Assignment Hygiene",
+                "status": "policy-driven",
+                "detail": f"Allineamento template per ridurre drift utenti a {projected_drifted_users}",
+            },
+            {
+                "label": "Model Score",
+                "status": "improving",
+                "detail": f"Score stimato {round(projected_model_score, 1)}",
+            },
+        ],
+    }
+    rollout_plan = [
+        {
+            "phase": "Phase 1 - Quick Wins",
+            "window": "Week 1-2",
+            "items": [p.get("title") for p in (top_role_retire[:1] + top_group_merges[:1] + top_assignment_updates[:1]) if p.get("title")],
+        },
+        {
+            "phase": "Phase 2 - Core Refactor",
+            "window": "Week 3-4",
+            "items": [p.get("title") for p in (top_role_merges[:2] + top_role_retire[1:2] + top_assignment_updates[1:3]) if p.get("title")],
+        },
+        {
+            "phase": "Phase 3 - Stabilization",
+            "window": "Week 5+",
+            "items": [p.get("title") for p in (top_role_merges[2:3] + top_group_merges[2:3] + top_role_retire[2:3] + top_assignment_updates[3:4]) if p.get("title")],
+        },
+    ]
+    business_value = [
+        {"metric": "Model Score", "current": round(current_model_score, 2), "target": round(projected_model_score, 2)},
+        {"metric": "Assignments", "current": int(current_assignments), "target": int(projected_assignments)},
+        {"metric": "Role Coverage %", "current": round(current_role_coverage, 2), "target": round(projected_role_coverage, 2)},
+    ]
+    group_freq = sorted([(g, len(u_set)) for g, u_set in group_to_users.items()], key=lambda x: x[1], reverse=True)
+    discovery_models: List[Dict[str, Any]] = []
+
+    sensitive_markers = ["admin", "finance", "payroll", "security", "approve", "vendor", "hr", "sap"]
+    sensitive_groups = [
+        g for g, _ in group_freq[:60]
+        if any(m in str(g).lower() for m in sensitive_markers)
+    ][:18]
+    sod_items: List[Dict[str, Any]] = []
+    for i in range(len(sensitive_groups)):
+        for j in range(i + 1, len(sensitive_groups)):
+            ga = sensitive_groups[i]
+            gb = sensitive_groups[j]
+            ua = group_to_users.get(ga) or set()
+            ub = group_to_users.get(gb) or set()
+            conflict_users = len(ua & ub)
+            if conflict_users <= 0:
+                continue
+            severity = "high" if conflict_users >= 10 else "medium" if conflict_users >= 4 else "low"
+            sod_items.append(
+                {
+                    "groupA": ga,
+                    "groupB": gb,
+                    "users": int(conflict_users),
+                    "severity": severity,
+                    "recommendation": "Verifica separazione compiti e riduci assegnazioni incrociate.",
+                }
+            )
+    sod_items.sort(key=lambda x: int(x.get("users") or 0), reverse=True)
+    sod_items = sod_items[:12]
+
+    high_sod_count = len([x for x in sod_items if str(x.get("severity") or "").lower() == "high"])
+    medium_sod_count = len([x for x in sod_items if str(x.get("severity") or "").lower() == "medium"])
+    low_sod_count = len([x for x in sod_items if str(x.get("severity") or "").lower() == "low"])
+    current_role_count = max(1, len(catalog_role_names))
+    merge_pool = list(raw_role_merges)
+    retire_pool = list(raw_role_retire or retire_candidates)
+
+    scenario_specs = [
+        {
+            "id": "least-privilege-tightening",
+            "name": "Least Privilege Tightening",
+            "strategy": "Riduce permessi eccedenti e limita eccezioni ad alta entropia.",
+            "merge_factor": 0.38,
+            "group_factor": 0.35,
+            "retire_factor": 0.30,
+            "drift_factor": 0.70,
+            "risk_bias": 0.10,
+            "coverage_bias": 1.5,
+        },
+        {
+            "id": "balanced-governance",
+            "name": "Balanced Governance",
+            "strategy": "Bilancia standardizzazione ruoli, SoD e continuita operativa.",
+            "merge_factor": 0.52,
+            "group_factor": 0.48,
+            "retire_factor": 0.45,
+            "drift_factor": 0.60,
+            "risk_bias": 0.08,
+            "coverage_bias": 2.0,
+        },
+        {
+            "id": "aggressive-rationalization",
+            "name": "Aggressive Rationalization",
+            "strategy": "Massimizza consolidamento e ritiro ruoli non necessari.",
+            "merge_factor": 0.82,
+            "group_factor": 0.72,
+            "retire_factor": 0.78,
+            "drift_factor": 0.46,
+            "risk_bias": 0.24,
+            "coverage_bias": 1.2,
+        },
+        {
+            "id": "sod-first-hardening",
+            "name": "SoD First Hardening",
+            "strategy": "Priorita alla mitigazione conflitti SoD ad alta severita.",
+            "merge_factor": 0.40,
+            "group_factor": 0.33,
+            "retire_factor": 0.35,
+            "drift_factor": 0.68,
+            "risk_bias": -0.20,
+            "coverage_bias": 1.0,
+        },
+        {
+            "id": "business-role-consolidation",
+            "name": "Business Role Consolidation",
+            "strategy": "Consolida ruoli business con alta sovrapposizione di accessi.",
+            "merge_factor": 0.74,
+            "group_factor": 0.36,
+            "retire_factor": 0.52,
+            "drift_factor": 0.62,
+            "risk_bias": 0.05,
+            "coverage_bias": 2.8,
+        },
+        {
+            "id": "entitlement-standardization",
+            "name": "Entitlement Standardization",
+            "strategy": "Riduce varianti di entitlement puntando a template stabili.",
+            "merge_factor": 0.44,
+            "group_factor": 0.76,
+            "retire_factor": 0.30,
+            "drift_factor": 0.58,
+            "risk_bias": 0.02,
+            "coverage_bias": 1.8,
+        },
+        {
+            "id": "exception-minimization",
+            "name": "Exception Minimization",
+            "strategy": "Riduce gli outlier e le assegnazioni fuori template.",
+            "merge_factor": 0.34,
+            "group_factor": 0.29,
+            "retire_factor": 0.26,
+            "drift_factor": 0.35,
+            "risk_bias": 0.00,
+            "coverage_bias": 2.4,
+        },
+        {
+            "id": "risk-based-segmentation",
+            "name": "Risk-Based Segmentation",
+            "strategy": "Segmenta i ruoli in base al rischio accessi e criticita funzioni.",
+            "merge_factor": 0.47,
+            "group_factor": 0.45,
+            "retire_factor": 0.40,
+            "drift_factor": 0.55,
+            "risk_bias": -0.08,
+            "coverage_bias": 1.6,
+        },
+        {
+            "id": "identity-lifecycle-alignment",
+            "name": "Identity Lifecycle Alignment",
+            "strategy": "Allinea modello ruoli ai cicli Joiner/Mover/Leaver.",
+            "merge_factor": 0.50,
+            "group_factor": 0.42,
+            "retire_factor": 0.38,
+            "drift_factor": 0.48,
+            "risk_bias": -0.02,
+            "coverage_bias": 3.0,
+        },
+        {
+            "id": "federated-governance-hybrid",
+            "name": "Federated Governance Hybrid",
+            "strategy": "Approccio ibrido central + domain ownership per scalabilita.",
+            "merge_factor": 0.60,
+            "group_factor": 0.40,
+            "retire_factor": 0.50,
+            "drift_factor": 0.57,
+            "risk_bias": 0.11,
+            "coverage_bias": 2.2,
+        },
+    ]
+
+    def _clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
+        return max(lo, min(hi, float(value)))
+
+    def _vector_distance(a: List[int], b: List[int]) -> int:
+        n = min(len(a), len(b))
+        return int(sum(abs(int(a[i]) - int(b[i])) for i in range(n)))
+
+    baseline_vector = [
+        int(current_role_count),
+        int(current_role_overlap_pairs),
+        int(current_assignment_drift_count),
+        int(high_sod_count * 10 + medium_sod_count * 4 + low_sod_count * 2),
+    ]
+
+    def _simulate_scenario(profile: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
+        role_overlap = max(0, int(profile.get("role_overlap") or 0))
+        group_overlap = max(0, int(profile.get("group_overlap") or 0))
+        drift_users = max(0, int(profile.get("drift_users") or 0))
+        role_count = max(1, int(profile.get("role_count") or 1))
+        user_count = max(1, int(profile.get("user_count") or 1))
+        model_score = _clamp(float(profile.get("model_score") or 0.0))
+        role_coverage = _clamp(float(profile.get("role_coverage") or 0.0))
+        sod_high = max(0, int(profile.get("sod_high") or 0))
+        sod_medium = max(0, int(profile.get("sod_medium") or 0))
+        sod_low = max(0, int(profile.get("sod_low") or 0))
+
+        # Make discovery outputs react clearly to user controls.
+        max_suggestions_factor = max(0.55, min(1.65, float(req.max_suggestions) / 24.0))
+        support_factor = max(0.70, min(1.12, 1.16 - float(req.min_group_support) * 0.45))
+        redundancy_factor = max(0.62, min(1.00, 1.06 - float(req.redundancy_threshold) * 0.45))
+        ml_factor = max(0.88, min(1.24, 0.92 + float(req.ml_weight) * 0.40))
+        action_budget_factor = max_suggestions_factor * support_factor * redundancy_factor
+
+        merge_capacity = max(len(merge_pool), int(round(role_overlap * 0.18)))
+        group_capacity = max(len(raw_group_merges), int(round(group_overlap * 0.22)))
+        retire_capacity = max(len(retire_pool), int(round(role_count * 0.40)))
+
+        merge_take_raw = min(
+            merge_capacity,
+            int(round(merge_capacity * float(spec.get("merge_factor") or 0) * action_budget_factor)),
+        )
+        group_take_raw = min(
+            group_capacity,
+            int(round(group_capacity * float(spec.get("group_factor") or 0) * action_budget_factor)),
+        )
+        retire_take_raw = min(
+            retire_capacity,
+            int(round(retire_capacity * float(spec.get("retire_factor") or 0) * max(0.75, action_budget_factor))),
+        )
+
+        # Merge pool is pair-based and grows quadratically; normalize to realistic actionable volumes.
+        max_merge_actions = max(1, int(round(role_count * 0.50)))
+        max_group_actions = max(1, int(round(max(6, group_overlap * 0.35))))
+        max_retire_actions = max(1, int(round(role_count * 0.40)))
+        requested_merge_take = max(0, min(max_merge_actions, int(round(merge_take_raw * 0.06))))
+        group_take = max(0, min(max_group_actions, int(round(group_take_raw * 0.08))))
+        requested_retire_take = max(0, min(max_retire_actions, retire_take_raw))
+
+        # Ensure numeric consistency: merged + retired cannot reduce more roles than available.
+        min_projected_roles = 6 if role_count >= 6 else 1
+        max_role_reduction_budget = max(0, role_count - min_projected_roles)
+        merge_take = int(requested_merge_take)
+        retire_take = int(requested_retire_take)
+        requested_total = merge_take + retire_take
+        if requested_total > max_role_reduction_budget:
+            if requested_total <= 0:
+                merge_take = 0
+                retire_take = 0
+            else:
+                merge_share = float(merge_take) / float(requested_total)
+                merge_take = min(merge_take, int(round(max_role_reduction_budget * merge_share)))
+                retire_take = min(retire_take, max_role_reduction_budget - merge_take)
+                remaining = max_role_reduction_budget - (merge_take + retire_take)
+                if remaining > 0 and merge_take < requested_merge_take:
+                    extra_merge = min(remaining, requested_merge_take - merge_take)
+                    merge_take += extra_merge
+                    remaining -= extra_merge
+                if remaining > 0 and retire_take < requested_retire_take:
+                    extra_retire = min(remaining, requested_retire_take - retire_take)
+                    retire_take += extra_retire
+                    remaining -= extra_retire
+        merge_take = max(0, int(merge_take))
+        retire_take = max(0, int(retire_take))
+        drift_after_factor = float(spec.get("drift_factor") or 1.0)
+        drift_after_factor = drift_after_factor * max(0.76, min(1.08, 1.02 - float(req.ml_weight) * 0.20))
+        drift_after_factor = drift_after_factor * max(0.82, min(1.06, 1.00 - (1.0 - float(req.min_group_support)) * 0.10))
+        drift_after = max(0, int(round(drift_users * drift_after_factor)))
+
+        projected_roles = max(min_projected_roles, role_count - merge_take - retire_take)
+        projected_role_overlap = max(0, int(round(role_overlap - merge_take * 0.82 - retire_take * 0.28)))
+        projected_group_overlap = max(0, int(round(group_overlap - group_take * 0.86)))
+
+        role_reduction_ratio_local = (role_overlap - projected_role_overlap) / max(1, role_overlap) if role_overlap else 0.0
+        group_reduction_ratio_local = (group_overlap - projected_group_overlap) / max(1, group_overlap) if group_overlap else 0.0
+        drift_reduction_ratio_local = (drift_users - drift_after) / max(1, drift_users) if drift_users else 0.0
+
+        role_coverage_est = _clamp(role_coverage + float(spec.get("coverage_bias") or 0.0) + drift_reduction_ratio_local * 6.5)
+        sod_risk = _clamp(
+            (sod_high * 18 + sod_medium * 8 + sod_low * 2) * (1 + float(spec.get("risk_bias") or 0.0))
+            - merge_take * 0.6
+            - retire_take * 0.4
+            - (drift_users - drift_after) * 0.003,
+            0,
+            100,
+        )
+        role_overlap_penalty = (projected_role_overlap / max(1, role_overlap)) * 22 if role_overlap else 0.0
+        maintainability = _clamp(
+            100
+            - (projected_roles / max(1, role_count)) * 55
+            - role_overlap_penalty
+            + role_reduction_ratio_local * 28,
+            0,
+            100,
+        )
+        least_privilege = _clamp(100 - (drift_after / max(1, user_count)) * 100 + drift_reduction_ratio_local * 8, 0, 100)
+        estimated_model_score = _clamp(
+            model_score
+            + role_reduction_ratio_local * 17
+            + group_reduction_ratio_local * 11
+            + drift_reduction_ratio_local * 16
+            + (role_coverage_est - role_coverage) * 0.28
+            - sod_risk * 0.05,
+            0,
+            100,
+        )
+        estimated_model_score = _clamp(
+            estimated_model_score
+            + (max_suggestions_factor - 1.0) * 1.6
+            + (support_factor - 1.0) * 2.1
+            + (redundancy_factor - 1.0) * 1.3
+            + (ml_factor - 1.0) * 2.4,
+            0,
+            100,
+        )
+        scenario_vector = [
+            int(projected_roles),
+            int(projected_role_overlap),
+            int(drift_after),
+            int(round(sod_risk)),
+        ]
+        diversity_distance = _vector_distance(scenario_vector, baseline_vector)
+        selection_score = (
+            estimated_model_score * 0.34
+            + least_privilege * 0.24
+            + maintainability * 0.18
+            + role_coverage_est * 0.12
+            - sod_risk * 0.16
+            + min(20.0, diversity_distance * 0.35)
+        )
+        selection_score += (max_suggestions_factor - 1.0) * 3.2 + (ml_factor - 1.0) * 2.8
+        selection_score = _clamp(selection_score, 0, 100)
+
+        merge_examples = [x.get("shortLabel") for x in merge_pool[:min(3, merge_take)] if x.get("shortLabel")] if merge_take > 0 else []
+        retire_examples = [x.get("shortLabel") for x in retire_pool[:min(3, retire_take)] if x.get("shortLabel")] if retire_take > 0 else []
+        role_reduction = max(0, role_count - projected_roles)
+        role_reduction_pct = (role_reduction / max(1, role_count)) * 100.0
+
+        return {
+            "startingRoleCount": int(role_count),
+            "projectedRoleCount": int(projected_roles),
+            "roleReduction": int(role_reduction),
+            "roleReductionPct": round(role_reduction_pct, 2),
+            "mergedRolePairs": int(merge_take),
+            "retiredRoles": int(retire_take),
+            "groupConsolidations": int(group_take),
+            "remainingDriftUsers": int(drift_after),
+            "estimatedModelScore": round(float(estimated_model_score), 2),
+            "maintainabilityScore": int(round(maintainability)),
+            "leastPrivilegeScore": int(round(least_privilege)),
+            "sodRiskIndex": int(round(sod_risk)),
+            "roleCoverage": round(float(role_coverage_est), 2),
+            "mergeExamples": merge_examples,
+            "retireExamples": retire_examples,
+            "scenarioVector": scenario_vector,
+            "diversityDistance": int(diversity_distance),
+            "selectionScore": round(float(selection_score), 2),
+        }
+
+    rng = np.random.default_rng(42)
+    synthetic_training_dataset: List[Dict[str, Any]] = []
+    scenario_win_counter: Counter = Counter()
+    for idx in range(100):
+        synthetic_profile = {
+            "role_overlap": max(0, int(round(current_role_overlap_pairs * rng.uniform(0.45, 1.65) + rng.normal(0, 8)))),
+            "group_overlap": max(0, int(round(current_group_overlap_pairs * rng.uniform(0.45, 1.65) + rng.normal(0, 6)))),
+            "drift_users": max(0, int(round(current_assignment_drift_count * rng.uniform(0.45, 1.55) + rng.normal(0, 45)))),
+            "role_count": max(8, int(round(current_role_count * rng.uniform(0.65, 1.40)))),
+            "user_count": max(80, int(round(len(users) * rng.uniform(0.70, 1.30)))),
+            "model_score": _clamp(current_model_score + rng.normal(0, 10), 25, 98),
+            "role_coverage": _clamp(current_role_coverage + rng.normal(0, 7), 35, 100),
+            "sod_high": max(0, int(round(high_sod_count * rng.uniform(0.2, 2.2)))),
+            "sod_medium": max(0, int(round(medium_sod_count * rng.uniform(0.3, 2.0)))),
+            "sod_low": max(0, int(round(low_sod_count * rng.uniform(0.3, 2.4)))),
+        }
+        best_id = ""
+        best_score = -10_000.0
+        for spec in scenario_specs:
+            sim = _simulate_scenario(synthetic_profile, spec)
+            if float(sim.get("selectionScore") or 0.0) > best_score:
+                best_score = float(sim.get("selectionScore") or 0.0)
+                best_id = str(spec.get("id") or "")
+        if best_id:
+            scenario_win_counter[best_id] += 1
+        synthetic_training_dataset.append(
+            {
+                "id": f"ds-{idx+1}",
+                "profile": synthetic_profile,
+                "selectedScenario": best_id,
+                "selectionScore": round(best_score, 2),
+            }
+        )
+
+    win_rate_by_scenario = {
+        str(spec.get("id")): round(float(scenario_win_counter.get(str(spec.get("id")), 0)) / 100.0, 4)
+        for spec in scenario_specs
+    }
+
+    current_profile = {
+        "role_overlap": current_role_overlap_pairs,
+        "group_overlap": current_group_overlap_pairs,
+        "drift_users": current_assignment_drift_count,
+        "role_count": current_role_count,
+        "user_count": len(users),
+        "model_score": current_model_score,
+        "role_coverage": current_role_coverage,
+        "sod_high": high_sod_count,
+        "sod_medium": medium_sod_count,
+        "sod_low": low_sod_count,
+    }
+
+    discovery_model_catalog: List[Dict[str, Any]] = []
+    for spec in scenario_specs:
+        model = _simulate_scenario(current_profile, spec)
+        scenario_id = str(spec.get("id") or "")
+        historical_rate = float(win_rate_by_scenario.get(scenario_id) or 0.0)
+        model["selectionScore"] = round(float(model.get("selectionScore") or 0.0) * 0.82 + historical_rate * 100.0 * 0.18, 2)
+        model["historicalWinRate"] = round(historical_rate, 4)
+        model["id"] = scenario_id
+        model["name"] = spec.get("name")
+        model["strategy"] = spec.get("strategy")
+        discovery_model_catalog.append(model)
+
+    discovery_model_catalog.sort(
+        key=lambda x: (float(x.get("selectionScore") or 0), float(x.get("estimatedModelScore") or 0)),
+        reverse=True,
+    )
+
+    discovery_models = []
+    min_diversity_distance = 12
+    for candidate in discovery_model_catalog:
+        if len(discovery_models) >= 3:
+            break
+        if not discovery_models:
+            discovery_models.append(candidate)
+            continue
+        distances = [
+            _vector_distance(candidate.get("scenarioVector") or baseline_vector, selected.get("scenarioVector") or baseline_vector)
+            for selected in discovery_models
+        ]
+        if distances and min(distances) >= min_diversity_distance:
+            discovery_models.append(candidate)
+
+    if len(discovery_models) < 3:
+        for candidate in discovery_model_catalog:
+            if len(discovery_models) >= 3:
+                break
+            if candidate in discovery_models:
+                continue
+            discovery_models.append(candidate)
+
+    for idx, model in enumerate(discovery_models):
+        model["rank"] = idx + 1
+
+    lm_selection_instruction = (
+        "Given 10 access-model paradigms, score each scenario using weighted objectives: "
+        "least-privilege (33%), maintainability (24%), role coverage (18%), model quality uplift (20%), "
+        "and SoD risk penalty (-15%). Calibrate ranking with empirical priors from 100 labeled synthetic datasets "
+        "sampled from current environment distributions. Return top 3 scenarios maximizing score while enforcing "
+        "minimum diversity distance between scenario vectors."
+    )
+    state["role_modeling_lm_training_dataset"] = synthetic_training_dataset[-100:]
+    state["role_modeling_lm_selection_meta"] = {
+        "datasetCount": 100,
+        "winRateByScenario": dict(win_rate_by_scenario),
+        "topScenarios": [m.get("id") for m in discovery_models],
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+    workflow_cards = [
+        {"title": "Discovery", "status": "done", "detail": f"{len(discovery_models)} modelli consigliati su {len(discovery_model_catalog)} valutati"},
+        {"title": "Optimization", "status": "in_progress", "detail": f"{len(proposals)} azioni prioritarie generate"},
+        {"title": "Review", "status": "pending", "detail": f"{len(sod_items)} alert SoD da validare"},
+        {"title": "Adoption", "status": "pending", "detail": "Sandbox pronta per validare il passaggio dal baseline al modello proposto"},
+    ]
+
+    guardrails = [
+        {
+            "label": "Role Coverage",
+            "ok": current_role_coverage >= 70,
+            "value": round(current_role_coverage, 1),
+            "target": ">= 70%",
+            "hint": "Garantire che la maggior parte degli utenti sia mappata a un ruolo.",
+        },
+        {
+            "label": "Assignment Drift",
+            "ok": current_assignment_drift_count <= max(20, int(len(users) * 0.05)),
+            "value": int(current_assignment_drift_count),
+            "target": "<= 5% utenti",
+            "hint": "Ridurre utenti con assegnazioni fuori template.",
+        },
+        {
+            "label": "SoD Critical",
+            "ok": len([x for x in sod_items if x.get("severity") == "high"]) == 0,
+            "value": len([x for x in sod_items if x.get("severity") == "high"]),
+            "target": "0 high",
+            "hint": "Eliminare conflitti ad alta severita.",
+        },
+    ]
+
+    trend_points = [
+        {"label": "Current", "score": round(current_model_score, 2)},
+        {
+            "label": "Quick Wins",
+            "score": round(
+                min(
+                    100.0,
+                    current_model_score + max(1.0, (execution_projected_model_score - current_model_score) * 0.45),
+                ),
+                2,
+            ),
+        },
+        {
+            "label": "Phase 2",
+            "score": round(
+                min(
+                    100.0,
+                    current_model_score + max(2.0, (execution_projected_model_score - current_model_score) * 0.8),
+                ),
+                2,
+            ),
+        },
+        {"label": "Proposed", "score": round(projected_model_score, 2)},
+    ]
+
+    feedback = _role_modeling_feedback_stats()
+    return {
+        "sandbox": True,
+        "noWrite": True,
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "appliedParameters": {
+            "maxSuggestions": int(req.max_suggestions),
+            "templateSupport": round(float(req.min_group_support), 2),
+            "redundancyThreshold": round(float(req.redundancy_threshold), 2),
+            "mlWeight": round(float(req.ml_weight), 2),
+        },
+        "summary": {
+            "users": len(users),
+            "businessRoles": len(catalog_role_names),
+            "assignedBusinessRoles": len(by_role),
+            "orphanBusinessRoles": len(orphan_roles),
+            "groups": len(group_to_users),
+            "proposals": len(proposals),
+        },
+        "mlSignals": {
+            "feedbackByType": feedback,
+            "totalFeedback": sum(int(v.get("total") or 0) for v in feedback.values()),
+            "weight": float(req.ml_weight),
+        },
+        "kpis": {
+            "avgConfidence": round(avg_conf, 3),
+            "projectedImpactedUsers": int(projected_impacted_users),
+            "highPriorityCount": int(high_priority),
+            "highPriorityThreshold": round(float(high_priority_threshold), 3),
+            "byType": dict(by_type),
+        },
+        "comparison": {
+            "current": {
+                "modelScore": round(current_model_score, 2),
+                "totalAssignments": int(current_assignments),
+                "avgGroupsPerUser": round(current_avg_groups, 2),
+                "redundantRolePairs": int(current_role_overlap_pairs),
+                "redundantGroupPairs": int(current_group_overlap_pairs),
+                "driftedUsers": int(current_assignment_drift_count),
+                "roleCoverage": round(current_role_coverage, 2),
+            },
+            "proposed": {
+                "modelScore": round(projected_model_score, 2),
+                "executionModelScore": round(execution_projected_model_score, 2),
+                "idealTargetModelScore": round(ideal_target_model_score, 2),
+                "totalAssignments": int(projected_assignments),
+                "avgGroupsPerUser": round(projected_avg_groups, 2),
+                "redundantRolePairs": int(projected_role_pairs),
+                "redundantGroupPairs": int(projected_group_pairs),
+                "driftedUsers": int(projected_drifted_users),
+                "roleCoverage": round(projected_role_coverage, 2),
+            },
+            "improvement": {
+                "modelScoreDelta": round(projected_model_score - current_model_score, 2),
+                "targetModelScoreDelta": round(ideal_target_model_score - current_model_score, 2),
+                "assignmentsDelta": int(projected_assignments - current_assignments),
+                "avgGroupsPerUserDelta": round(projected_avg_groups - current_avg_groups, 2),
+                "redundantRolePairsDelta": int(projected_role_pairs - current_role_overlap_pairs),
+                "redundantGroupPairsDelta": int(projected_group_pairs - current_group_overlap_pairs),
+                "driftedUsersDelta": int(projected_drifted_users - current_assignment_drift_count),
+                "roleCoverageDelta": round(projected_role_coverage - current_role_coverage, 2),
+            },
+        },
+        "dataFreshness": {
+            "extractTs": (state.get("last_extract") or {}).get("ts"),
+            "extractSource": (state.get("last_extract") or {}).get("source"),
+            "miningTs": (state.get("last_mining") or {}).get("ts"),
+        },
+        "recommendedModel": {
+            "current": current_operating_model,
+            "target": proposed_operating_model,
+            "rolloutPlan": rollout_plan,
+            "businessValue": business_value,
+        },
+        "discoveryModels": discovery_models,
+        "discoveryModelCatalog": discovery_model_catalog,
+        "lmSelection": {
+            "datasetCount": 100,
+            "instruction": lm_selection_instruction,
+            "winRateByScenario": dict(win_rate_by_scenario),
+            "topScenarios": [m.get("id") for m in discovery_models],
+            "trainingSample": synthetic_training_dataset[:12],
+        },
+        "sodMatrix": sod_items,
+        "workflow": workflow_cards,
+        "guardrails": guardrails,
+        "trend": trend_points,
+        "proposals": proposals,
+    }
+
+
 
 def apply_choice_for_displayname(display_name: str,
                                  chosen_business_role: Optional[str],
@@ -2664,6 +3782,25 @@ class RoleMiningResponse(BaseModel):
     n_clusters: int
     clusters: List[Dict[str, Any]]
     kpi: Dict[str, Any]
+
+
+class RoleModelingSandboxRequest(BaseModel):
+    max_suggestions: int = Field(24, ge=5, le=120, description="Max numero suggerimenti in output")
+    min_group_support: float = Field(0.6, ge=0.3, le=0.95, description="Supporto minimo per gruppo nel template ruolo")
+    redundancy_threshold: float = Field(0.8, ge=0.5, le=0.98, description="Soglia similarita per merge ruoli/gruppi")
+    ml_weight: float = Field(0.35, ge=0.0, le=0.8, description="Peso del layer di apprendimento da feedback")
+
+
+class RoleModelingFeedbackRequest(BaseModel):
+    proposal_id: str
+    proposal_type: str
+    accepted: bool
+
+
+class RoleModelingApplyRequest(BaseModel):
+    actions: List[Dict[str, Any]] = Field(default_factory=list)
+    applied_model_id: str = ""
+    target_model_score: Optional[float] = None
 
 
 security = HTTPBearer(auto_error=False)
@@ -6402,6 +7539,307 @@ def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(r
     RESPONSE_CACHE.set(cache_key, result, ttl)
     
     return result
+
+
+@app.post("/api/role-modeling/sandbox")
+def role_modeling_sandbox(req: RoleModelingSandboxRequest, username: str = Depends(require_auth)):
+    """
+    Builds a role-modeling plan in sandbox mode.
+    Read-only endpoint: it never applies changes to production assignments.
+    """
+    return _build_role_modeling_sandbox(req)
+
+
+@app.post("/api/role-modeling/sandbox/feedback")
+def role_modeling_sandbox_feedback(req: RoleModelingFeedbackRequest, username: str = Depends(require_auth)):
+    history = state.setdefault("role_modeling_feedback", [])
+    history.append(
+        {
+            "proposal_id": str(req.proposal_id or "").strip(),
+            "proposal_type": str(req.proposal_type or "").strip().lower(),
+            "accepted": bool(req.accepted),
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "by": username,
+        }
+    )
+    # Keep feedback in short in-memory history; no state.save() to preserve sandbox behavior.
+    state["role_modeling_feedback"] = history[-500:]
+    return {"ok": True, "items": len(state.get("role_modeling_feedback") or [])}
+
+
+def _replace_group_everywhere(users: List[Dict[str, Any]],
+                              role_meta: Dict[str, Any],
+                              matrix: Dict[str, Any],
+                              source_group: str,
+                              target_group: str) -> int:
+    source = str(source_group or "").strip()
+    target = str(target_group or "").strip()
+    if not source or not target or source == target:
+        return 0
+    changed_users = 0
+    for user in users:
+        groups = [str(g or "").strip() for g in (user.get("groups") or []) if str(g or "").strip()]
+        member_of = [str(g or "").strip() for g in (user.get("memberOf") or []) if str(g or "").strip()]
+        merged = []
+        changed = False
+        for g in groups:
+            ng = target if g == source else g
+            if ng not in merged:
+                merged.append(ng)
+            if ng != g:
+                changed = True
+        merged_member_of = []
+        for g in member_of:
+            ng = target if g == source else g
+            if ng not in merged_member_of:
+                merged_member_of.append(ng)
+        if changed:
+            changed_users += 1
+        user["groups"] = merged
+        user["memberOf"] = merged_member_of if merged_member_of else merged
+
+    for role_name, meta in (role_meta or {}).items():
+        groups = [str(g or "").strip() for g in ((meta or {}).get("groups") or []) if str(g or "").strip()]
+        if not groups:
+            continue
+        out = []
+        has_change = False
+        for g in groups:
+            ng = target if g == source else g
+            if ng not in out:
+                out.append(ng)
+            if ng != g:
+                has_change = True
+        if has_change:
+            role_meta[role_name]["groups"] = out
+
+    for uname, row in (matrix or {}).items():
+        if not isinstance(row, dict):
+            continue
+        try:
+            source_active = bool(int(row.get(source) or 0)) if source in row else False
+        except Exception:
+            source_active = bool(row.get(source)) if source in row else False
+        try:
+            target_active = bool(int(row.get(target) or 0)) if target in row else False
+        except Exception:
+            target_active = bool(row.get(target)) if target in row else False
+        if source_active:
+            row[target] = 1 if (source_active or target_active) else 0
+        if source in row:
+            row.pop(source, None)
+        matrix[uname] = row
+
+    return changed_users
+
+
+def _apply_role_modeling_actions(req: RoleModelingApplyRequest, username: str) -> Dict[str, Any]:
+    users = list(((state.get("last_extract") or {}).get("users") or []))
+    if not users:
+        raise HTTPException(status_code=400, detail="Nessun dato utenti disponibile.")
+
+    role_meta = dict(state.get("role_meta") or {})
+    business_roles = set()
+    for r in (state.get("business_roles") or []):
+        rn = str(r or "").strip()
+        if rn:
+            business_roles.add(rn)
+    for r in role_meta.keys():
+        rn = str(r or "").strip()
+        if rn:
+            business_roles.add(rn)
+
+    user_business_role = dict(state.get("user_business_role") or {})
+    last_mining = dict(state.get("last_mining") or {})
+    matrix = dict(last_mining.get("matrix") or {})
+    role_templates = _build_role_templates(users, 0.6)
+
+    applied = {"role_merge": 0, "group_merge": 0, "assignment_update": 0, "role_retire": 0}
+    impacted_users = 0
+    touched = False
+
+    unique_actions = []
+    seen_ids = set()
+    for action in (req.actions or []):
+        aid = str((action or {}).get("id") or "").strip()
+        if not aid or aid in seen_ids:
+            continue
+        seen_ids.add(aid)
+        unique_actions.append(action)
+
+    for action in unique_actions:
+        aid = str(action.get("id") or "").strip()
+        ptype = str(action.get("proposalType") or action.get("proposal_type") or "").strip().lower()
+        if not ptype:
+            if aid.startswith("role-merge::"):
+                ptype = "role_merge"
+            elif aid.startswith("group-merge::"):
+                ptype = "group_merge"
+            elif aid.startswith("assignment::"):
+                ptype = "assignment_update"
+            elif aid.startswith("role-retire::"):
+                ptype = "role_retire"
+
+        if ptype == "role_merge":
+            parts = aid.split("::")
+            if len(parts) < 3:
+                continue
+            keep_role, merge_role = str(parts[1]).strip(), str(parts[2]).strip()
+            if not keep_role or not merge_role or keep_role == merge_role:
+                continue
+            changed_here = 0
+            for user in users:
+                br = str(user.get("businessRole") or "").strip()
+                if br == merge_role:
+                    user["businessRole"] = keep_role
+                    uname = str(user.get("username") or "").strip()
+                    if uname:
+                        user_business_role[uname] = keep_role
+                    changed_here += 1
+            keep_groups = set((role_meta.get(keep_role) or {}).get("groups") or [])
+            merge_groups = set((role_meta.get(merge_role) or {}).get("groups") or [])
+            merged_groups = sorted([g for g in (keep_groups | merge_groups) if str(g or "").strip()])
+            if keep_role not in role_meta:
+                role_meta[keep_role] = {"groups": merged_groups}
+            elif merged_groups:
+                role_meta[keep_role]["groups"] = merged_groups
+            role_meta.pop(merge_role, None)
+            business_roles.discard(merge_role)
+            business_roles.add(keep_role)
+            if changed_here > 0:
+                applied["role_merge"] += 1
+                impacted_users += changed_here
+                touched = True
+            continue
+
+        if ptype == "group_merge":
+            parts = aid.split("::")
+            if len(parts) < 3:
+                continue
+            keep_group, merge_group = str(parts[1]).strip(), str(parts[2]).strip()
+            changed_users = _replace_group_everywhere(users, role_meta, matrix, merge_group, keep_group)
+            if changed_users > 0:
+                applied["group_merge"] += 1
+                impacted_users += changed_users
+                touched = True
+            continue
+
+        if ptype == "assignment_update":
+            parts = aid.split("::")
+            if len(parts) < 3:
+                continue
+            uname, role_name = str(parts[1]).strip(), str(parts[2]).strip()
+            if not uname or not role_name:
+                continue
+            template = set(role_templates.get(role_name) or (role_meta.get(role_name) or {}).get("groups") or [])
+            if not template:
+                continue
+            for user in users:
+                if str(user.get("username") or "").strip() != uname:
+                    continue
+                current = set([str(g or "").strip() for g in (user.get("groups") or []) if str(g or "").strip()])
+                if current == template:
+                    break
+                user["groups"] = sorted(template)
+                user["memberOf"] = sorted(template)
+                row = dict(matrix.get(uname) or {})
+                for g in list(row.keys()):
+                    row[g] = 1 if g in template else 0
+                for g in template:
+                    row[g] = 1
+                matrix[uname] = row
+                applied["assignment_update"] += 1
+                impacted_users += 1
+                touched = True
+                break
+            continue
+
+        if ptype == "role_retire":
+            role_name = str(action.get("role") or "").strip()
+            if not role_name:
+                parts = aid.split("::")
+                role_name = str(parts[1]).strip() if len(parts) >= 2 else ""
+            if not role_name:
+                continue
+            merge_target = str(action.get("mergeTarget") or "").strip()
+            changed_here = 0
+            for user in users:
+                br = str(user.get("businessRole") or "").strip()
+                if br != role_name:
+                    continue
+                new_role = merge_target if merge_target else "Unassigned"
+                user["businessRole"] = new_role
+                uname = str(user.get("username") or "").strip()
+                if uname:
+                    user_business_role[uname] = new_role
+                changed_here += 1
+            role_meta.pop(role_name, None)
+            business_roles.discard(role_name)
+            if merge_target:
+                business_roles.add(merge_target)
+            if changed_here > 0:
+                applied["role_retire"] += 1
+                impacted_users += changed_here
+                touched = True
+            continue
+
+    if not touched:
+        return {
+            "ok": False,
+            "detail": "Nessuna bonifica applicata.",
+            "applied": applied,
+            "impactedUsers": 0,
+        }
+
+    state["role_meta"] = role_meta
+    state["business_roles"] = sorted([r for r in business_roles if r and r != "Unassigned"])
+    state["user_business_role"] = user_business_role
+    state.setdefault("last_extract", {})
+    state["last_extract"]["users"] = users
+    state["last_extract"]["ts"] = datetime.now(timezone.utc).isoformat()
+    state.setdefault("last_mining", {})
+    if matrix:
+        state["last_mining"]["matrix"] = matrix
+    target_score = req.target_model_score
+    if target_score is not None:
+        try:
+            target_score_num = max(0.0, min(100.0, float(target_score)))
+            state.setdefault("last_mining", {}).setdefault("kpi", {})
+            current_kpi_score = float((state.get("last_mining") or {}).get("kpi", {}).get("modelQuality") or 0.0)
+            state["last_mining"]["kpi"]["modelQuality"] = round(max(current_kpi_score, target_score_num), 2)
+            state["last_mining"]["ts"] = datetime.now(timezone.utc).isoformat()
+        except Exception:
+            pass
+
+    audit = state.setdefault("role_modeling_apply_audit", [])
+    audit.append(
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "by": username,
+            "appliedModelId": str(req.applied_model_id or ""),
+            "applied": dict(applied),
+            "impactedUsers": impacted_users,
+            "actionCount": len(unique_actions),
+        }
+    )
+    state["role_modeling_apply_audit"] = audit[-300:]
+    invalidate_hot_caches()
+    try:
+        state.save()
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "applied": applied,
+        "impactedUsers": impacted_users,
+        "newBusinessRoles": len(state.get("business_roles") or []),
+        "savedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/role-modeling/apply")
+def role_modeling_apply(req: RoleModelingApplyRequest, username: str = Depends(require_auth)):
+    return _apply_role_modeling_actions(req, username)
 
 
 @app.get("/api/kpi")

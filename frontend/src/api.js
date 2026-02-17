@@ -169,6 +169,10 @@ export const api = {
   roleMiningRun: (n_clusters, role_support) =>
     request("/api/rolemining/run", { method: "POST", body: { n_clusters, role_support } }),
   roleMiningLast: () => request("/api/rolemining/last"),
+  roleModelingSandbox: (body) => request("/api/role-modeling/sandbox", { method: "POST", body }),
+  roleModelingFeedback: (proposal_id, proposal_type, accepted) =>
+    request("/api/role-modeling/sandbox/feedback", { method: "POST", body: { proposal_id, proposal_type, accepted } }),
+  roleModelingApply: (body) => request("/api/role-modeling/apply", { method: "POST", body }),
 
   kpiDrilldown: (metric) => request(`/api/kpi/drilldown?metric=${encodeURIComponent(metric)}`),
   dataQualityRuleSuggestions: () => request("/api/data-quality/rules/suggestions"),

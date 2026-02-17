@@ -3,45 +3,13 @@
 > vite --host 0.0.0.0 --port 5173 --strictPort
 
 
-  VITE v5.4.21  ready in 219 ms
+  VITE v5.4.21  ready in 234 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.46:5173/
-8:40:35 PM [vite] http proxy error: /api/me
+11:02:15 AM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-8:40:35 PM [vite] http proxy error: /api/me
+11:02:15 AM [vite] http proxy error: /api/me
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-8:41:42 PM [vite] hmr update /src/app.jsx
-8:43:24 PM [vite] hmr update /src/styles.css
-8:44:02 PM [vite] hmr update /src/app.jsx
-8:44:42 PM [vite] hmr update /src/styles.css
-8:45:12 PM [vite] hmr update /src/app.jsx
-8:45:16 PM [vite] hmr update /src/styles.css
-8:46:23 PM [vite] hmr update /src/app.jsx
-8:46:55 PM [vite] hmr update /src/styles.css
-8:48:15 PM [vite] hmr update /src/app.jsx
-8:50:13 PM [vite] hmr update /src/styles.css
-8:50:20 PM [vite] hmr update /src/app.jsx
-8:50:25 PM [vite] hmr update /src/styles.css
-8:51:50 PM [vite] hmr update /src/app.jsx
-8:53:02 PM [vite] hmr update /src/app.jsx
-8:53:45 PM [vite] hmr update /src/app.jsx
-8:54:15 PM [vite] hmr update /src/styles.css
-8:54:36 PM [vite] hmr update /src/app.jsx
-8:54:42 PM [vite] hmr update /src/styles.css
-8:55:31 PM [vite] hmr update /src/app.jsx
-8:57:34 PM [vite] hmr update /src/app.jsx
-8:58:12 PM [vite] hmr update /src/app.jsx
-8:59:01 PM [vite] hmr update /src/app.jsx
-9:00:42 PM [vite] hmr update /src/app.jsx
-9:01:24 PM [vite] hmr update /src/app.jsx
-9:02:10 PM [vite] hmr update /src/app.jsx
-9:03:35 PM [vite] hmr update /src/app.jsx
-9:06:15 PM [vite] hmr update /src/styles.css
-9:06:39 PM [vite] hmr update /src/styles.css
-9:11:25 PM [vite] hmr update /src/styles.css
-9:11:27 PM [vite] hmr update /src/app.jsx
-9:12:35 PM [vite] hmr update /src/styles.css
-9:13:55 PM [vite] hmr update /src/styles.css

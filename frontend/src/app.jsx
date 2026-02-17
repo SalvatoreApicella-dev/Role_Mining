@@ -22,6 +22,7 @@ const AiLabAbPlaygroundPage = lazy(() => import("./pages/AiLabAbPlaygroundPage")
 const AiLabFairnessPage = lazy(() => import("./pages/AiLabFairnessPage"));
 const AiLabSyntheticPage = lazy(() => import("./pages/AiLabSyntheticPage"));
 const AiLabFeedbackPage = lazy(() => import("./pages/AiLabFeedbackPage"));
+const RoleModelingSandboxPage = lazy(() => import("./pages/RoleModelingSandboxPage"));
 const Plot = lazy(() => import("react-plotly.js"));
 
 
@@ -479,7 +480,7 @@ function Analytics() {
             <button className="analytics-focus-btn" style={{ marginTop: 0 }} onClick={() => navigate(focusItem.route)}>
               Apri analisi prioritaria
             </button>
-            <button className="analytics-focus-btn" style={{ marginTop: 0 }} onClick={() => navigate("/cluster")}>
+            <button className="analytics-focus-btn" style={{ marginTop: 0 }} onClick={() => navigate("/role-modeling")}>
               Role Modeling
             </button>
           </div>
@@ -5077,6 +5078,14 @@ export default function App() {
               element={
                 <PermissionGate allow={permissions.can_view_cluster} title="Cluster non disponibile">
                   <Cluster permissions={permissions} />
+                </PermissionGate>
+              }
+            />
+            <Route
+              path="/role-modeling"
+              element={
+                <PermissionGate allow={permissions.can_view_cluster} title="Role Modeling non disponibile">
+                  <RoleModelingSandboxPage />
                 </PermissionGate>
               }
             />

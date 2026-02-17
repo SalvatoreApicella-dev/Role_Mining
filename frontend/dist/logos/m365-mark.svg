@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Microsoft 365 logo">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a07be8"/>
+      <stop offset="100%" stop-color="#0a73d9"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#58d7f6"/>
+      <stop offset="100%" stop-color="#5a65cf"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#b58cf0"/>
+      <stop offset="100%" stop-color="#6b4bb4"/>
+    </linearGradient>
+    <clipPath id="ring">
+      <path d="M256 58c28 0 55 8 79 23l100 62c24 15 39 40 39 68v90c0 28-15 53-39 68l-100 62a153 153 0 0 1-79 23c-28 0-55-8-79-23l-100-62c-24-15-39-40-39-68v-90c0-28 15-53 39-68l100-62a153 153 0 0 1 79-23z"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#ring)">
+    <path d="M72 166c0-38 30-68 68-68h128v124l-104 66H72V166z" fill="url(#g1)"/>
+    <path d="M440 166v122H266v-66l100-124h6c38 0 68 30 68 68z" fill="url(#g2)"/>
+    <path d="M266 288h174v58c0 38-30 68-68 68H244l-70-44 92-58z" fill="url(#g3)"/>
+    <path d="M72 288h92l102 64v62H140c-38 0-68-30-68-68v-58z" fill="#1e89e6" opacity="0.92"/>
+  </g>
+
+  <circle cx="256" cy="256" r="72" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="6"/>
+</svg>
