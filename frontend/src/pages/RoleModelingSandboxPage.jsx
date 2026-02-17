@@ -116,20 +116,27 @@ export default function RoleModelingSandboxPage() {
     setLoading(true);
     setErr("");
     try {
-      const [res, kpiRes, miningRes] = await Promise.all([
-        api.roleModelingSandbox({
-          max_suggestions: numberOr(form.max_suggestions, DEFAULT_FORM.max_suggestions),
-          min_group_support: numberOr(form.min_group_support, DEFAULT_FORM.min_group_support),
-          redundancy_threshold: numberOr(form.redundancy_threshold, DEFAULT_FORM.redundancy_threshold),
-          ml_weight: numberOr(form.ml_weight, DEFAULT_FORM.ml_weight),
-        }),
-        api.kpi().catch(() => ({})),
-        api.roleMiningLast().catch(() => ({})),
-      ]);
+      const res = await api.roleModelingSandbox({
+        max_suggestions: numberOr(form.max_suggestions, DEFAULT_FORM.max_suggestions),
+        min_group_support: numberOr(form.min_group_support, DEFAULT_FORM.min_group_support),
+        redundancy_threshold: numberOr(form.redundancy_threshold, DEFAULT_FORM.redundancy_threshold),
+        ml_weight: numberOr(form.ml_weight, DEFAULT_FORM.ml_weight),
+      });
       if (requestSeq !== requestSeqRef.current) return;
       setResult(res || null);
-      setFallbackKpi(kpiRes || {});
-      setFallbackMining(miningRes || {});
+      const hasUsers = numberOr(res?.summary?.users, 0) > 0;
+      const hasCurrentScore = Number.isFinite(Number(res?.comparison?.current?.modelScore));
+      if (!hasUsers || !hasCurrentScore) {
+        Promise.allSettled([
+          !hasCurrentScore ? api.kpi() : Promise.resolve(fallbackKpi || {}),
+          !hasUsers ? api.roleMiningLast() : Promise.resolve(fallbackMining || {}),
+        ]).then((results) => {
+          if (requestSeq !== requestSeqRef.current) return;
+          const [kpiResult, miningResult] = results;
+          if (kpiResult?.status === "fulfilled") setFallbackKpi(kpiResult.value || {});
+          if (miningResult?.status === "fulfilled") setFallbackMining(miningResult.value || {});
+        });
+      }
       if (resetFlow) {
         setAppliedDiscoveryModelId("");
         setActiveLane("discovery");
