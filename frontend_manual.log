@@ -3,8 +3,13 @@
 > vite --host 0.0.0.0 --port 5173 --strictPort
 
 
-  VITE v5.4.21  ready in 166 ms
+  VITE v5.4.21  ready in 223 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.46:5173/
-11:31:55 AM [vite] hmr update /src/pages/RoleModelingSandboxPage.jsx
+11:54:06 PM [vite] http proxy error: /api/me
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+11:54:06 PM [vite] http proxy error: /api/me
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)

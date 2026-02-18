@@ -2,12 +2,14 @@ import os
 import time
 import json
 import hashlib
+import tempfile
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
 
 import jwt
 import numpy as np
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -79,6 +81,9 @@ from collections import defaultdict, Counter
 # ML Engine import
 from ml_engine import get_ml_engine, ACCOUNT_TYPES
 ml_engine = get_ml_engine(data_dir="./ml_data")
+GLOBAL_ML_SIGNALS_PATH = Path("./ml_data/global_ml_signals.json")
+GLOBAL_ML_SIGNALS_LOCK = threading.RLock()
+GLOBAL_ML_SIGNALS_MAX = max(1000, int(os.getenv("GLOBAL_ML_SIGNALS_MAX", "20000")))
 
 REBUILD_LOCK = threading.Lock()
 from app.core.cache import (
@@ -585,11 +590,20 @@ def build_cluster_quality_items(clusters: list, matrix: dict) -> list[dict]:
 # ----------------------------
 # Persistent Storage (replaces in-memory state)
 # ----------------------------
-from app.db.storage import get_store, init_default_state
+from app.db.storage import (
+    get_store,
+    get_current_tenant_id,
+    init_default_state,
+    list_known_tenant_ids,
+    normalize_tenant_id,
+    pop_tenant_context,
+    push_tenant_context,
+    tenant_context,
+)
 
 # Initialize persistent storage
 state = get_store()
-init_default_state()
+init_default_state(normalize_tenant_id(os.getenv("DEFAULT_TENANT_ID", "example.internal")))
 REQUIRED_DUPLICATE_ORDER = ["last_login", "groups_count", "dept_group_correlation", "has_department"]
 MODEL_QUALITY_PRESETS: Dict[str, Dict[str, float]] = {
     "banking": {
@@ -2252,7 +2266,15 @@ def build_over_rows_only(matrix: Dict[str, Dict[str, int]], threshold: Optional[
 
 
 def log(level: str, message: str) -> None:
-    state["logs"].insert(0, {"ts": datetime.now(timezone.utc).isoformat(), "level": level, "message": message})
+    state["logs"].insert(
+        0,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "tenant_id": get_current_tenant_id(),
+            "level": level,
+            "message": message,
+        },
+    )
     state["logs"] = state["logs"][:500]
 
 def _json_safe_value(value: Any) -> Any:
@@ -2271,6 +2293,50 @@ def _json_safe_value(value: Any) -> Any:
     return str(value)
 
 
+def _append_global_ml_signal(kind: str, payload: Dict[str, Any]) -> None:
+    """
+    Persist ML-relevant signals in a global cross-tenant file so learning can
+    aggregate feedback from all tenants.
+    """
+    item = {
+        "kind": str(kind or "").strip() or "unknown",
+        "tenant_id": get_current_tenant_id(),
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "payload": _json_safe_value(payload),
+    }
+    try:
+        GLOBAL_ML_SIGNALS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with GLOBAL_ML_SIGNALS_LOCK:
+            rows: List[Dict[str, Any]] = []
+            if GLOBAL_ML_SIGNALS_PATH.exists():
+                try:
+                    with GLOBAL_ML_SIGNALS_PATH.open("r", encoding="utf-8") as rf:
+                        loaded = json.load(rf)
+                    if isinstance(loaded, list):
+                        rows = loaded
+                except Exception:
+                    rows = []
+            rows.append(item)
+            if len(rows) > GLOBAL_ML_SIGNALS_MAX:
+                rows = rows[-GLOBAL_ML_SIGNALS_MAX:]
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=str(GLOBAL_ML_SIGNALS_PATH.parent),
+                prefix=f"{GLOBAL_ML_SIGNALS_PATH.name}.tmp.",
+                suffix=".json",
+                delete=False,
+            ) as tf:
+                json.dump(rows, tf, ensure_ascii=False, separators=(",", ":"))
+                tf.flush()
+                os.fsync(tf.fileno())
+                temp_name = tf.name
+            os.replace(temp_name, GLOBAL_ML_SIGNALS_PATH)
+    except Exception:
+        # Global telemetry must never block the main request path.
+        return
+
+
 def record_manual_user_change(
     *,
     actor: str,
@@ -2282,9 +2348,11 @@ def record_manual_user_change(
     persist: bool = True,
 ) -> None:
     events = state.setdefault("manual_user_changes", [])
+    tenant_id = get_current_tenant_id()
     item = {
         "id": f"muc-{int(time.time()*1000)}-{len(events)+1}",
         "ts": datetime.now(timezone.utc).isoformat(),
+        "tenantId": tenant_id,
         "actor": actor,
         "username": username,
         "displayName": display_name or username,
@@ -2298,6 +2366,7 @@ def record_manual_user_change(
         state["manual_user_changes"] = trimmed
     else:
         events[:] = trimmed
+    _append_global_ml_signal("manual_user_change", item)
     return item
 
 
@@ -2310,9 +2379,11 @@ def record_llm_learning_event(
     details: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     events = state.setdefault("llm_learning_history", [])
+    tenant_id = get_current_tenant_id()
     item = {
         "id": f"lle-{int(time.time()*1000)}-{len(events)+1}",
         "ts": datetime.now(timezone.utc).isoformat(),
+        "tenantId": tenant_id,
         "actor": actor,
         "source": source,
         "signalType": signal_type,
@@ -2321,6 +2392,7 @@ def record_llm_learning_event(
     }
     events.append(item)
     state["llm_learning_history"] = events[-3000:]
+    _append_global_ml_signal("llm_learning_event", item)
     return item
 
 
@@ -2375,59 +2447,68 @@ def refresh_ai_detection_background(trigger: str, actor: str) -> None:
         log("ERROR", f"Background AI detection refresh failed (trigger={trigger}, by={actor}): {exc}")
 
 
-def run_post_snapshot_logic_background(snapshot_ts: str, actor: str) -> None:
+def run_post_snapshot_logic_background(snapshot_ts: str, actor: str, tenant_id: Optional[str] = None) -> None:
     """
     Run heavy post-import business logic after AD snapshot has been saved.
     If a newer snapshot exists, skip to avoid stale background work.
     """
-    try:
-        current_ts = str((state.get("last_extract") or {}).get("ts") or "")
-        if not snapshot_ts or current_ts != str(snapshot_ts):
-            log("INFO", f"Skip post-snapshot logic: stale snapshot (expected={snapshot_ts}, current={current_ts})")
-            return
+    with tenant_context(tenant_id):
+        try:
+            init_default_state(get_current_tenant_id())
+            current_ts = str((state.get("last_extract") or {}).get("ts") or "")
+            if not snapshot_ts or current_ts != str(snapshot_ts):
+                log("INFO", f"Skip post-snapshot logic: stale snapshot (expected={snapshot_ts}, current={current_ts})")
+                return
 
-        users = (state.get("last_extract") or {}).get("users") or []
-        rerun_auto_business_roles_after_connector(users, preserve_existing_brs=False)
-        sync_roles_from_users(users)
+            users = (state.get("last_extract") or {}).get("users") or []
+            rerun_auto_business_roles_after_connector(users, preserve_existing_brs=False)
+            sync_roles_from_users(users)
 
-        rebuild_ingest_candidates()
-        apply_duplicate_displayname_resolution()
-        invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+            rebuild_ingest_candidates()
+            apply_duplicate_displayname_resolution()
+            invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
 
-        refresh_ai_detection_background("ad-import-post-snapshot", actor)
-        log("INFO", f"Post-snapshot logic completed (snapshot_ts={snapshot_ts}, by={actor})")
-    except Exception as exc:
-        log("ERROR", f"Post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
+            refresh_ai_detection_background("ad-import-post-snapshot", actor)
+            log("INFO", f"Post-snapshot logic completed (snapshot_ts={snapshot_ts}, by={actor})")
+        except Exception as exc:
+            log("ERROR", f"Post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
 
 
-def run_post_csv_snapshot_logic_background(snapshot_ts: str, actor: str, touched_depts: List[str]) -> None:
+def run_post_csv_snapshot_logic_background(
+    snapshot_ts: str,
+    actor: str,
+    touched_depts: List[str],
+    tenant_id: Optional[str] = None,
+) -> None:
     """
     Run heavy post-import business logic after CSV snapshot has been saved.
     If a newer snapshot exists, skip to avoid stale background work.
     """
-    try:
-        current_ts = str((state.get("last_extract") or {}).get("ts") or "")
-        if not snapshot_ts or current_ts != str(snapshot_ts):
-            log("INFO", f"Skip CSV post-snapshot logic: stale snapshot (expected={snapshot_ts}, current={current_ts})")
-            return
+    with tenant_context(tenant_id):
+        try:
+            init_default_state(get_current_tenant_id())
+            current_ts = str((state.get("last_extract") or {}).get("ts") or "")
+            if not snapshot_ts or current_ts != str(snapshot_ts):
+                log("INFO", f"Skip CSV post-snapshot logic: stale snapshot (expected={snapshot_ts}, current={current_ts})")
+                return
 
-        users = (state.get("last_extract") or {}).get("users") or []
-        only_depts = {d for d in (touched_depts or []) if d}
-        rerun_auto_business_roles_after_connector(
-            users,
-            only_depts=only_depts if only_depts else None,
-            preserve_existing_brs=True,
-        )
-        sync_roles_from_users(users)
+            users = (state.get("last_extract") or {}).get("users") or []
+            only_depts = {d for d in (touched_depts or []) if d}
+            rerun_auto_business_roles_after_connector(
+                users,
+                only_depts=only_depts if only_depts else None,
+                preserve_existing_brs=True,
+            )
+            sync_roles_from_users(users)
 
-        rebuild_ingest_candidates()
-        apply_duplicate_displayname_resolution()
-        invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
+            rebuild_ingest_candidates()
+            apply_duplicate_displayname_resolution()
+            invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
 
-        refresh_ai_detection_background("csv-import-post-snapshot", actor)
-        log("INFO", f"CSV post-snapshot logic completed (snapshot_ts={snapshot_ts}, by={actor})")
-    except Exception as exc:
-        log("ERROR", f"CSV post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
+            refresh_ai_detection_background("csv-import-post-snapshot", actor)
+            log("INFO", f"CSV post-snapshot logic completed (snapshot_ts={snapshot_ts}, by={actor})")
+        except Exception as exc:
+            log("ERROR", f"CSV post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
 
 def active_users(users: list[dict]) -> list[dict]:
     return [u for u in (users or []) if not u.get("excluded")]
@@ -3592,12 +3673,15 @@ def apply_choice_for_displayname(display_name: str,
 class LoginRequest(BaseModel):
     username: str
     password: str
+    domain: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     username: str
+    tenant_id: str
+    tenant_domain: str
 
 
 class SystemUserPermissions(BaseModel):
@@ -3806,17 +3890,95 @@ class RoleModelingApplyRequest(BaseModel):
 security = HTTPBearer(auto_error=False)
 
 
-def create_access_token(username: str) -> str:
+DEFAULT_TENANT_ID = normalize_tenant_id(os.getenv("DEFAULT_TENANT_ID", "example.internal"))
+DEFAULT_TENANT_DOMAIN = (
+    os.getenv("DEFAULT_TENANT_DOMAIN", "example.internal").strip() or "example.internal"
+).lower()
+TENANT_DOMAIN_MAP_RAW = os.getenv("TENANT_DOMAIN_MAP", "")
+_TENANT_DOMAIN_RE = re.compile(r"^[a-z0-9.-]+$")
+BUILTIN_TENANT_DOMAIN_MAP: Dict[str, str] = {
+    "example.internal": "example.internal",
+    "bip.internal": "bip",
+    "bip": "bip",
+}
+
+
+def _normalize_tenant_domain(raw: Optional[str]) -> str:
+    value = str(raw or "").strip().lower()
+    if "://" in value:
+        value = value.split("://", 1)[1]
+    value = value.split("/", 1)[0]
+    value = value.split(":", 1)[0].strip(".")
+    if not value:
+        return ""
+    if not _TENANT_DOMAIN_RE.fullmatch(value):
+        return ""
+    return value
+
+
+def _parse_tenant_domain_map(raw: str) -> Dict[str, str]:
+    """
+    Parse TENANT_DOMAIN_MAP from env.
+    Accepted format:
+      TENANT_DOMAIN_MAP="sky.it=sky,prometeon.com=prometeon"
+    """
+    mapping: Dict[str, str] = {}
+    for item in (raw or "").split(","):
+        chunk = item.strip()
+        if not chunk:
+            continue
+        if "=" in chunk:
+            domain_raw, tenant_raw = chunk.split("=", 1)
+        elif ":" in chunk:
+            domain_raw, tenant_raw = chunk.split(":", 1)
+        else:
+            continue
+        domain = _normalize_tenant_domain(domain_raw)
+        tenant_id = normalize_tenant_id(str(tenant_raw or "").strip().lower())
+        if domain and tenant_id:
+            mapping[domain] = tenant_id
+    return mapping
+
+
+def _tenant_domain_map() -> Dict[str, str]:
+    mapping = {k: normalize_tenant_id(v) for k, v in BUILTIN_TENANT_DOMAIN_MAP.items()}
+    mapping.update(_parse_tenant_domain_map(TENANT_DOMAIN_MAP_RAW))
+    mapping.setdefault(DEFAULT_TENANT_DOMAIN, DEFAULT_TENANT_ID)
+    return mapping
+
+
+def _resolve_tenant_for_login(raw_domain: Optional[str]) -> Tuple[str, str]:
+    # Manual input by user: no fallback auto-selection.
+    domain = _normalize_tenant_domain(raw_domain)
+    if not domain:
+        raise HTTPException(status_code=400, detail="Dominio cliente obbligatorio")
+
+    tenant_id = _tenant_domain_map().get(domain)
+    if not tenant_id:
+        raise HTTPException(status_code=401, detail="Dominio non autorizzato")
+    return normalize_tenant_id(tenant_id), domain
+
+
+def create_access_token(username: str, tenant_id: str, tenant_domain: str) -> str:
     exp = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
-    payload = {"sub": username, "exp": exp}
+    payload = {
+        "sub": username,
+        "tenant_id": normalize_tenant_id(tenant_id or DEFAULT_TENANT_ID),
+        "tenant_domain": str(tenant_domain or DEFAULT_TENANT_DOMAIN),
+        "exp": exp,
+    }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
-def require_auth(creds: HTTPAuthorizationCredentials = Depends(security)) -> str:
+def require_auth(request: Request, creds: HTTPAuthorizationCredentials = Depends(security)) -> str:
     if creds is None or not creds.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
     try:
         payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=["HS256"])
+        tenant_id = normalize_tenant_id(payload.get("tenant_id") or DEFAULT_TENANT_ID)
+        request.state.tenant_id = tenant_id
+        request.state.auth_claims = payload
+        init_default_state(tenant_id)
         return payload["sub"]
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -5386,7 +5548,8 @@ def _run_connector_extract_pipeline(
 
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
-    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, actor)
+    tenant_id = get_current_tenant_id()
+    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, actor, tenant_id)
     return ExtractResponse(
         ou=state["last_extract"]["ou"],
         total_users=len(state["last_extract"]["users"]),
@@ -6494,39 +6657,41 @@ def run_role_mining(
     }
 
 
-def _mining_worker(n_clusters, role_support):
-    ok = False
-    try:
-        users = active_users(state.get("last_extract", {}).get("users") or [])
-        res = run_role_mining(users, n_clusters=n_clusters, role_support=role_support)
+def _mining_worker(n_clusters, role_support, tenant_id: Optional[str] = None):
+    with tenant_context(tenant_id):
+        ok = False
+        try:
+            init_default_state(get_current_tenant_id())
+            users = active_users(state.get("last_extract", {}).get("users") or [])
+            res = run_role_mining(users, n_clusters=n_clusters, role_support=role_support)
 
-        # Build displayNames map (username -> displayName) for frontend optimization
-        display_names = {}
-        for u in users:
-            uname = u.get("username")
-            if uname:
-                display_names[uname] = u.get("displayName") or uname
+            # Build displayNames map (username -> displayName) for frontend optimization
+            display_names = {}
+            for u in users:
+                uname = u.get("username")
+                if uname:
+                    display_names[uname] = u.get("displayName") or uname
 
-        state.update({
-            "last_mining": {
-                "clusters": res.get("clusters", []),
-                "matrix": res.get("matrix", {}),
-                "kpi": res.get("kpi", {}),
-                "groups": res.get("groups", []),
-                "displayNames": display_names,
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "status": "ready"
-            },
-            "mining_dirty": False
-        })
-        ok = True
-    except Exception as e:
-        print(f"[Mining Worker] Error: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        state["mining_processing"] = False
-        state["mining_status"] = "ready" if ok else "idle"
+            state.update({
+                "last_mining": {
+                    "clusters": res.get("clusters", []),
+                    "matrix": res.get("matrix", {}),
+                    "kpi": res.get("kpi", {}),
+                    "groups": res.get("groups", []),
+                    "displayNames": display_names,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "status": "ready"
+                },
+                "mining_dirty": False
+            })
+            ok = True
+        except Exception as e:
+            print(f"[Mining Worker] Error: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            state["mining_processing"] = False
+            state["mining_status"] = "ready" if ok else "idle"
 
 def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
     """
@@ -6582,11 +6747,12 @@ def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
     n_clusters = params.get("n_clusters", None)
     role_support = params.get("role_support", 0.6)
     
+    tenant_id = get_current_tenant_id()
     if background_tasks:
-        background_tasks.add_task(_mining_worker, n_clusters, role_support)
+        background_tasks.add_task(_mining_worker, n_clusters, role_support, tenant_id)
     else:
         # Fallback sync if no background_tasks provided (should verify calls)
-        _mining_worker(n_clusters, role_support)
+        _mining_worker(n_clusters, role_support, tenant_id)
 
 
 
@@ -6611,6 +6777,42 @@ app.add_middleware(
 
 from fastapi.middleware.gzip import GZipMiddleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+def _extract_bearer_token(request: Request) -> str:
+    auth_header = str(request.headers.get("authorization") or "").strip()
+    if not auth_header.lower().startswith("bearer "):
+        return ""
+    return auth_header.split(" ", 1)[1].strip()
+
+
+@app.middleware("http")
+async def tenant_context_middleware(request: Request, call_next):
+    """
+    Bind tenant context for the full request lifetime.
+    - Authenticated requests: tenant from JWT claim `tenant_id`
+    - Anonymous requests: default tenant
+    """
+    tenant_id = normalize_tenant_id(DEFAULT_TENANT_ID)
+    token_str = _extract_bearer_token(request)
+    if token_str:
+        try:
+            claims = jwt.decode(token_str, JWT_SECRET, algorithms=["HS256"])
+            request.state.auth_claims = claims
+            tenant_id = normalize_tenant_id(claims.get("tenant_id") or DEFAULT_TENANT_ID)
+        except Exception:
+            # Keep default tenant; protected endpoints will be rejected by require_auth.
+            tenant_id = normalize_tenant_id(DEFAULT_TENANT_ID)
+
+    ctx_token = push_tenant_context(tenant_id)
+    try:
+        request.state.tenant_id = tenant_id
+        init_default_state(tenant_id)
+        response = await call_next(request)
+        return response
+    finally:
+        pop_tenant_context(ctx_token)
+
 
 @app.get("/api/kpi/drilldown")
 def kpidrilldown_q(metric: str): #, username: str = Depends(require_auth)):
@@ -6798,10 +7000,14 @@ def run_discovery_scheduler_once() -> None:
 
 def _discovery_scheduler_loop() -> None:
     while not DISCOVERY_SCHEDULER_STOP.is_set():
-        try:
-            run_discovery_scheduler_once()
-        except Exception as e:
-            log("ERROR", f"Discovery scheduler loop error: {e}")
+        tenant_ids = list_known_tenant_ids()
+        for tenant_id in tenant_ids:
+            with tenant_context(tenant_id):
+                try:
+                    init_default_state(get_current_tenant_id())
+                    run_discovery_scheduler_once()
+                except Exception as e:
+                    log("ERROR", f"Discovery scheduler loop error (tenant={tenant_id}): {e}")
         DISCOVERY_SCHEDULER_STOP.wait(30)
 
 
@@ -6866,30 +7072,43 @@ def toggle_user_group(body: ToggleUserGroupRequest, username: str = Depends(requ
 
 @app.post("/api/auth/login", response_model=TokenResponse)
 def login(body: LoginRequest):
-    rec = _find_system_user(body.username)
-    if rec:
-        if not bool(rec.get("active", True)):
-            raise HTTPException(status_code=401, detail="Utente disattivato")
-        if str(rec.get("password") or "") != str(body.password or ""):
+    tenant_id, tenant_domain = _resolve_tenant_for_login(body.domain)
+    with tenant_context(tenant_id):
+        init_default_state(tenant_id)
+        rec = _find_system_user(body.username)
+        if rec:
+            if not bool(rec.get("active", True)):
+                raise HTTPException(status_code=401, detail="Utente disattivato")
+            if str(rec.get("password") or "") != str(body.password or ""):
+                raise HTTPException(status_code=401, detail="Credenziali non valide")
+        elif body.username == APP_LOGIN_USER and body.password == APP_LOGIN_PASS:
+            # Backward compatibility when env credentials are used.
+            pass
+        else:
             raise HTTPException(status_code=401, detail="Credenziali non valide")
-    elif body.username == APP_LOGIN_USER and body.password == APP_LOGIN_PASS:
-        # Backward compatibility when env credentials are used.
-        pass
-    else:
-        raise HTTPException(status_code=401, detail="Credenziali non valide")
-    token = create_access_token(body.username)
-    log("INFO", f"Login OK {body.username}")
-    return TokenResponse(access_token=token, username=body.username)
+        token = create_access_token(body.username, tenant_id=tenant_id, tenant_domain=tenant_domain)
+        log("INFO", f"Login OK {body.username} tenant={tenant_id}")
+        return TokenResponse(
+            access_token=token,
+            username=body.username,
+            tenant_id=tenant_id,
+            tenant_domain=tenant_domain,
+        )
 
 
 @app.get("/api/me")
-def me(username: str = Depends(require_auth)):
+def me(request: Request, username: str = Depends(require_auth)):
     rec = _find_system_user(username)
     permissions = _permissions_for_user(username)
+    claims = getattr(request.state, "auth_claims", {}) if hasattr(request, "state") else {}
+    tenant_id = normalize_tenant_id(claims.get("tenant_id") or DEFAULT_TENANT_ID)
+    tenant_domain = str(claims.get("tenant_domain") or DEFAULT_TENANT_DOMAIN)
     return {
         "username": username,
         "display_name": (rec or {}).get("display_name") or username,
         "permissions": permissions,
+        "tenant_id": tenant_id,
+        "tenant_domain": tenant_domain,
     }
 
 
@@ -7081,7 +7300,8 @@ def extract(req: ExtractRequest, background_tasks: BackgroundTasks, username: st
         state.update(updates)
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
-    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username)
+    tenant_id = get_current_tenant_id()
+    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username, tenant_id)
 
     return ExtractResponse(
         ou=state["last_extract"]["ou"],
@@ -7131,7 +7351,8 @@ def extract_sap(req: ExtractRequest, background_tasks: BackgroundTasks, username
 
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
-    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username)
+    tenant_id = get_current_tenant_id()
+    background_tasks.add_task(run_post_snapshot_logic_background, snapshot_ts, username, tenant_id)
 
     return ExtractResponse(
         ou=state["last_extract"]["ou"],
@@ -9340,15 +9561,17 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
     touched_depts_list = sorted([d for d in touched_depts if d])
+    tenant_id = get_current_tenant_id()
     if background_tasks:
         background_tasks.add_task(
             run_post_csv_snapshot_logic_background,
             snapshot_ts,
             username,
             touched_depts_list,
+            tenant_id,
         )
     else:
-        run_post_csv_snapshot_logic_background(snapshot_ts, username, touched_depts_list)
+        run_post_csv_snapshot_logic_background(snapshot_ts, username, touched_depts_list, tenant_id)
 
     return {
         "ok": True,

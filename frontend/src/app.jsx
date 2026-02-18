@@ -193,13 +193,19 @@ function Login() {
   const nav = useNavigate();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("admin123");
+  const [domain, setDomain] = useState("");
   const [err, setErr] = useState("");
 
   async function doLogin(e) {
     e.preventDefault();
     setErr("");
+    const normalizedDomain = String(domain || "").trim().toLowerCase();
+    if (!normalizedDomain) {
+      setErr("Inserisci il dominio cliente (es: example.internal)");
+      return;
+    }
     try {
-      const res = await api.login(username, password);
+      const res = await api.login(username, password, normalizedDomain);
       setToken(res.access_token || res.token || "");
       nav("/analytics");
     } catch (e2) {
@@ -218,9 +224,15 @@ function Login() {
 
         <h2 style={{ marginTop: 0 }}>Login</h2>
         <p style={{ color: "var(--muted)", marginTop: -6 }}>
-          Mock users: admin / admin123, user / user123
+          Inserisci dominio cliente + credenziali. Tenant attuale: example.internal
         </p>
         <form onSubmit={doLogin} className="row" style={{ flexDirection: "column", alignItems: "stretch" }}>
+          <input
+            value={domain}
+            onChange={e => setDomain(e.target.value)}
+            placeholder="Dominio cliente (es: example.internal)"
+            aria-label="Dominio cliente"
+          />
           <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" aria-label="Username" />
           <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" type="password" aria-label="Password" />
           <button className="primary" type="submit">Entra</button>

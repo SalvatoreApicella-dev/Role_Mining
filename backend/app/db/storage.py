@@ -9,7 +9,9 @@ from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
 import threading
 from contextlib import contextmanager
+from contextvars import ContextVar, Token
 import tempfile
+import re
 
 
 class JsonFileStore:
@@ -236,22 +238,83 @@ class JsonFileStore:
                     self.save()
 
 
-# Global instance
-_store: Optional[JsonFileStore] = None
+DEFAULT_TENANT_ID = (
+    os.getenv("DEFAULT_TENANT_ID", "example.internal").strip().lower() or "example.internal"
+)
+_TENANT_ID_PATTERN = re.compile(r"^[a-z0-9._-]+$")
+_TENANT_CTX: ContextVar[str] = ContextVar("role_mining_tenant_id", default=DEFAULT_TENANT_ID)
 
 
-def get_store() -> JsonFileStore:
-    """Get or create the global storage instance."""
-    global _store
-    if _store is None:
-        _store = JsonFileStore()
-    return _store
+def normalize_tenant_id(raw: Optional[str]) -> str:
+    candidate = str(raw or "").strip().lower()
+    if not candidate:
+        return DEFAULT_TENANT_ID
+    if not _TENANT_ID_PATTERN.fullmatch(candidate):
+        return DEFAULT_TENANT_ID
+    return candidate
 
 
-def init_default_state():
-    """Initialize default state structure if empty."""
-    store = get_store()
-    
+def get_current_tenant_id() -> str:
+    return normalize_tenant_id(_TENANT_CTX.get())
+
+
+def push_tenant_context(tenant_id: Optional[str]) -> Token:
+    return _TENANT_CTX.set(normalize_tenant_id(tenant_id))
+
+
+def pop_tenant_context(token: Token) -> None:
+    _TENANT_CTX.reset(token)
+
+
+@contextmanager
+def tenant_context(tenant_id: Optional[str]):
+    token = push_tenant_context(tenant_id)
+    try:
+        yield normalize_tenant_id(tenant_id)
+    finally:
+        pop_tenant_context(token)
+
+
+def _tenant_storage_path(tenant_id: str) -> Path:
+    return Path("data") / "tenants" / normalize_tenant_id(tenant_id) / "storage.json"
+
+
+def _maybe_migrate_legacy_storage(target_path: Path, tenant_id: str) -> None:
+    """
+    One-shot migration from legacy single-tenant file `data/storage.json`
+    into the default tenant path.
+    """
+    if normalize_tenant_id(tenant_id) != DEFAULT_TENANT_ID:
+        return
+    if target_path.exists():
+        return
+    legacy = Path("data") / "storage.json"
+    if not legacy.exists():
+        return
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with legacy.open("r", encoding="utf-8") as rf:
+            raw = json.load(rf)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=str(target_path.parent),
+            prefix=f"{target_path.name}.tmp.",
+            suffix=".json",
+            delete=False,
+        ) as tf:
+            json.dump(raw, tf, ensure_ascii=False)
+            tf.flush()
+            os.fsync(tf.fileno())
+            temp_name = tf.name
+        os.replace(temp_name, target_path)
+    except Exception:
+        # Migration best-effort only.
+        return
+
+
+def _init_default_state_on_store(store: JsonFileStore) -> None:
+    """Initialize default state structure for a specific tenant store."""
     defaults = {
         "connector": {
             "server": "mock",
@@ -431,3 +494,108 @@ def init_default_state():
         store._state["businessroles"] = store._state["business_roles"]
     if "user_business_role" in store._state:
         store._state["userbusinessrole"] = store._state["user_business_role"]
+
+
+class TenantStoreProxy:
+    """
+    Tenant-aware facade that routes every state call to the active tenant store.
+    The active tenant is selected via context var (`push_tenant_context`).
+    """
+
+    def __init__(self):
+        self._stores: Dict[str, JsonFileStore] = {}
+        self._lock = threading.RLock()
+
+    def _get_tenant_store(self, tenant_id: Optional[str] = None) -> JsonFileStore:
+        tid = normalize_tenant_id(tenant_id or get_current_tenant_id())
+        with self._lock:
+            store = self._stores.get(tid)
+            if store is None:
+                path = _tenant_storage_path(tid)
+                _maybe_migrate_legacy_storage(path, tid)
+                store = JsonFileStore(filepath=str(path))
+                _init_default_state_on_store(store)
+                self._stores[tid] = store
+            return store
+
+    def for_tenant(self, tenant_id: Optional[str]) -> JsonFileStore:
+        return self._get_tenant_store(tenant_id)
+
+    def list_tenant_ids(self) -> List[str]:
+        ids = set(self._stores.keys())
+        base = Path("data") / "tenants"
+        if base.exists():
+            for entry in base.iterdir():
+                if entry.is_dir():
+                    tid = normalize_tenant_id(entry.name)
+                    if tid:
+                        ids.add(tid)
+        ids.add(DEFAULT_TENANT_ID)
+        return sorted(ids)
+
+    @property
+    def _state(self) -> Dict[str, Any]:
+        return self._get_tenant_store()._state
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._get_tenant_store().get(key, default)
+
+    def set(self, key: str, value: Any):
+        self._get_tenant_store().set(key, value)
+
+    def setdefault(self, key: str, default: Any) -> Any:
+        return self._get_tenant_store().setdefault(key, default)
+
+    def update(self, updates: Dict[str, Any]):
+        self._get_tenant_store().update(updates)
+
+    def save(self):
+        self._get_tenant_store().save()
+
+    def load(self):
+        self._get_tenant_store().load()
+
+    def clear(self):
+        self._get_tenant_store().clear()
+
+    def __getitem__(self, key: str) -> Any:
+        return self._get_tenant_store()[key]
+
+    def __setitem__(self, key: str, value: Any):
+        self._get_tenant_store()[key] = value
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._get_tenant_store()
+
+    def keys(self):
+        return self._get_tenant_store().keys()
+
+    def items(self):
+        return self._get_tenant_store().items()
+
+    @contextmanager
+    def batch(self):
+        with self._get_tenant_store().batch():
+            yield self
+
+
+# Global tenant-aware store proxy
+_store: Optional[TenantStoreProxy] = None
+
+
+def get_store() -> TenantStoreProxy:
+    """Get or create the tenant-aware storage proxy."""
+    global _store
+    if _store is None:
+        _store = TenantStoreProxy()
+    return _store
+
+
+def list_known_tenant_ids() -> List[str]:
+    return get_store().list_tenant_ids()
+
+
+def init_default_state(tenant_id: Optional[str] = None):
+    """Initialize default state structure for a specific tenant."""
+    store = get_store().for_tenant(tenant_id or get_current_tenant_id())
+    _init_default_state_on_store(store)

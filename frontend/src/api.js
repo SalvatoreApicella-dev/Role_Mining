@@ -128,7 +128,8 @@ async function request(path, { method = "GET", body, signal } = {}) {
 
 export const api = {
   health: () => request("/api/health"),
-  login: (username, password) => request("/api/auth/login", { method: "POST", body: { username, password } }),
+  login: (username, password, domain) =>
+    request("/api/auth/login", { method: "POST", body: { username, password, domain } }),
   me: () => request("/api/me"),
 
   adGroups: () => request("/api/ad/groups"),

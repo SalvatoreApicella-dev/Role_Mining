@@ -36,10 +36,16 @@ class ResponseCache:
         for key, _ in sorted(self._cache.items(), key=lambda kv: kv[1][1])[:overflow]:
             self._cache.pop(key, None)
 
+    def _tenant_key(self, key: str) -> str:
+        from app.db.storage import get_current_tenant_id
+        tid = get_current_tenant_id()
+        return f"{tid}:{key}"
+
     def get(self, key: str) -> Optional[Any]:
         with self._lock:
+            t_key = self._tenant_key(key)
             now = time.time()
-            item = self._cache.get(key)
+            item = self._cache.get(t_key)
             if item is not None:
                 value, expire_time = item
                 if now < expire_time:
@@ -47,7 +53,7 @@ class ResponseCache:
                     if self._touch_and_should_sweep_locked():
                         self._purge_expired_locked(now)
                     return value
-                self._cache.pop(key, None)
+                self._cache.pop(t_key, None)
             self._misses += 1
             if self._touch_and_should_sweep_locked():
                 self._purge_expired_locked(now)
@@ -55,8 +61,9 @@ class ResponseCache:
 
     def set(self, key: str, value: Any, ttl_seconds: float = 30.0) -> None:
         with self._lock:
+            t_key = self._tenant_key(key)
             expire_at = time.time() + max(0.0, float(ttl_seconds))
-            self._cache[key] = (value, expire_at)
+            self._cache[t_key] = (value, expire_at)
             if self._touch_and_should_sweep_locked():
                 self._purge_expired_locked()
             self._enforce_capacity_locked()
@@ -64,7 +71,8 @@ class ResponseCache:
     def invalidate(self, key: Optional[str] = None) -> None:
         with self._lock:
             if key:
-                self._cache.pop(key, None)
+                t_key = self._tenant_key(key)
+                self._cache.pop(t_key, None)
             else:
                 self._cache.clear()
 
@@ -72,7 +80,8 @@ class ResponseCache:
         if not prefix:
             return
         with self._lock:
-            keys = [k for k in self._cache.keys() if k.startswith(prefix)]
+            t_prefix = self._tenant_key(prefix)
+            keys = [k for k in self._cache.keys() if k.startswith(t_prefix)]
             for key in keys:
                 self._cache.pop(key, None)
 
