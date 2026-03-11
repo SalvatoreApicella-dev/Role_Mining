@@ -7,7 +7,7 @@ import json
 BASE_URL = "http://127.0.0.1:8002"
 
 def get_token():
-    resp = requests.post(f"{BASE_URL}/api/auth/login", json={"username": "admin", "password": "admin123"})
+    resp = requests.post(f"{BASE_URL}/api/auth/login", json={"username": "admin", "password": "admin123", "domain": "example.internal"})
     return resp.json().get("access_token")
 
 def test():

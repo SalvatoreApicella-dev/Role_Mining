@@ -22,7 +22,7 @@ def wait_for_backend(timeout=20):
 
 def login():
     url = f"{BASE_URL}/api/auth/login"
-    data = json.dumps({"username": "admin", "password": "admin123"}).encode("utf-8")
+    data = json.dumps({"username": "admin", "password": "admin123", "domain": "example.internal"}).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req) as response:
         return json.loads(response.read().decode())["access_token"]

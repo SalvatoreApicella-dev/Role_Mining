@@ -6,13 +6,14 @@ CSV Format:
 DisplayName;Department;Ruoli
 Bob Bianchi;HR;HRIS,Payroll,Confluence
 """
-import requests
 import sys
+from fastapi.testclient import TestClient
+from main import app
 
-BASE_URL = "http://127.0.0.1:8002"
+client = TestClient(app)
 
 def get_token():
-    resp = requests.post(f"{BASE_URL}/api/auth/login", json={"username": "admin", "password": "admin123"})
+    resp = client.post("/api/auth/login", json={"username": "admin", "password": "admin123", "domain": "example.internal"})
     if resp.status_code != 200:
         print(f"FAIL: Login failed: {resp.status_code} {resp.text}")
         sys.exit(1)
@@ -31,7 +32,7 @@ Prova Accesso;;Admin,Admin1
 
     # Import CSV
     files = {'file': ('test.csv', csv_content, 'text/csv')}
-    resp = requests.post(f"{BASE_URL}/api/import/csv", headers=headers, files=files)
+    resp = client.post("/api/import/csv", headers=headers, files=files)
     if resp.status_code != 200:
         print(f"FAIL: CSV import failed: {resp.status_code} {resp.text}")
         return False
@@ -40,7 +41,7 @@ Prova Accesso;;Admin,Admin1
     print(f"CSV Import OK: {import_result}")
     
     # Fetch users and check Bob Bianchi
-    resp = requests.get(f"{BASE_URL}/api/users", headers=headers)
+    resp = client.get("/api/users", headers=headers)
     if resp.status_code != 200:
         print(f"FAIL: Users fetch failed: {resp.status_code}")
         return False

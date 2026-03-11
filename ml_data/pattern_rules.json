@@ -22,5 +22,29 @@
     "field": "display_name",
     "regex": ".*CEO.*",
     "created_at": "2026-02-10T01:17:16.509121"
+  },
+  {
+    "account_type": "Technical",
+    "field": "department_code",
+    "regex": "^DEV.*",
+    "created_at": "2026-02-25T15:16:10.954662"
+  },
+  {
+    "account_type": "Executive",
+    "field": "display_name",
+    "regex": ".*CEO.*",
+    "created_at": "2026-02-25T15:16:10.955387"
+  },
+  {
+    "account_type": "Technical",
+    "field": "department_code",
+    "regex": "^DEV.*",
+    "created_at": "2026-02-25T15:16:21.723775"
+  },
+  {
+    "account_type": "Executive",
+    "field": "display_name",
+    "regex": ".*CEO.*",
+    "created_at": "2026-02-25T15:16:21.724183"
   }
 ]

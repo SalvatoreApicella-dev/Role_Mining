@@ -1,0 +1,9 @@
+{
+  "max_detect_secrets": 0,
+  "max_bandit_high": 0,
+  "max_bandit_medium": 0,
+  "max_pip_audit_vulnerabilities": 0,
+  "max_npm_high": 0,
+  "max_npm_critical": 0,
+  "max_semgrep_error": 0
+}

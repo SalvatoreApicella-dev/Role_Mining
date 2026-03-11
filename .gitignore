@@ -27,3 +27,5 @@ gen_output.txt
 *.webp
 *.png
 brain/
+compliance/evidence/*
+!compliance/evidence/.gitkeep

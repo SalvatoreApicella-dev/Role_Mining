@@ -8,7 +8,7 @@ USERNAME = "admin"
 PASSWORD = "admin123"
 
 def get_token():
-    resp = requests.post(f"{BASE_URL}/api/auth/login", json={"username": USERNAME, "password": PASSWORD})
+    resp = requests.post(f"{BASE_URL}/api/auth/login", json={"username": USERNAME, "password": PASSWORD, "domain": "example.internal"})
     if resp.status_code != 200:
         print("Login failed")
         return None

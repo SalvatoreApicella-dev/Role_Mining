@@ -33,7 +33,7 @@ class RoleMiningUAT(unittest.TestCase):
             self.fail(f"Backend not reachable: {e}")
 
     def test_01_login(self):
-        payload = {"username": "admin", "password": "admin123"}
+        payload = {"username": "admin", "password": "admin123", "domain": "example.internal"}
         resp = requests.post(f"{BASE_URL}/api/auth/login", json=payload)
         self.assertEqual(resp.status_code, 200, "Login failed")
         data = resp.json()

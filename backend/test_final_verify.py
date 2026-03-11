@@ -2,7 +2,7 @@
 import requests
 
 BASE_URL = "http://127.0.0.1:8002"
-token = requests.post(f"{BASE_URL}/api/auth/login", json={"username":"admin","password":"admin123"}).json().get("access_token")
+token = requests.post(f"{BASE_URL}/api/auth/login", json={"username":"admin","password":"admin123","domain":"example.internal"}).json().get("access_token")
 headers = {"Authorization": f"Bearer {token}"}
 users = requests.get(f"{BASE_URL}/api/users", headers=headers).json().get("users", [])
 

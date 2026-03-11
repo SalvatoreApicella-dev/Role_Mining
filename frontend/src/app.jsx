@@ -286,6 +286,8 @@ function Analytics() {
 
   const [kpi, setKpi] = useState({ totalUsers: 0, clusterQuality: 0, modelQuality: 0, aiDetection: 0 });
   const [connectorCfg, setConnectorCfg] = useState({ discovery_results: {} });
+  const [modelQualityDrill, setModelQualityDrill] = useState({});
+  const [clusterQualityDrill, setClusterQualityDrill] = useState({});
   const [animatedView, setAnimatedView] = useState({
     totalUsers: 0,
     clusterPct: 0,
@@ -303,7 +305,12 @@ function Analytics() {
     (async () => {
       try {
         setErr("");
-        const [kpiRes, cfgRes] = await Promise.allSettled([api.kpi(), api.getConnector()]);
+        const [kpiRes, cfgRes, mqRes, cqRes] = await Promise.allSettled([
+          api.kpi(),
+          api.getConnector(),
+          api.kpiDrilldown("model-quality"),
+          api.kpiDrilldown("cluster-quality"),
+        ]);
         if (kpiRes.status === "fulfilled") {
           const data = kpiRes.value;
           const normalized = (data && typeof data.kpi === "object") ? data.kpi : data;
@@ -314,6 +321,12 @@ function Analytics() {
         if (cfgRes.status === "fulfilled") {
           setConnectorCfg(cfgRes.value || { discovery_results: {} });
         }
+        if (mqRes.status === "fulfilled") {
+          setModelQualityDrill(mqRes.value || {});
+        }
+        if (cqRes.status === "fulfilled") {
+          setClusterQualityDrill(cqRes.value || {});
+        }
       } catch (e) {
         setErr(String(e.message || e));
       }
@@ -321,12 +334,20 @@ function Analytics() {
   }, []);
 
   const pct = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+  const fmtPct = (v) => Math.round(Number(v) || 0);
   const clusterPct = pct(
     kpi.clusterQuality ?? kpi.clusteringQuality ?? kpi.cluster_quality ?? kpi.clustering_quality
   );
   const modelPct = pct(kpi.modelQuality ?? kpi.model_quality);
   const aiPct = pct(kpi.aiDetection ?? kpi.ai_detection);
   const rawTotalUsers = Number(kpi.totalUsers ?? 0);
+  const staleCount = (modelQualityDrill?.staleAccounts || []).length;
+  const policyCount = (modelQualityDrill?.policyViolations || []).length;
+  const ambiguousCount = (modelQualityDrill?.ambiguousUsers || []).length;
+  const zeroCount = (modelQualityDrill?.zeroGroupsUsers || []).length;
+  const overCount = (modelQualityDrill?.overprivilegedUsers || []).length;
+  const issueUsersCount = staleCount + zeroCount + overCount;
+  const duplicatesCount = Number(clusterQualityDrill?.stats?.duplicateDisplayName || 0);
 
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -452,24 +473,25 @@ function Analytics() {
       },
       customdata: [...kpiItems.map((item) => [gapFor(item), item.helper]), [gapFor(kpiItems[0]), kpiItems[0].helper]],
       hovertemplate:
-        "<b>%{theta}</b><br>Score: %{r:.0f}%<br>Gap: %{customdata[0]:.0f}%<br>%{customdata[1]}<extra></extra>",
+        "<b>%{theta}</b><br>Score: %{r:.0f}%<br>Scostamento: %{customdata[0]:.0f}%<br>%{customdata[1]}<extra></extra>",
       showlegend: false,
     },
   ];
 
+  const gapTop = rankedByGapCard.slice(0, 3);
   const gapData = [
     {
       type: "bar",
-      orientation: "h",
-      x: rankedByGapCard.map((item) => gapFor(item)),
-      y: rankedByGapCard.map((item) => item.label),
+      orientation: "v",
+      x: gapTop.map((item) => item.label),
+      y: gapTop.map((item) => item.value),
       marker: {
-        color: rankedByGapCard.map((item) => item.color),
+        color: gapTop.map((item) => item.color),
         line: { color: "rgba(255,255,255,0.28)", width: 1 },
       },
-      customdata: rankedByGapCard.map((item) => [item.value]),
+      customdata: gapTop.map((item) => [item.value, item.target]),
       hovertemplate:
-        "<b>%{y}</b><br>Gap: %{x:.0f}%<br>Score corrente: %{customdata[0]:.0f}%<extra></extra>",
+        "<b>%{x}</b><br>Score: %{y:.0f}%<br>Target: %{customdata[1]}%<extra></extra>",
     },
   ];
 
@@ -510,48 +532,43 @@ function Analytics() {
       <div className="analytics-chart-layout">
         <div className="panel analytics-plot-panel analytics-card-enter" style={{ "--reveal-delay": "200ms" }}>
           <div className="analytics-plot-head">
-            <div className="analytics-plot-title">KPI Landscape</div>
-            <div className="analytics-plot-subtitle">Radar interattivo: hover per dettagli, click sul punto per drill-down.</div>
+            <div className="analytics-plot-title">Indicatori Modello</div>
+            <div className="analytics-plot-subtitle">Valori chiave che compongono la qualita complessiva.</div>
           </div>
-          <Suspense fallback={<div style={{ height: 310 }} />}>
-            <Plot
-              data={radarData}
-              layout={{
-                autosize: true,
-                paper_bgcolor: "rgba(5,10,20,0)",
-                plot_bgcolor: "rgba(7,14,28,0.70)",
-                font: { color: "#e9eefc" },
-                margin: { l: 26, r: 20, t: 8, b: 14 },
-                polar: {
-                  bgcolor: "rgba(7,14,28,0.70)",
-                  radialaxis: {
-                    range: [0, 100],
-                    ticksuffix: "%",
-                    gridcolor: "rgba(255,255,255,0.12)",
-                    linecolor: "rgba(255,255,255,0.15)",
-                  },
-                  angularaxis: {
-                    gridcolor: "rgba(255,255,255,0.10)",
-                  },
-                },
-                showlegend: false,
-                transition: { duration: 520, easing: "cubic-in-out" },
-              }}
-              useResizeHandler
-              config={{ displayModeBar: false, responsive: true }}
-              style={{ width: "100%", height: 310 }}
-              onClick={(ev) => {
-                const label = ev?.points?.[0]?.theta;
-                const route = routeByLabel[label];
-                if (route) navigate(route);
-              }}
-            />
-          </Suspense>
+          <div className="analytics-modelscore-card">
+            <div className="analytics-modelscore-items">
+              <button className="analytics-modelscore-item" type="button" onClick={() => navigate("/model-quality")}>
+                <span className="analytics-modelscore-item-dot" style={{ background: "#ff8ea7" }} />
+                <span className="analytics-modelscore-item-label">Account Stale</span>
+                <span className="analytics-modelscore-item-value">{staleCount}</span>
+              </button>
+              <button className="analytics-modelscore-item" type="button" onClick={() => navigate("/model-quality")}>
+                <span className="analytics-modelscore-item-dot" style={{ background: "#ffd36b" }} />
+                <span className="analytics-modelscore-item-label">User Exceptions</span>
+                <span className="analytics-modelscore-item-value">{issueUsersCount}</span>
+              </button>
+              <button className="analytics-modelscore-item" type="button" onClick={() => navigate("/kpi/cluster-quality")}>
+                <span className="analytics-modelscore-item-dot" style={{ background: "#8ab8ff" }} />
+                <span className="analytics-modelscore-item-label">Duplicates</span>
+                <span className="analytics-modelscore-item-value">{duplicatesCount}</span>
+              </button>
+              <button className="analytics-modelscore-item" type="button" onClick={() => navigate("/model-quality")}>
+                <span className="analytics-modelscore-item-dot" style={{ background: "#7af1c6" }} />
+                <span className="analytics-modelscore-item-label">Policy Violations</span>
+                <span className="analytics-modelscore-item-value">{policyCount}</span>
+              </button>
+              <button className="analytics-modelscore-item" type="button" onClick={() => navigate("/model-quality")}>
+                <span className="analytics-modelscore-item-dot" style={{ background: "#6aa6ff" }} />
+                <span className="analytics-modelscore-item-label">Ambiguous Users</span>
+                <span className="analytics-modelscore-item-value">{ambiguousCount}</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="panel analytics-plot-panel analytics-card-enter" style={{ "--reveal-delay": "280ms" }}>
           <div className="analytics-plot-head">
-            <div className="analytics-plot-title">Target Gap Ranking</div>
+            <div className="analytics-plot-title">Target Ranking</div>
             <div className="analytics-plot-subtitle">Classifica aree per distanza dal target; priorita in alto.</div>
           </div>
           <Suspense fallback={<div style={{ height: 310 }} />}>
@@ -562,20 +579,43 @@ function Analytics() {
                 paper_bgcolor: "rgba(5,10,20,0)",
                 plot_bgcolor: "rgba(7,14,28,0.70)",
                 font: { color: "#e9eefc" },
-                margin: { l: 124, r: 10, t: 8, b: 30 },
+                margin: { l: 46, r: 10, t: 16, b: 50 },
                 xaxis: {
-                  range: [0, 100],
+                  tickfont: { size: 12 },
+                  tickangle: -10,
+                  gridcolor: "rgba(255,255,255,0.06)",
+                },
+                yaxis: {
+                  range: [0, 110],
                   ticksuffix: "%",
                   gridcolor: "rgba(255,255,255,0.10)",
                   zeroline: false,
                 },
-                yaxis: {
-                  autorange: "reversed",
-                  automargin: true,
-                  ticklabelposition: "outside",
-                  ticklabelstandoff: 16,
-                  tickfont: { size: 12 },
-                },
+                shapes: [
+                  {
+                    type: "line",
+                    xref: "paper",
+                    x0: 0,
+                    x1: 1,
+                    yref: "y",
+                    y0: 100,
+                    y1: 100,
+                    line: { color: "rgba(120,210,255,0.85)", width: 1.6, dash: "dash" },
+                  },
+                ],
+                annotations: [
+                  {
+                    xref: "paper",
+                    x: 1,
+                    yref: "y",
+                    y: 100,
+                    text: "Target 100%",
+                    showarrow: false,
+                    font: { size: 11, color: "rgba(120,210,255,0.95)" },
+                    xanchor: "right",
+                    yanchor: "bottom",
+                  },
+                ],
                 showlegend: false,
                 transition: { duration: 520, easing: "cubic-in-out" },
               }}
@@ -1111,15 +1151,6 @@ function Connettori({ permissions }) {
             {loading ? "STOP" : "Discovery"}
           </button>
         )}
-        {showRunButtons && (
-          <button
-            className="primary"
-            onClick={() => runProvisioning(target)}
-            disabled={cfgSaving || loading || provisioningLoading || !canManageSettings}
-          >
-            {provisioningLoading ? "Provisioning..." : "Provision"}
-          </button>
-        )}
         <button className="primary" onClick={() => openScheduleModal(target)} disabled={cfgSaving || loading || !canManageSettings}>Schedule</button>
         <button className="primary" onClick={() => openResultModal(target)} disabled={cfgSaving}>Esito</button>
       </div>
@@ -1387,17 +1418,6 @@ function Connettori({ permissions }) {
                         >
                           {discoveryLoadingTarget === card.key ? "STOP" : "Discovery"}
                         </button>
-                        <button
-                          type="button"
-                          className="primary connectors-modern-card__quick-btn"
-                          disabled={cfgSaving || provisioningLoadingTarget === card.key || !canManageSettings}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            runProvisioning(card.key);
-                          }}
-                        >
-                          {provisioningLoadingTarget === card.key ? "Provisioning..." : "Provisioning"}
-                        </button>
                       </div>
                     )}
                     <div className="connectors-modern-card__status-row">
@@ -1477,9 +1497,6 @@ function Connettori({ permissions }) {
                       <div className="row connector-form-actions" style={{ marginTop: 8 }}>
                         <button className="primary" disabled={!csvFile || csvLoading || !canManageSettings} onClick={() => runDiscovery("csv")}>
                           {csvLoading ? "Discovery..." : "Discovery"}
-                        </button>
-                        <button className="primary" disabled={csvLoading || provisioningLoadingTarget === "csv" || !canManageSettings} onClick={() => runProvisioning("csv")}>
-                          {provisioningLoadingTarget === "csv" ? "Provisioning..." : "Provision"}
                         </button>
                         <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading || !canManageSettings}>Schedule</button>
                         <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>
@@ -1751,7 +1768,7 @@ function Connettori({ permissions }) {
                 placeholder="Department"
                 aria-label="SAP Bulk Department"
               />
-              <button className="primary" onClick={runSapBulkProvision} disabled={cfgSaving || sapBulkLoading}>
+              <button className="primary" onClick={runSapBulkProvision} disabled={cfgSaving || sapBulkLoading} style={{ display: "none" }}>
                 {sapBulkLoading ? "Uploading..." : "Upload Bulk Users"}
               </button>
             </div>
@@ -2011,13 +2028,6 @@ function Connettori({ permissions }) {
                 onClick={() => runDiscovery("csv")}
               >
                 {csvLoading ? "Discovery..." : "Discovery"}
-              </button>
-              <button
-                className="primary"
-                disabled={csvLoading || provisioningLoadingTarget === "csv"}
-                onClick={() => runProvisioning("csv")}
-              >
-                {provisioningLoadingTarget === "csv" ? "Provisioning..." : "Provision"}
               </button>
               <button className="primary" onClick={() => openScheduleModal("csv")} disabled={csvLoading}>Schedule</button>
               <button className="primary" onClick={() => openResultModal("csv")} disabled={csvLoading}>Esito</button>

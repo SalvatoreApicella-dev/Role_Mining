@@ -13,7 +13,7 @@ def print_result(test_name, success, message=""):
 def test_login():
     """Test Login and Token retrieval"""
     url = f"{BASE_URL}/api/auth/login"
-    payload = {"username": "admin", "password": "admin123"} 
+    payload = {"username": "admin", "password": "admin123", "domain": "example.internal"} 
     try:
         resp = requests.post(url, json=payload) # JSON body
         if resp.status_code == 200:
