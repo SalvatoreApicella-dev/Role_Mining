@@ -3,6 +3,17 @@ import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 import { api, clearToken, getToken, setToken } from "./api.js";
+import { buildBusinessRolesViewModel } from "./businessRolesView.js";
+import { buildClusterHeatmapViewModel } from "./clusterHeatmapView.js";
+import { buildUsersRiskSummary, filterUsersByQuickRisk, selectUsersSummaryRows } from "./clusterUsersView.js";
+import {
+  AI_FEATURES_ENABLED,
+  buildAnalyticsKpiItems,
+  getAnalyticsFocusActions,
+  getVisibleBusinessRoleSections,
+  getVisibleSystemPermissionKeys,
+  isRoleModelingRouteEnabled,
+} from "./featureFlags.js";
 import Select from "react-select";
 import ForceGraph2D from "react-force-graph-2d";
 import { forceCollide, forceRadial } from "d3-force";
@@ -24,6 +35,7 @@ const AiLabSyntheticPage = lazy(() => import("./pages/AiLabSyntheticPage"));
 const AiLabFeedbackPage = lazy(() => import("./pages/AiLabFeedbackPage"));
 const RoleModelingSandboxPage = lazy(() => import("./pages/RoleModelingSandboxPage"));
 const LogsPage = lazy(() => import("./pages/LogsPage"));
+const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const UsersAdvancedAnalyticsPage = lazy(() => import("./pages/UsersAdvancedAnalyticsPage"));
 const Plot = lazy(() => import("react-plotly.js"));
 
@@ -61,6 +73,7 @@ function Sidebar({ onLogout, permissions }) {
   const [openCfg, setOpenCfg] = useState(false);
   const [openAiGym, setOpenAiGym] = useState(false);
   const can = (key) => permissions?.[key] !== false;
+  const showAiNavigation = AI_FEATURES_ENABLED && can("can_view_ai_training");
 
   return (
     <aside className="sidebar bip-sidebar">
@@ -100,7 +113,7 @@ function Sidebar({ onLogout, permissions }) {
 
         <div className="menu-block nav-section">
           <div className="menu-section">System</div>
-          {can("can_view_ai_training") && (
+          {showAiNavigation && (
             <button className={`link nav-toggle ${openAiGym ? "is-open" : ""}`} onClick={() => setOpenAiGym(v => !v)}>
               <span className="nav-toggle__label">
                 <span className="nav-item__dot" />
@@ -108,7 +121,7 @@ function Sidebar({ onLogout, permissions }) {
               </span>
             </button>
           )}
-          {can("can_view_ai_training") && openAiGym && (
+          {showAiNavigation && openAiGym && (
             <div className="submenu nav-submenu">
               <NavLink to="/ai-training" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
                 <span className="nav-item__dot" />
@@ -179,6 +192,12 @@ function Sidebar({ onLogout, permissions }) {
           <NavLink to="/advanced-analytics" className={({ isActive }) => (isActive ? "nav-item nav-item--audit-quick active" : "nav-item nav-item--audit-quick")}>
             <span className="nav-item__chip" />
             <span className="nav-item__text">Advanced Analytics</span>
+          </NavLink>
+        )}
+        {(can("can_view_logs") || can("can_view_users") || can("can_view_cluster") || can("can_view_business_roles")) && (
+          <NavLink to="/reports" className={({ isActive }) => (isActive ? "nav-item nav-item--reports-quick active" : "nav-item nav-item--reports-quick")}>
+            <span className="nav-item__chip" />
+            <span className="nav-item__text">Reports</span>
           </NavLink>
         )}
         <button className="danger" onClick={onLogout}>Logout</button>
@@ -399,32 +418,11 @@ function Analytics() {
   const animatedClusterPct = pct(animatedView.clusterPct);
   const animatedModelPct = pct(animatedView.modelPct);
   const animatedAiPct = pct(animatedView.aiPct);
-  const kpiItems = [
-    {
-      label: "Cluster Quality",
-      value: animatedClusterPct,
-      target: 100,
-      color: "#75adff",
-      route: "/kpi/cluster-quality",
-      helper: "Coerenza tra utenti e cluster proposti.",
-    },
-    {
-      label: "Model Score",
-      value: animatedModelPct,
-      target: 100,
-      color: "#ff8ea7",
-      route: "/model-quality",
-      helper: "Precisione complessiva del modello.",
-    },
-    {
-      label: "AI Detection",
-      value: animatedAiPct,
-      target: 0,
-      color: "#7effc2",
-      route: "/ai-detection",
-      helper: "Capacita di rilevare anomalie e deviazioni.",
-    },
-  ];
+  const kpiItems = buildAnalyticsKpiItems({
+    clusterPct: animatedClusterPct,
+    modelPct: animatedModelPct,
+    aiPct: animatedAiPct,
+  });
   const routeByLabel = Object.fromEntries(kpiItems.map((item) => [item.label, item.route]));
   const gapFor = (item) => Math.abs((Number(item.target) || 0) - (Number(item.value) || 0));
   const rankedByGap = [...kpiItems].sort((a, b) => gapFor(b) - gapFor(a));
@@ -436,7 +434,10 @@ function Analytics() {
   const railItems = [...rankedByGap];
   const biggestGap = rankedByGap[0];
   const focusItem = biggestGap || kpiItems[0];
-  const overall = animatedView.overall;
+  const overall = kpiItems.length
+    ? Math.round(kpiItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0) / kpiItems.length)
+    : animatedView.overall;
+  const focusActions = getAnalyticsFocusActions(focusItem.route);
   const discoveryResults = connectorCfg?.discovery_results || {};
   const connectorMeta = {
     sap: "SAP",
@@ -519,12 +520,16 @@ function Analytics() {
           <div className="analytics-focus-title">{focusItem.label}</div>
           <div className="analytics-focus-helper">Target operativo: portare il valore verso {focusItem.target}%.</div>
           <div style={{ marginTop: "auto", alignSelf: "flex-start", display: "flex", gap: 10 }}>
-            <button className="analytics-focus-btn" style={{ marginTop: 0 }} onClick={() => navigate(focusItem.route)}>
-              Apri analisi prioritaria
-            </button>
-            <button className="analytics-focus-btn" style={{ marginTop: 0 }} onClick={() => navigate("/role-modeling")}>
-              Role Modeling
-            </button>
+            {focusActions.map((action) => (
+              <button
+                key={action.label}
+                className="analytics-focus-btn"
+                style={{ marginTop: 0 }}
+                onClick={() => navigate(action.route)}
+              >
+                {action.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -2171,6 +2176,7 @@ function Utenti({ permissions }) {
   const [q, setQ] = useState("");
   const [typeQ, setTypeQ] = useState("");
   const [rows, setRows] = useState([]);
+  const [pageRows, setPageRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
@@ -2179,19 +2185,30 @@ function Utenti({ permissions }) {
   const [csvImporting, setCsvImporting] = useState(false);
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
+  const [quickRiskFilter, setQuickRiskFilter] = useState("");
   const csvInputRef = useRef(null);
   const nav = useNavigate();
   const canManageAssignments = permissions?.can_manage_assignments !== false;
+  const summaryRows = useMemo(() => selectUsersSummaryRows(pageRows, rows), [pageRows, rows]);
+  const usersRiskSummary = useMemo(() => buildUsersRiskSummary(summaryRows), [summaryRows]);
+  const visibleRows = useMemo(
+    () => filterUsersByQuickRisk(rows, quickRiskFilter),
+    [rows, quickRiskFilter],
+  );
+  const pagedRows = useMemo(
+    () => visibleRows.slice(offset, offset + limit),
+    [visibleRows, offset, limit],
+  );
+  const visibleTotal = visibleRows.length;
 
 
   async function load(currOffset = 0) {
     try {
       setErr("");
       setOffset(currOffset);
-      setErr("");
-      setOffset(currOffset);
       const res = await api.users(q, limit, currOffset, sortBy, sortOrder, typeQ);
-      setRows(res.items || []);
+      setPageRows(res.items || []);
+      setRows(res.users || res.items || []);
       setTotal(res.total || 0);
     } catch (e) {
       setErr(String(e.message || e));
@@ -2208,7 +2225,7 @@ function Utenti({ permissions }) {
     if (offset - limit >= 0) load(offset - limit);
   }
   function goNext() {
-    if (offset + limit < total) load(offset + limit);
+    if (offset + limit < visibleTotal) load(offset + limit);
   }
 
   function handleSort(col) {
@@ -2220,6 +2237,7 @@ function Utenti({ permissions }) {
     }
   }
   useEffect(() => { if (sortBy) load(0); }, [sortBy, sortOrder]);
+  useEffect(() => { setOffset(0); }, [quickRiskFilter]);
 
   const sortIcon = (col) => sortBy === col ? (sortOrder === "asc" ? " ▲" : " ▼") : "";
 
@@ -2241,10 +2259,44 @@ function Utenti({ permissions }) {
   }
 
   return (
-    <div className="main">
-      <h2 style={{ marginTop: 0 }}>Utenti ({total})</h2>
+    <div className="main users-home">
+      <section className="users-hero panel">
+        <div className="users-hero__copy">
+          <h2 style={{ marginTop: 0, marginBottom: 6 }}>Utenti ({total})</h2>
+          <div className="users-hero__subtitle">
+            KPI e filtri rapidi calcolati sull'intero dataset utenti caricato per
+            la ricerca corrente, non solo sulla pagina visibile.
+          </div>
+        </div>
+        <div className="users-summary">
+          <button
+            type="button"
+            className={`users-summary__card ${quickRiskFilter === "stale" ? "is-active" : ""}`}
+            onClick={() => setQuickRiskFilter((prev) => (prev === "stale" ? "" : "stale"))}
+          >
+            <span>Stale</span>
+            <strong>{usersRiskSummary.staleUsers}</strong>
+          </button>
+          <button
+            type="button"
+            className={`users-summary__card ${quickRiskFilter === "overprivileged" ? "is-active" : ""}`}
+            onClick={() => setQuickRiskFilter((prev) => (prev === "overprivileged" ? "" : "overprivileged"))}
+          >
+            <span>Overprivileged</span>
+            <strong>{usersRiskSummary.overprivilegedUsers}</strong>
+          </button>
+          <button
+            type="button"
+            className={`users-summary__card ${quickRiskFilter === "zero_groups" ? "is-active" : ""}`}
+            onClick={() => setQuickRiskFilter((prev) => (prev === "zero_groups" ? "" : "zero_groups"))}
+          >
+            <span>Zero groups</span>
+            <strong>{usersRiskSummary.zeroGroupsUsers}</strong>
+          </button>
+        </div>
+      </section>
 
-      <div className="panel">
+      <div className="panel users-toolbar">
         <div className="row">
           <input
             type="search"
@@ -2287,7 +2339,9 @@ function Utenti({ permissions }) {
             </svg>
           </button>
         </div>
+      </div>
 
+      <div className="panel users-table-shell">
         <hr className="sep" />
         {!canManageAssignments && (
           <div style={{ color: "var(--muted)", marginBottom: 10 }}>
@@ -2295,7 +2349,29 @@ function Utenti({ permissions }) {
           </div>
         )}
 
-        <table className="table">
+        <div className="users-table-head">
+          <div>
+            <div className="users-table-head__title">Elenco utenti</div>
+            <div className="users-table-head__meta">
+              Lista paginata, ma KPI e quick filter sono allineati al dataset completo filtrato.
+            </div>
+          </div>
+          {quickRiskFilter && (
+            <button
+              type="button"
+              className="users-table-head__pill"
+              onClick={() => setQuickRiskFilter("")}
+            >
+              Filtro rapido attivo:
+              {" "}
+              {quickRiskFilter === "stale" ? "Stale" : quickRiskFilter === "overprivileged" ? "Overprivileged" : "Zero groups"}
+              {" "}
+              • Reset
+            </button>
+          )}
+        </div>
+
+        <table className="table users-table">
           <thead>
             <tr>
               <th style={{ cursor: "pointer" }} onClick={() => handleSort("displayName")}>Display Name{sortIcon("displayName")}</th>
@@ -2305,7 +2381,7 @@ function Utenti({ permissions }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(u => (
+            {pagedRows.map(u => (
               <tr
                 key={u.username}
                 onClick={() => nav(`/utenti/${encodeURIComponent(u.username)}`)}
@@ -2321,15 +2397,24 @@ function Utenti({ permissions }) {
                 <td style={{ color: "var(--muted)", fontSize: 13 }}>{(u.groups || []).length}</td>
               </tr>
             ))}
+            {pagedRows.length === 0 && (
+              <tr>
+                <td colSpan={4}>
+                  <div className="business-roles-empty">
+                    Nessun utente corrisponde ai filtri correnti.
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
 
         <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
           <button disabled={offset === 0} onClick={goPrev}>Prev</button>
           <span style={{ color: "var(--muted)", alignSelf: "center", fontSize: 13 }}>
-            Page {Math.floor(offset / limit) + 1} / {Math.ceil(total / limit) || 1}
+            Page {Math.floor(offset / limit) + 1} / {Math.ceil(visibleTotal / limit) || 1}
           </span>
-          <button disabled={offset + limit >= total} onClick={goNext}>Next</button>
+          <button disabled={offset + limit >= visibleTotal} onClick={goNext}>Next</button>
         </div>
 
         {csvMsg && <div className="ok">{csvMsg}</div>}
@@ -3736,6 +3821,11 @@ function Cluster({ permissions }) {
   const usersInMatrix = rowData.length;
   const groupsInMatrix = mining?.groups?.length || 0;
   const roleLegend = (roleData.roles || []).slice().sort((a, b) => String(a.role || "").localeCompare(String(b.role || "")));
+  const heatmapView = buildClusterHeatmapViewModel({
+    rowColorFilter,
+    roleLegend,
+    isHeatmapCollapsed,
+  });
 
   function onGridSortOrFilterChanged(p) {
     const next = [];
@@ -3752,15 +3842,38 @@ function Cluster({ permissions }) {
 
   return (
     <div className="main cluster-page">
+      <section className="cluster-hero panel">
+        <div className="cluster-hero__copy">
+          <div className="cluster-page__head">
+            <div>
+              <h2 style={{ marginTop: 0, marginBottom: 6 }}>
+                Cluster Intelligence
+                {mining?.isComputing && <span style={{ fontSize: "0.6em", marginLeft: 10, color: "var(--accent)" }}>Computing...</span>}
+              </h2>
+              <div className="cluster-page__subtitle">
+                Matrice utenti-gruppi con codifica colore per Business Role e assegnazioni operative in tempo reale
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="cluster-summary">
+          <div className="cluster-summary__card">
+            <span>Users in matrix</span>
+            <strong>{usersInMatrix}</strong>
+          </div>
+          <div className="cluster-summary__card">
+            <span>Roles</span>
+            <strong>{groupsInMatrix}</strong>
+          </div>
+          <div className="cluster-summary__card">
+            <span>Business roles</span>
+            <strong>{roleCount}</strong>
+          </div>
+        </div>
+      </section>
+
       <div className="cluster-page__head">
         <div>
-          <h2 style={{ marginTop: 0, marginBottom: 6 }}>
-            Cluster Intelligence
-            {mining?.isComputing && <span style={{ fontSize: "0.6em", marginLeft: 10, color: "var(--accent)" }}>Computing...</span>}
-          </h2>
-          <div className="cluster-page__subtitle">
-            Matrice utenti-gruppi con codifica colore per Business Role e assegnazioni operative in tempo reale
-          </div>
         </div>
       </div>
 
@@ -3799,12 +3912,6 @@ function Cluster({ permissions }) {
               +
             </button>
           </div>
-          <div className="cluster-kpis cluster-toolbar__kpis">
-            <div className="cluster-kpi-chip">Users: <b>{usersInMatrix}</b></div>
-            <div className="cluster-kpi-chip">Roles: <b>{groupsInMatrix}</b></div>
-            <div className="cluster-kpi-chip">Business Roles: <b>{roleCount}</b></div>
-          </div>
-
           <button className="primary cluster-toolbar__run" onClick={run} disabled={isRunBusy}>
             {isRunBusy ? "Ricalcolo..." : "Ricalcola modello"}
           </button>
@@ -3823,35 +3930,55 @@ function Cluster({ permissions }) {
       >
         <div className="cluster-legend">
           <div className="cluster-legend__main">
-            <span className="cluster-legend__title">Association Heatmap</span>
-            <div className="cluster-legend__actions">
-              {!isHeatmapCollapsed && (
+            <div className="cluster-legend__intro">
+              <span className="cluster-legend__eyebrow">Heatmap Guide</span>
+              <span className="cluster-legend__title">Association Heatmap</span>
+              <p className="cluster-legend__copy">{heatmapView.helperCopy}</p>
+            </div>
+            <div className="cluster-legend__summary">
+              <div className={`cluster-legend__stat cluster-legend__stat--${heatmapView.activeFilterTone}`}>
+                <span>Active filter</span>
+                <strong>{heatmapView.activeFilterLabel}</strong>
+              </div>
+              <div className="cluster-legend__stat">
+                <span>Role families</span>
+                <strong>{heatmapView.roleFamilyCount}</strong>
+              </div>
+              <div className="cluster-legend__stat">
+                <span>Guide status</span>
+                <strong>{heatmapView.visibilityLabel}</strong>
+              </div>
+            </div>
+            {!isHeatmapCollapsed && (
+              <div className="cluster-legend__actions">
                 <span className="cluster-legend__scale">
                   <span className="cluster-legend__dot cluster-legend__dot--off" /> No Access
                   <span className="cluster-legend__dot cluster-legend__dot--on" /> Access Enabled
                 </span>
-              )}
-              <button
-                type="button"
-                className="ghost cluster-legend__toggle"
-                onClick={() => setIsHeatmapCollapsed((v) => !v)}
-              >
-                {isHeatmapCollapsed ? "Expand" : "Collapse"}
-              </button>
-            </div>
+              </div>
+            )}
+          </div>
+          <div className="cluster-legend__toggle-row">
+            <button
+              type="button"
+              className="ghost cluster-legend__toggle"
+              onClick={() => setIsHeatmapCollapsed((v) => !v)}
+            >
+              {isHeatmapCollapsed ? "Expand" : "Collapse"}
+            </button>
           </div>
           {!isHeatmapCollapsed && (
-            <>
-              <div className="cluster-legend__active">
-                Row filter:
-                <b>{rowColorFilter === "All" ? " All Colors" : ` ${rowColorFilter}`}</b>
+            <div className="cluster-legend__body">
+              <div className={`cluster-legend__active cluster-legend__active--${heatmapView.activeFilterTone}`}>
+                <span className="cluster-legend__active-label">Visible rows</span>
+                <b>{heatmapView.activeFilterLabel}</b>
                 {rowColorFilter !== "All" && (
                   <button className="ghost cluster-legend__clear" onClick={() => setRowColorFilter("All")}>
                     Reset
                   </button>
                 )}
               </div>
-              <div className="cluster-legend__roles">
+              <div className="cluster-legend__roles" aria-label="Role family filters">
                 {roleLegend.map((r) => (
                   <button
                     key={r.role}
@@ -3865,34 +3992,44 @@ function Cluster({ permissions }) {
                   </button>
                 ))}
               </div>
-            </>
+            </div>
           )}
         </div>
 
-        <div className={`cluster-matrix ${matrixDensity.className}`} style={{ flex: "1 1 auto", minHeight: 240, overflow: "auto" }}>
-          <div className="ag-theme-quartz-dark" style={{ height: "100%", width: "100%" }}>
-            <AgGridReact
-              rowData={rowData}
-              columnDefs={columnDefs}
-              onCellClicked={onCellClicked}
-              onCellDoubleClicked={onCellDoubleClicked}
-              onSortChanged={onGridSortOrFilterChanged}
-              onFilterChanged={onGridSortOrFilterChanged}
-              defaultColDef={{
-                resizable: true,
-                sortable: true,
-                filter: true,
-                floatingFilter: false,
-                suppressHeaderMenuButton: true,
-                suppressHeaderFilterButton: true
-              }}
-              animateRows={true}
-              quickFilterText={quick}
-              rowHeight={matrixDensity.rowHeight}
-              headerHeight={matrixDensity.headerHeight}
-              alwaysShowHorizontalScroll={true}
-              alwaysShowVerticalScroll={true}
-            />
+        <div className="cluster-matrix-shell">
+          <div className="cluster-matrix-shell__head">
+            <div>
+              <span className="cluster-matrix-shell__eyebrow">Users x Groups Matrix</span>
+              <strong className="cluster-matrix-shell__title">Scan intersections, then narrow by role family when needed.</strong>
+            </div>
+            <span className="cluster-matrix-shell__hint">Blue cells indicate active access on the selected group.</span>
+          </div>
+
+          <div className={`cluster-matrix ${matrixDensity.className}`} style={{ flex: "1 1 auto", minHeight: 240, overflow: "auto" }}>
+            <div className="ag-theme-quartz-dark" style={{ height: "100%", width: "100%" }}>
+              <AgGridReact
+                rowData={rowData}
+                columnDefs={columnDefs}
+                onCellClicked={onCellClicked}
+                onCellDoubleClicked={onCellDoubleClicked}
+                onSortChanged={onGridSortOrFilterChanged}
+                onFilterChanged={onGridSortOrFilterChanged}
+                defaultColDef={{
+                  resizable: true,
+                  sortable: true,
+                  filter: true,
+                  floatingFilter: false,
+                  suppressHeaderMenuButton: true,
+                  suppressHeaderFilterButton: true
+                }}
+                animateRows={true}
+                quickFilterText={quick}
+                rowHeight={matrixDensity.rowHeight}
+                headerHeight={matrixDensity.headerHeight}
+                alwaysShowHorizontalScroll={true}
+                alwaysShowVerticalScroll={true}
+              />
+            </div>
           </div>
         </div>
 
@@ -3992,6 +4129,12 @@ function SystemUsersPage({ permissions }) {
       keys: ["can_manage_settings", "can_manage_assignments"],
     },
   ];
+  const visiblePermissionGroups = permissionGroups
+    .map((group) => ({
+      ...group,
+      keys: getVisibleSystemPermissionKeys(group.keys),
+    }))
+    .filter((group) => group.keys.length > 0);
 
   const labels = {
     can_view_analytics: "Analytics",
@@ -4406,7 +4549,7 @@ function SystemUsersPage({ permissions }) {
                   Best practice: separare visibilita pagina da permessi operativi.
                 </div>
               </div>
-              {permissionGroups.map((group) => (
+              {visiblePermissionGroups.map((group) => (
                 <div key={group.title} className="system-users-perm-group">
                   <div className="system-users-perm-group__title">{group.title}</div>
                   <div className="system-users-perm-group__hint">{group.hint}</div>
@@ -4510,108 +4653,141 @@ function BusinessRolesHome({ permissions }) {
     })();
   }, []);
 
+  const { filteredRoles, summary } = useMemo(
+    () => buildBusinessRolesViewModel(roles, searchRole),
+    [roles, searchRole],
+  );
+
 
   return (
-    <div className="main">
-      <h2 style={{ marginTop: 0 }}>Business Roles</h2>
+    <div className="main business-roles-home">
+      <section className="business-roles-hero panel">
+        <div className="business-roles-hero__copy">
+          <h2 style={{ marginTop: 0, marginBottom: 6 }}>Business Roles</h2>
+          <div className="business-roles-hero__subtitle">
+            Vista di controllo dei ruoli applicativi con metriche rapide e accesso
+            immediato al dettaglio.
+          </div>
+        </div>
+        <div className="business-roles-summary">
+          <div className="business-roles-summary__card">
+            <span>Ruoli totali</span>
+            <strong>{summary.totalRoles}</strong>
+          </div>
+          <div className="business-roles-summary__card">
+            <span>Assegnazioni utenti</span>
+            <strong>{summary.totalAssignments}</strong>
+          </div>
+          <div className="business-roles-summary__card">
+            <span>Media gruppi</span>
+            <strong>{summary.avgGroupsPerRole}</strong>
+          </div>
+        </div>
+      </section>
 
-      <div className="panel">
-        <div className="row">
+      <div className="panel business-roles-toolbar">
+        <div className="business-roles-toolbar__search">
+          <div className="business-roles-toolbar__label">Ricerca</div>
           <input
-            style={{ width: 190 }}
+            className="business-roles-toolbar__input"
             value={searchRole}
             onChange={(e) => setSearchRole(e.target.value)}
-            placeholder="Cerca..."
+            placeholder="Filtra per nome ruolo..."
           />
-          <input
-            style={{ width: 260 }}
-            value={newRole}
-            onChange={(e) => setNewRole(e.target.value)}
-            placeholder="Nuovo ruolo (es. Finance)"
-          />
-          <button
-            className="primary"
-            onClick={async () => {
-              try {
-                setErr(""); setOk("");
-                await api.businessRoleCreate(newRole);
-                setNewRole("");
-                setOk("Ruolo creato.");
-                await refreshRoles();
-              } catch (e) {
-                setErr(String(e.message || e));
-              }
-            }}
-            disabled={!canManageAssignments}
-          >
-            + Crea
-          </button>
-          <button
-            className="primary"
-            onClick={async () => {
-              try {
-                setErr(""); setOk("");
-                setRecalcBusy(true);
-                const res = await api.businessRolesRecalculateGroups();
-                setOk(`Assegnazioni gruppi ricalcolate (${res.groupsAssigned} gruppi).`);
-                await refreshRoles();
-              } catch (e) {
-                setErr(String(e.message || e));
-              } finally {
-                setRecalcBusy(false);
-              }
-            }}
-            disabled={recalcBusy || !canManageAssignments}
-          >
-            {recalcBusy ? "Ricalcolo..." : "Ricalcola Gruppi"}
-          </button>
-          <input
-            ref={csvInputRef}
-            type="file"
-            accept=".csv"
-            style={{ display: "none" }}
-            onChange={async (e) => {
-              const file = e.target.files?.[0] || null;
-              if (!file) return;
-              try {
-                setErr("");
-                setImportMsg("");
-                setCsvImporting(true);
-                await importBusinessRolesCsv(file);
-                setImportMsg("Import CSV completato.");
-                await refreshRoles();
-              } catch (e2) {
-                setErr(String(e2?.message || e2));
-              } finally {
-                setCsvImporting(false);
-                if (csvInputRef.current) csvInputRef.current.value = "";
-              }
-            }}
-          />
-          <button
-            className="primary"
-            title="Import CSV"
-            aria-label="Import CSV"
-            onClick={() => csvInputRef.current?.click()}
-            disabled={csvImporting || !canManageAssignments}
-            style={{ width: 42, height: 42, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+        </div>
+
+        <div className="business-roles-toolbar__actions">
+          <div className="business-roles-toolbar__label">Azioni</div>
+          <div className="business-roles-toolbar__action-row">
+            <input
+              className="business-roles-toolbar__input business-roles-toolbar__input--create"
+              value={newRole}
+              onChange={(e) => setNewRole(e.target.value)}
+              placeholder="Nuovo ruolo (es. Finance)"
+            />
+            <button
+              className="primary"
+              onClick={async () => {
+                try {
+                  setErr(""); setOk("");
+                  await api.businessRoleCreate(newRole);
+                  setNewRole("");
+                  setOk("Ruolo creato.");
+                  await refreshRoles();
+                } catch (e) {
+                  setErr(String(e.message || e));
+                }
+              }}
+              disabled={!canManageAssignments}
             >
-              <path d="M12 3v11" />
-              <path d="m7 10 5 5 5-5" />
-              <path d="M4 21h16" />
-            </svg>
-          </button>
+              + Crea
+            </button>
+            <button
+              className="primary"
+              onClick={async () => {
+                try {
+                  setErr(""); setOk("");
+                  setRecalcBusy(true);
+                  const res = await api.businessRolesRecalculateGroups();
+                  setOk(`Assegnazioni gruppi ricalcolate (${res.groupsAssigned} gruppi).`);
+                  await refreshRoles();
+                } catch (e) {
+                  setErr(String(e.message || e));
+                } finally {
+                  setRecalcBusy(false);
+                }
+              }}
+              disabled={recalcBusy || !canManageAssignments}
+            >
+              {recalcBusy ? "Ricalcolo..." : "Ricalcola gruppi"}
+            </button>
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv"
+              style={{ display: "none" }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0] || null;
+                if (!file) return;
+                try {
+                  setErr("");
+                  setImportMsg("");
+                  setCsvImporting(true);
+                  await importBusinessRolesCsv(file);
+                  setImportMsg("Import CSV completato.");
+                  await refreshRoles();
+                } catch (e2) {
+                  setErr(String(e2?.message || e2));
+                } finally {
+                  setCsvImporting(false);
+                  if (csvInputRef.current) csvInputRef.current.value = "";
+                }
+              }}
+            />
+            <button
+              className="primary business-roles-toolbar__import"
+              title="Import CSV"
+              aria-label="Import CSV"
+              onClick={() => csvInputRef.current?.click()}
+              disabled={csvImporting || !canManageAssignments}
+            >
+              {csvImporting ? "Import..." : "Import CSV"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel business-roles-table-shell">
+        <div className="business-roles-table-head">
+          <div>
+            <div className="business-roles-table-head__title">Catalogo ruoli</div>
+            <div className="business-roles-table-head__meta">
+              {filteredRoles.length} risultati visibili su {summary.totalRoles}
+            </div>
+          </div>
+          <div className="business-roles-table-head__pill">
+            Naviga nel dettaglio per utenti e gruppi associati
+          </div>
         </div>
 
         {ok && <div className="ok">{ok}</div>}
@@ -4625,19 +4801,18 @@ function BusinessRolesHome({ permissions }) {
 
         <hr className="sep" />
 
-        <table className="table">
-          <thead><tr><th>Business Role</th><th>Users</th><th>Ruoli</th></tr></thead>
+        <table className="table business-roles-table">
+          <thead><tr><th>Business role</th><th>Users</th><th>Gruppi</th></tr></thead>
           <tbody>
-            {roles
-              .filter((r) => String(r?.role || "").toLowerCase().includes(searchRole.trim().toLowerCase()))
-              .map(r => (
+            {filteredRoles.map(r => (
                 <tr key={r.role}>
                   <td>
                     <NavLink
                       to={`/business-roles/${encodeURIComponent(r.role)}`}
-                      className="roleRowLink"
+                      className="roleRowLink roleRowLink--business"
                     >
-                      {r.role}
+                      <span className="roleRowLink__title">{r.role}</span>
+                      <span className="roleRowLink__subtitle">Apri dettaglio ruolo</span>
                     </NavLink>
                   </td>
                   <td>
@@ -4658,6 +4833,15 @@ function BusinessRolesHome({ permissions }) {
                   </td>
                 </tr>
               ))}
+            {filteredRoles.length === 0 && (
+              <tr>
+                <td colSpan={3}>
+                  <div className="business-roles-empty">
+                    Nessun Business Role corrisponde al filtro corrente.
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
 
         </table>
@@ -4685,6 +4869,7 @@ function BusinessRoleDetail({ permissions }) {
   const [suggLoading, setSuggLoading] = useState(false);
   const [autoApplied, setAutoApplied] = useState(false); // evita loop infinito
   const canManageAssignments = permissions?.can_manage_assignments !== false;
+  const { showAiSuggestions } = getVisibleBusinessRoleSections();
 
 
   const selectStyles = {
@@ -4763,36 +4948,43 @@ function BusinessRoleDetail({ permissions }) {
         api.businessRoleMeta(role),
         api.adGroups(),
       ]);
-      setMeta({ color: m.color, groups: m.groups }),
+      setMeta({ color: m.color, groups: m.groups });
 
-        setSuggErr("");
-      setSuggLoading(true);
       let items = [];
-      try {
-        const s = await api.businessRoleSuggestions(role, 0.50, 50);
-        items = s.items || [];
-        setSuggestions(items);
-      } catch (e3) {
-        setSuggestions([]);
-        setSuggErr(String(e3?.message || e3));
-      } finally {
-        setSuggLoading(false);
-      }
-
-      if (!autoApplied) {
+      if (showAiSuggestions) {
+        setSuggErr("");
+        setSuggLoading(true);
         try {
-          const out = await autoApplyHighConfidence(role, items, m.groups || []);
-          if (out.applied > 0) {
-            setOk(`Auto-assegnati ${out.applied} gruppi (confidence ≥ 80%).`);
-            setAutoApplied(true);
-            await load(); // ricarica meta + suggestions aggiornate
-            return;
-          }
-        } catch (e4) {
-          setErr(String(e4?.message || e4));
+          const s = await api.businessRoleSuggestions(role, 0.50, 50);
+          items = s.items || [];
+          setSuggestions(items);
+        } catch (e3) {
+          setSuggestions([]);
+          setSuggErr(String(e3?.message || e3));
         } finally {
-          setAutoApplied(true);
+          setSuggLoading(false);
         }
+
+        if (!autoApplied) {
+          try {
+            const out = await autoApplyHighConfidence(role, items, m.groups || []);
+            if (out.applied > 0) {
+              setOk(`Auto-assegnati ${out.applied} gruppi (confidence ≥ 80%).`);
+              setAutoApplied(true);
+              await load();
+              return;
+            }
+          } catch (e4) {
+            setErr(String(e4?.message || e4));
+          } finally {
+            setAutoApplied(true);
+          }
+        }
+      } else {
+        setSuggestions([]);
+        setSuggErr("");
+        setSuggLoading(false);
+        setAutoApplied(true);
       }
 
       setDetail(d);
@@ -4989,61 +5181,63 @@ function BusinessRoleDetail({ permissions }) {
           </tbody>
         </table>
 
-        <hr className="sep" />
+        {showAiSuggestions && (
+          <>
+            <hr className="sep" />
 
-        <h3 style={{ marginTop: 0 }}>AI Suggestion (confidence &gt; 50%)</h3>
+            <h3 style={{ marginTop: 0 }}>AI Suggestion (confidence &gt; 50%)</h3>
 
-        {suggLoading && <div style={{ color: "var(--muted)" }}>Caricamento suggestions…</div>}
-        {suggErr && <div className="err">{suggErr}</div>}
+            {suggLoading && <div style={{ color: "var(--muted)" }}>Caricamento suggestions…</div>}
+            {suggErr && <div className="err">{suggErr}</div>}
 
-        {!suggLoading && !suggErr && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Group</th>
-                <th style={{ width: 140 }}>Confidence</th>
-                <th style={{ width: 140 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(suggestions || [])
-                // safety: se per qualche motivo arriva un gruppo già assegnato, non mostrarlo
-                .filter(x => !(meta.groups || []).includes(x.group))
-                .map((x) => (
-                  <tr key={x.group}>
-                    <td>{x.group}</td>
-                    <td style={{ color: "var(--muted)" }}>
-                      {Math.round((Number(x.confidence || 0) * 100))}%
-                    </td>
-                    <td>
-                      <button
-                        className="primary"
-                        onClick={async () => {
-                          try {
-                            setErr(""); setOk("");
-                            // riusa il tuo endpoint standard di add group
-                            await api.businessRoleAddGroup(role, x.group);
-                            setOk("Gruppo assegnato dal suggerimento.");
-                            await load();
-                          } catch (e2) {
-                            setErr(String(e2.message || e2));
-                          }
-                        }}
-                        disabled={!canManageAssignments}
-                      >
-                        Select
-                      </button>
-                    </td>
+            {!suggLoading && !suggErr && (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Group</th>
+                    <th style={{ width: 140 }}>Confidence</th>
+                    <th style={{ width: 140 }}></th>
                   </tr>
-                ))}
-            </tbody>
-          </table>
-        )}
+                </thead>
+                <tbody>
+                  {(suggestions || [])
+                    .filter(x => !(meta.groups || []).includes(x.group))
+                    .map((x) => (
+                      <tr key={x.group}>
+                        <td>{x.group}</td>
+                        <td style={{ color: "var(--muted)" }}>
+                          {Math.round((Number(x.confidence || 0) * 100))}%
+                        </td>
+                        <td>
+                          <button
+                            className="primary"
+                            onClick={async () => {
+                              try {
+                                setErr(""); setOk("");
+                                await api.businessRoleAddGroup(role, x.group);
+                                setOk("Gruppo assegnato dal suggerimento.");
+                                await load();
+                              } catch (e2) {
+                                setErr(String(e2.message || e2));
+                              }
+                            }}
+                            disabled={!canManageAssignments}
+                          >
+                            Select
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
 
-        {!suggLoading && !suggErr && (suggestions || []).length === 0 && (
-          <div style={{ color: "var(--muted)" }}>
-            Nessun gruppo suggerito sopra soglia 50%.
-          </div>
+            {!suggLoading && !suggErr && (suggestions || []).length === 0 && (
+              <div style={{ color: "var(--muted)" }}>
+                Nessun gruppo suggerito sopra soglia 50%.
+              </div>
+            )}
+          </>
         )}
 
         <hr className="sep" />
@@ -5162,14 +5356,16 @@ export default function App() {
                 </PermissionGate>
               }
             />
-            <Route
-              path="/role-modeling"
-              element={
-                <PermissionGate allow={permissions.can_view_cluster} title="Role Modeling non disponibile">
-                  <RoleModelingSandboxPage />
-                </PermissionGate>
-              }
-            />
+            {isRoleModelingRouteEnabled() && (
+              <Route
+                path="/role-modeling"
+                element={
+                  <PermissionGate allow={permissions.can_view_cluster} title="Role Modeling non disponibile">
+                    <RoleModelingSandboxPage />
+                  </PermissionGate>
+                }
+              />
+            )}
             <Route
               path="/utenti"
               element={
@@ -5187,6 +5383,17 @@ export default function App() {
               }
             />
             <Route path="/utenti/advanced-analytics" element={<Navigate to="/advanced-analytics" replace />} />
+            <Route
+              path="/reports"
+              element={
+                <PermissionGate
+                  allow={permissions.can_view_users || permissions.can_view_business_roles || permissions.can_view_cluster || permissions.can_view_logs}
+                  title="Reports non disponibili"
+                >
+                  <ReportsPage />
+                </PermissionGate>
+              }
+            />
             <Route
               path="/utenti/:username"
               element={
@@ -5250,7 +5457,7 @@ export default function App() {
             <Route
               path="/ai-detection"
               element={
-                <PermissionGate allow={permissions.can_view_ai_training} title="AI Detection non disponibile">
+                <PermissionGate allow={permissions.can_view_analytics} title="Automatic Detection non disponibile">
                   <AiDetectionPage />
                 </PermissionGate>
               }

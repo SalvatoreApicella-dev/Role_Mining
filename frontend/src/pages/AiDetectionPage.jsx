@@ -81,7 +81,7 @@ export default function AiDetectionPage() {
   return (
     <div className="main">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 24 }}>
-        <h2 style={{ margin: 0 }}>AI Detection <span style={{ color: "var(--muted)", fontSize: 13, marginLeft: 10, fontWeight: 400 }}>Smart Anomaly Analysis</span></h2>
+        <h2 style={{ margin: 0 }}>Automatic Detection <span style={{ color: "var(--muted)", fontSize: 13, marginLeft: 10, fontWeight: 400 }}>Smart Anomaly Analysis</span></h2>
         {ts && (
           <span style={{ color: "var(--muted)", fontSize: 13 }}>
             Ultimo aggiornamento: {new Date(ts).toLocaleString()}
