@@ -174,12 +174,23 @@ run_semgrep() {
 }
 
 run_sbom() {
-  if ! ensure_cmd syft; then
+  local syft_bin=""
+  if [[ -x "/usr/local/bin/syft" ]]; then
+    syft_bin="/usr/local/bin/syft"
+  elif command -v syft >/dev/null 2>&1; then
+    syft_bin="$(command -v syft)"
+  fi
+
+  if [[ -z "${syft_bin}" ]]; then
+    if [[ "${STRICT_MODE}" == "1" ]]; then
+      die "Comando richiesto non trovato: syft"
+    fi
+    warn "Comando non trovato (skip in modalita non strict): syft"
     return 0
   fi
 
   log "SBOM generation (syft)"
-  syft dir:"${ROOT_DIR}" -o cyclonedx-json > "${REPORT_DIR}/sbom.cdx.json"
+  "${syft_bin}" dir:"${ROOT_DIR}" -o cyclonedx-json > "${REPORT_DIR}/sbom.cdx.json"
 }
 
 evaluate_reports() {
