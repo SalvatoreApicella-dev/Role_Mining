@@ -48,6 +48,11 @@ The login flow requires three values:
 2. username
 3. password
 
+The login screen also exposes a **Registra Dominio** secondary action. This
+opens a small registration form that collects a domain name and a `LicenseCode`
+before the user logs in. Successful registration initializes a new tenant store
+and pre-fills the login domain field.
+
 After login, the frontend calls `/api/me` to resolve the current user profile,
 permissions, and tenant identity. The sidebar and route guards then derive
 visibility from the permission flags returned by the backend.
@@ -61,6 +66,9 @@ Important UI characteristics:
   paths disabled by default.
 - The frontend already understands tenant-aware login because it sends the
   user-entered domain to `/api/auth/login`.
+- The connector page includes a CSV card action that generates a local CSV
+  import template from the browser. The template is client-side only and does
+  not call the backend.
 
 ## Backend architecture
 The backend public entrypoint is `backend/main.py`, but the actual
@@ -114,10 +122,27 @@ The mapping source is:
 - built-in domain mappings such as `example.internal -> example.internal`
   and `bip.internal -> bip`
 - optional environment override through `TENANT_DOMAIN_MAP`
+- existing tenant storage folders returned by `list_known_tenant_ids()`
 
 If the domain is missing, the backend rejects the request. If the domain is not
 mapped, the backend returns "Domain not authorized." This means a tenant is not
 just a UI concept; it is an authorization boundary and a persistence boundary.
+
+### Tenant registration
+Tenant registration is implemented by `/api/auth/register-domain` in
+`backend/app/server.py`. The endpoint is public because it runs before login,
+but it is gated by a fixed `LicenseCode` check. If the code is invalid, the API
+returns the error message "Codice Licenza non valido."
+
+When the code is valid, the backend normalizes the submitted domain, derives
+the tenant ID from that normalized domain, enters the corresponding tenant
+context, initializes the tenant store, and ensures default local system users
+exist. The response returns the created `tenant_id` and `tenant_domain`.
+
+Registered tenants become login-addressable because `_tenant_domain_map()` also
+adds known tenant IDs from storage. This means a newly created tenant can be
+used immediately as a login domain without requiring a process restart or a
+manual `TENANT_DOMAIN_MAP` update.
 
 ### Request lifetime and tenant context
 The middleware `tenant_context_middleware()` binds the tenant context for the
@@ -209,6 +234,19 @@ The general ingestion sequence is:
 This is important because the ML and clustering layers do not read directly
 from external systems. They read from the normalized tenant snapshot already
 stored in application state.
+
+### CSV import contract
+CSV import is handled by `/api/import/csv` in `backend/app/server.py`. The
+parser expects semicolon-separated files and requires at least the
+`DisplayName` header. It accepts multiple aliases for common fields, including
+`Username`, `Department`, `BusinessRole`, `Roles`, `Groups`, `Email`, `UPN`,
+`EmployeeId`, `Manager`, `StatusAd`, and `StatusHr`.
+
+The frontend exposes this contract through the CSV connector card. After the
+card is flipped, **Scarica Template** generates
+`role-mining-csv-template.csv` in the browser with the expected semicolon
+delimiter, the supported primary headers, and sample rows. This action is
+implemented in `frontend/src/app.jsx` and does not persist data by itself.
 
 ## Role mining pipeline
 Role mining is not implemented in `ml_engine.py`. It is implemented directly in
@@ -367,7 +405,8 @@ architecture.
 - `backend/ml_engine.py`: account classification and BRDB learning
 - `backend/app/api/ai_lab_routes.py`: AI lab analytics and simulated workflows
 - `backend/app/api/pattern_rules_routes.py`: pattern-rule configuration APIs
-- `frontend/src/app.jsx`: router, login, permissions, and admin UI
+- `frontend/src/app.jsx`: router, login, tenant registration, connector UI,
+  permissions, and admin UI
 - `frontend/src/api.js`: REST client and token handling
 - `frontend/src/featureFlags.js`: frontend exposure gates
 
@@ -387,6 +426,9 @@ The current design also has structural limits that matter for future work.
 - `backend/app/server.py` concentrates too many responsibilities.
 - File-based tenant storage is simple but weak for concurrency, auditability,
   and horizontal scale.
+- Domain registration currently uses a fixed license-code constant in backend
+  code. That is acceptable for a controlled local/demo flow, but it is not a
+  production license-management architecture.
 - ML artifacts are global, so they are not strictly isolated per tenant.
 - Several AI-facing features are simulations or synthetic tooling, which can be
   mistaken for production ML unless documented clearly.
