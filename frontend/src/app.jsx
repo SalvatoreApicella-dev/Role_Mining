@@ -214,6 +214,12 @@ function Login() {
   const [password, setPassword] = useState("admin123");
   const [domain, setDomain] = useState("");
   const [err, setErr] = useState("");
+  const [mode, setMode] = useState("login");
+  const [registerDomain, setRegisterDomain] = useState("");
+  const [licenseCode, setLicenseCode] = useState("");
+  const [registering, setRegistering] = useState(false);
+  const [registerMessage, setRegisterMessage] = useState("");
+  const [licensePopup, setLicensePopup] = useState("");
 
   async function doLogin(e) {
     e.preventDefault();
@@ -232,32 +238,130 @@ function Login() {
     }
   }
 
+  async function doRegisterDomain(e) {
+    e.preventDefault();
+    setErr("");
+    setRegisterMessage("");
+    setLicensePopup("");
+    const normalizedDomain = String(registerDomain || "").trim().toLowerCase();
+    if (!normalizedDomain) {
+      setErr("Inserisci il nome del dominio");
+      return;
+    }
+    setRegistering(true);
+    try {
+      const res = await api.registerDomain(normalizedDomain, licenseCode);
+      const createdDomain = res.tenant_domain || normalizedDomain;
+      setDomain(createdDomain);
+      setRegisterDomain("");
+      setLicenseCode("");
+      setMode("login");
+      setRegisterMessage(`Dominio ${createdDomain} registrato. Puoi accedere con le credenziali del tenant.`);
+    } catch (e2) {
+      const message = String(e2.message || e2);
+      if (message === "Codice Licenza non valido") {
+        setLicensePopup("Codice Licenza non valido");
+      } else {
+        setErr(message);
+      }
+    } finally {
+      setRegistering(false);
+    }
+  }
+
   return (
-    <div className="main" style={{ display: "grid", placeItems: "center", height: "100vh" }}>
-      <div className="panel" style={{ width: 420 }}>
+    <div className="login-shell">
+      <div className="panel login-panel">
         <img
           src="/BIP-Thumbnail-RED-on-BLUE.png"
           alt="Logo"
-          style={{ width: 320, margin: "0 auto 14px", display: "block" }}
+          className="login-logo"
         />
 
-        <h2 style={{ marginTop: 0 }}>Login</h2>
-        <p style={{ color: "var(--muted)", marginTop: -6 }}>
-          Inserisci dominio cliente + credenziali. Tenant attuale: example.internal
-        </p>
-        <form onSubmit={doLogin} className="row" style={{ flexDirection: "column", alignItems: "stretch" }}>
-          <input
-            value={domain}
-            onChange={e => setDomain(e.target.value)}
-            placeholder="Dominio cliente (es: example.internal)"
-            aria-label="Dominio cliente"
-          />
-          <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" aria-label="Username" />
-          <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" type="password" aria-label="Password" />
-          <button className="primary" type="submit">Entra</button>
-          {err && <div className="err">{err}</div>}
-        </form>
+        {mode === "login" ? (
+          <>
+            <h2 className="login-title">Login</h2>
+            <p className="login-copy">
+              Inserisci dominio cliente + credenziali. Tenant attuale: example.internal
+            </p>
+            <form onSubmit={doLogin} className="login-form">
+              <input
+                value={domain}
+                onChange={e => setDomain(e.target.value)}
+                placeholder="Dominio cliente (es: example.internal)"
+                aria-label="Dominio cliente"
+              />
+              <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" aria-label="Username" />
+              <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" type="password" aria-label="Password" />
+              <button className="primary" type="submit">Entra</button>
+              {err && <div className="err">{err}</div>}
+              {registerMessage && <div className="ok">{registerMessage}</div>}
+            </form>
+            <button
+              className="login-register-link"
+              type="button"
+              onClick={() => {
+                setErr("");
+                setRegisterMessage("");
+                setMode("register");
+              }}
+            >
+              Registra Dominio
+            </button>
+          </>
+        ) : (
+          <>
+            <h2 className="login-title">Registra Dominio</h2>
+            <p className="login-copy">
+              Crea un nuovo tenant inserendo dominio cliente e LicenseCode.
+            </p>
+            <form onSubmit={doRegisterDomain} className="login-form">
+              <input
+                value={registerDomain}
+                onChange={e => setRegisterDomain(e.target.value)}
+                placeholder="Nome dominio"
+                aria-label="Nome dominio"
+              />
+              <input
+                value={licenseCode}
+                onChange={e => setLicenseCode(e.target.value)}
+                placeholder="LicenseCode"
+                type="password"
+                aria-label="LicenseCode"
+              />
+              <button className="primary" type="submit" disabled={registering}>
+                {registering ? "Registrazione..." : "Crea Tenant"}
+              </button>
+              {err && <div className="err">{err}</div>}
+            </form>
+            <button
+              className="login-register-link"
+              type="button"
+              onClick={() => {
+                setErr("");
+                setLicensePopup("");
+                setMode("login");
+              }}
+            >
+              Torna al Login
+            </button>
+          </>
+        )}
       </div>
+      {licensePopup && (
+        <div className="license-popup-backdrop" role="presentation" onClick={() => setLicensePopup("")}>
+          <div
+            className="license-popup"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="license-popup-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div id="license-popup-title" className="license-popup__title">Codice Licenza non valido</div>
+            <button className="primary" type="button" onClick={() => setLicensePopup("")}>OK</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

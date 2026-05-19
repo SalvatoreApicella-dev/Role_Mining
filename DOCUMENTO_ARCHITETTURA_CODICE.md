@@ -1,173 +1,406 @@
-# Documento Architetturale del Codice
+# Code architecture document
 
-## 1. Scopo e perimetro
-Questo documento descrive l'architettura **implementata nel codice** del progetto `Role_Mining`, con focus su:
-- componenti runtime (frontend, backend, storage locale, engine ML);
-- flussi applicativi principali;
-- modello dati persistito;
-- endpoint API e responsabilita';
-- criticita' tecniche osservate.
+## Scope
+This document describes the architecture implemented in the `Role_Mining`
+repository as of May 19, 2026. It focuses on the parts that matter most for
+understanding the product logic today: tenant isolation, authentication, local
+state persistence, role mining, and the machine learning components that are
+actually operational in the codebase.
 
-Il documento riflette lo stato del repository al **11 Febbraio 2026**.
+The goal is to document the real runtime behavior, not an aspirational target
+architecture.
 
-## 2. Panorama architetturale
-Il sistema e' una web app full-stack con backend `FastAPI` e frontend `React/Vite`.
-La persistenza e' file-based (JSON locale), con stato applicativo centralizzato in `backend/data/storage.json`.
+## System overview
+The application is a full-stack web product with a React/Vite frontend and a
+FastAPI backend. The backend is a single deployable runtime that owns API
+endpoints, tenant resolution, state persistence, data ingestion, clustering,
+business role management, and ML-related services.
+
+At runtime, the browser talks only to the backend over REST. The backend then
+reads and writes two local persistence layers:
+
+- tenant-scoped business state in
+  `backend/data/tenants/<tenant-id>/storage.json`
+- global ML artifacts in `backend/ml_data/*`
 
 ```mermaid
 flowchart LR
-    U[Utente Browser] --> F[Frontend React/Vite]
-    F -->|Bearer JWT + REST| B[Backend FastAPI]
-    B --> S[(JsonFileStore\nbackend/data/storage.json)]
-    B --> M[ML Engine\nscikit-learn + regole]
-    B --> L[LDAP/AD Connector\nldap3]
-    M --> D[(backend/ml_data/*.pkl,*.json)]
+    B["Browser"] --> F["React / Vite frontend"]
+    F -->|JWT + REST| A["FastAPI backend"]
+    A --> T["Tenant store proxy"]
+    T --> S1["data/tenants/example.internal/storage.json"]
+    T --> S2["data/tenants/bip/storage.json"]
+    T --> S3["data/tenants/sky/storage.json"]
+    A --> M["ML engine + clustering"]
+    M --> G["ml_data/*.pkl + *.json"]
+    A --> C["LDAP / CSV / connector ingestion"]
 ```
 
-## 3. Componenti principali
+## Frontend architecture
+The frontend is a single-page application rooted in
+`frontend/src/app.jsx`. It owns routing, session bootstrapping, permission
+gating, and page composition. The API client lives in
+`frontend/src/api.js` and stores the JWT in `localStorage` under `rm_token`.
 
-### 3.1 Frontend (`frontend/src`)
-- SPA React con routing via `react-router-dom`.
-- Entry point: `frontend/src/main.jsx`.
-- Shell applicativa e pagine principali in `frontend/src/app.jsx` + pagine lazy in `frontend/src/pages/*`.
-- Client API centralizzato in `frontend/src/api.js` con gestione token JWT in `localStorage` (`rm_token`).
-- Librerie UI/visualizzazione:
-  - `ag-grid-react` per tabelle;
-  - `react-plotly.js` per KPI/chart.
+The login flow requires three values:
 
-### 3.2 Backend API (`backend/main.py`)
-- Monolite FastAPI con responsabilita' multiple:
-  - autenticazione JWT;
-  - estrazione AD/LDAP e ingest CSV/XLSX;
-  - role mining (clustering);
-  - KPI e drilldown;
-  - gestione business role;
-  - servizi ML/BRDB e pattern rules.
-- Middleware:
-  - CORS aperto (include `*`);
-  - GZip per payload > 1000 byte.
-- Cache in-memory TTL (`ResponseCache`) per endpoint ad alta frequenza.
+1. tenant domain
+2. username
+3. password
 
-### 3.3 Storage applicativo (`backend/app/db/storage.py`)
-- `JsonFileStore` thread-safe con `RLock`.
-- Persistenza completa dello stato applicativo in JSON.
-- Inizializzazione stato di default con chiavi operative (`last_extract`, `last_mining`, `role_meta`, `user_business_role`, ecc.).
+After login, the frontend calls `/api/me` to resolve the current user profile,
+permissions, and tenant identity. The sidebar and route guards then derive
+visibility from the permission flags returned by the backend.
 
-### 3.4 ML Engine (`backend/ml_engine.py`)
-- Classificazione tipo account (ML + fallback rule-based).
-- BRDB (Business Role Database) per inferenza ruolo da gruppi.
-- Persistenza modelli e storico in `backend/ml_data/`:
-  - `account_classifier.pkl`
-  - `training_history.json`
-  - `pattern_rules.json`
-  - `brdb_state.json`
+Important UI characteristics:
 
-## 4. Flussi applicativi principali
+- System user administration is implemented directly in
+  `frontend/src/app.jsx`.
+- Role modeling and most AI lab surfaces exist in the code, but the frontend
+  feature flags in `frontend/src/featureFlags.js` keep major AI navigation
+  paths disabled by default.
+- The frontend already understands tenant-aware login because it sends the
+  user-entered domain to `/api/auth/login`.
 
-### 4.1 Autenticazione
-1. `POST /api/auth/login` valida credenziali (`APP_LOGIN_USER/PASS`).
-2. Backend emette JWT HS256.
-3. Frontend salva token in `localStorage`.
-4. Endpoint protetti usano `Depends(require_auth)`.
+## Backend architecture
+The backend public entrypoint is `backend/main.py`, but the actual
+implementation lives in `backend/app/server.py`. The server is still a large
+monolithic FastAPI module, even though some AI lab and pattern rule routes have
+been extracted into `backend/app/api/ai_lab_routes.py` and
+`backend/app/api/pattern_rules_routes.py`.
 
-### 4.2 Ingest da AD/LDAP
-1. Configurazione connettore (`/api/config/connector`).
-2. `POST /api/ad/extract`:
-   - connessione LDAP;
-   - mapping utenti+gruppi;
-   - deduplica e merge con stato esistente;
-   - auto-assegnazione business role;
-   - rebuild candidati ingest e risoluzione duplicati.
-3. Stato aggiornato in `last_extract`; mining marcato `dirty`.
+The backend runtime owns these responsibilities:
 
-### 4.3 Ingest CSV/XLSX
-- `POST /api/import/csv`: parser header flessibile, merge per `displayName/username`, riallineamento BR.
-- `POST /api/import/xlsx`: import semplificato da colonne obbligatorie.
-- In entrambi i casi: aggiornamento stato + invalidazione logica del mining.
+- request-scoped tenant binding
+- JWT authentication and authorization
+- tenant-local system users
+- connector configuration and ingestion
+- user and business-role management
+- role mining and KPI computation
+- ML model loading, learning, and suggestion serving
+- AI lab analytics and synthetic workflows
 
-### 4.4 Role Mining
-1. Trigger: `POST /api/rolemining/run`.
-2. Esecuzione worker (background):
-   - costruzione matrice utente-gruppo;
-   - riduzione dimensionale `TruncatedSVD`;
-   - clustering `MiniBatchKMeans`;
-   - costruzione cluster (`members`, `roleGroups`, `purity`);
-   - calcolo KPI.
-3. Persistenza risultato in `last_mining`.
+This makes `backend/app/server.py` the operational center of the system.
 
-### 4.5 KPI e Drilldown
-- `GET /api/kpi`: ritorna metriche aggregate (cluster quality, model quality, AI detection, role coverage).
-- `GET /api/kpi/drilldown/{metric}`: dettaglio per metrica (`cluster-quality`, `model-quality`, `ai-detection`, `overprivileged`).
-- `POST /api/ai-detection/run`: analisi anomalie smart (peer/dept/policy).
+## Tenant and instance model
+The current codebase is no longer single-tenant. Tenant isolation is
+implemented in `backend/app/db/storage.py` through a `TenantStoreProxy` layered
+over a `JsonFileStore`.
 
-## 5. Modello dati (stato persistito)
-Chiavi principali in `storage.json`:
-- `connector`: configurazione LDAP/mock;
-- `last_extract`: snapshot utenti/gruppi sorgente;
-- `last_mining`: output clustering + KPI + matrice;
-- `role_meta`: metadati business role (colore, gruppi template);
-- `business_roles`: insieme ruoli noti;
-- `user_business_role`: mapping utente -> business role;
-- `last_ingest_stats`, `last_rejects`: qualita' ingest;
-- `ingest_sources`, `ingest_candidates`, `choice_by_displayName`: gestione conflitti ingest;
-- `brdb_*`, `last_ai_detection`: stato inferenza BR e AI detection.
+The active tenant is selected through a context variable and resolved at two
+levels:
 
-## 6. API surface (macro-domini)
-- Auth: `/api/auth/*`, `/api/me`.
-- Connector & ingest: `/api/config/connector`, `/api/ad/extract`, `/api/import/*`, `/api/ingest/conflicts/*`.
-- Users: `/api/users*`, `/api/users/{uname}/update`, `/api/users/{uname}/peer-analysis`.
-- Role mining & KPI: `/api/rolemining/*`, `/api/kpi*`, `/api/drilldown/overprivileged`.
-- Business roles: `/api/businessroles*`.
-- ML/BRDB: `/api/ml/*`, `/api/brdb/status`, `/api/config/ad-fields`.
+- unauthenticated requests default to `example.internal`
+- authenticated requests inherit `tenant_id` from the JWT
 
-## 7. Deployment e runtime
-`docker-compose.yml` definisce due servizi:
-- `backend`: FastAPI su porta host `9000 -> 8000`.
-- `frontend`: Vite dev server su `5173`.
+Each tenant gets its own persisted JSON state file:
 
-Note runtime:
-- backend monta volume `./backend:/app` e avvia uvicorn con `--reload`;
-- frontend monta sorgenti live e dipende dal backend;
-- persistenza dati e modelli avviene su filesystem locale (no DB esterno).
+- `backend/data/tenants/example.internal/storage.json`
+- `backend/data/tenants/bip/storage.json`
+- `backend/data/tenants/sky/storage.json`
 
-## 8. Vincoli e trade-off architetturali
-- Approccio monolitico accelera sviluppo ma concentra complessita' in `backend/main.py`.
-- Storage JSON semplifica setup ma limita concorrenza/scalabilita' e auditing strutturato.
-- Background task in-process: semplice, ma senza job queue esterna (affidabilita' limitata su restart/crash).
-- Cache in-memory: migliora latenza, ma non condivisa tra processi/istanze.
+The storage module also contains a one-time migration path from the legacy
+single-tenant file `backend/data/storage.json` into the default tenant store.
+That means the repository still contains legacy artifacts, but the live
+application model is tenant-scoped.
 
-## 9. Criticita' tecniche rilevate dal codice
-1. **Disallineamento firma funzione**:
-   - chiamata `classify_account(..., attributes=d)` durante extract LDAP;
-   - firma definita senza parametro `attributes`.
-   - Impatto: rischio eccezione per record LDAP e perdita dati in ingest.
+### Tenant resolution at login
+Tenant selection is domain-driven. The login request includes a `domain`
+string, and the backend resolves it with `_resolve_tenant_for_login()` in
+`backend/app/server.py`.
 
-2. **Endpoint frontend non implementati nel backend**:
-   - `frontend/src/api.js` invoca `/api/ai/suggest-business-role-online`, `/api/ai/suggest-business-role-hybrid`, `/api/ai/health`;
-   - endpoint non presenti in `backend/main.py`.
+The mapping source is:
 
-3. **Stato BRDB incompleto per `/api/brdb/status`**:
-   - endpoint legge `state["brdb_calculated"]`, `state["brdb_min_confidence"]`, `state["brdb_last_update"]`;
-   - chiavi non inizializzate nello stato default visibile.
+- built-in domain mappings such as `example.internal -> example.internal`
+  and `bip.internal -> bip`
+- optional environment override through `TENANT_DOMAIN_MAP`
 
-4. **Duplicazione/sovrascrittura logica BRDB nello stesso file**:
-   - presenti piu' definizioni di funzioni BRDB (prima custom, poi delegate a `ml_engine`).
-   - Impatto: manutenzione complessa e possibile comportamento inatteso.
+If the domain is missing, the backend rejects the request. If the domain is not
+mapped, the backend returns "Domain not authorized." This means a tenant is not
+just a UI concept; it is an authorization boundary and a persistence boundary.
 
-5. **Configurazione CORS permissiva**:
-   - `allow_origins` include `*` insieme a credenziali, appropriato solo per ambienti non-prod.
+### Request lifetime and tenant context
+The middleware `tenant_context_middleware()` binds the tenant context for the
+entire request lifetime. That context drives every `state.get()` and
+`state.set()` call because `state` is a tenant-aware proxy, not a single global
+dictionary.
 
-## 10. Raccomandazioni architetturali (priorita')
-1. Separare `backend/main.py` in moduli (`routers`, `services`, `domain`, `repositories`).
-2. Uniformare contratti frontend-backend (OpenAPI-first o client generato).
-3. Introdurre DB transazionale (es. PostgreSQL) per stato operativo e storico decisioni.
-4. Portare job asincroni critici su coda esterna (es. Celery/RQ) per resilienza.
-5. Aggiungere test di contratto API e smoke test su endpoint chiave ingest/mining.
+This is the key architectural rule for the whole backend:
 
-## 11. File di riferimento
-- Backend API: `backend/main.py`
-- Storage: `backend/app/db/storage.py`
-- ML Engine: `backend/ml_engine.py`
-- Frontend shell: `frontend/src/app.jsx`
-- Frontend API client: `frontend/src/api.js`
-- Deploy locale: `docker-compose.yml`
+Tenant-sensitive business data is isolated per instance, but the Python process
+and most service logic are shared.
+
+## Authentication and local system users
+Authentication is JWT-based and implemented in `backend/app/server.py`.
+
+The flow is:
+
+1. The client posts `username`, `password`, and `domain` to
+   `/api/auth/login`.
+2. The backend resolves the tenant from the domain.
+3. Inside that tenant context, it looks up the local system user list stored in
+   `state["system_users"]`.
+4. It verifies the password against a PBKDF2-SHA256 hash.
+5. It issues a JWT containing `sub`, `tenant_id`, `tenant_domain`, and `exp`.
+
+Each tenant owns its own local admin and viewer accounts. The bootstrap logic
+in `_ensure_system_users_state()` seeds default records if the tenant has no
+system users yet. Those records are persisted inside the tenant storage file,
+not in a central identity database.
+
+Permission enforcement is capability-based. The important flags are:
+
+- `can_view_analytics`
+- `can_view_cluster`
+- `can_view_users`
+- `can_view_business_roles`
+- `can_view_ai_training`
+- `can_view_configurations`
+- `can_view_logs`
+- `can_view_system_users`
+- `can_manage_settings`
+- `can_manage_assignments`
+
+This means "instance administration" is local to each tenant. An admin in one
+tenant does not automatically exist in another tenant unless you create or seed
+that user there too.
+
+## Persistent state model
+Tenant business state is file-based JSON. The default shape is initialized in
+`_init_default_state_on_store()` in `backend/app/db/storage.py`.
+
+The most important keys are:
+
+- `connector`: connector and ingestion configuration
+- `last_extract`: current tenant user and group snapshot
+- `last_mining`: latest role mining result, matrix, and KPI payload
+- `role_meta`: business role metadata and template groups
+- `business_roles`: known business role set
+- `user_business_role`: explicit user-to-business-role mapping
+- `logs`: in-app log feed
+- `dq_*`: data quality configuration and feedback
+- `system_users`: local tenant application users
+
+The store is thread-safe and uses atomic file replacement through temporary
+files plus `os.replace()`. The design is simple and resilient for local
+single-process development, but it is not a substitute for a transactional
+database.
+
+## Ingestion and operational data flow
+The backend can populate tenant data from multiple sources:
+
+- LDAP / Active Directory
+- CSV import
+- SAP and other configured connectors
+- mock generators
+
+No matter which source feeds the system, the operational target is always the
+same tenant state structure under `last_extract`.
+
+The general ingestion sequence is:
+
+1. Normalize source-specific fields into a user record.
+2. Infer or preserve account type and business role metadata.
+3. Deduplicate or merge colliding identities.
+4. Persist the new tenant snapshot.
+5. Mark mining as dirty.
+6. Trigger post-snapshot rebuild logic for derived state.
+
+This is important because the ML and clustering layers do not read directly
+from external systems. They read from the normalized tenant snapshot already
+stored in application state.
+
+## Role mining pipeline
+Role mining is not implemented in `ml_engine.py`. It is implemented directly in
+`backend/app/server.py`.
+
+The pipeline uses classic unsupervised learning primitives:
+
+- binary user-group matrix construction
+- dimensionality reduction with `TruncatedSVD`
+- clustering with `MiniBatchKMeans`
+
+The output is persisted in `state["last_mining"]` and includes:
+
+- the user-group matrix
+- discovered clusters
+- KPI values
+- timestamps and mining parameters
+
+This is production logic, not a placeholder. The cluster-based analytics pages
+and several KPI views depend on this persisted output.
+
+## Machine learning: what is real
+The repository contains both real ML behavior and simulated AI-lab behavior.
+They are not the same thing and should not be treated as equivalent.
+
+### Real ML in production paths
+The real ML logic lives in `backend/ml_engine.py`.
+
+It currently provides two operational capabilities:
+
+1. Account type classification
+2. BRDB learning for business-role-to-group suggestions
+
+#### Account type classifier
+The account classifier is a genuine scikit-learn pipeline. It builds text
+features from user identity attributes and trains either:
+
+- `LogisticRegression` for multiclass cases, or
+- `MultinomialNB` for small binary cases
+
+Feature extraction uses `TfidfVectorizer`. Trained artifacts are persisted to
+`backend/ml_data/account_classifier.pkl`.
+
+Inference is hybrid:
+
+- if a trained model exists, use ML prediction with confidence
+- otherwise, fall back to rule-based classification using naming and OU
+  heuristics
+
+This is real ML with a deterministic heuristic safety net.
+
+#### BRDB group suggestion learner
+The BRDB subsystem is also operational. It learns statistical associations
+between business roles and groups by accumulating confirmed assignments.
+
+Persisted BRDB artifacts include:
+
+- `role_group_counts`
+- `group_role_primary`
+- `role_suggestions`
+- `total_assignments`
+
+These are stored in `backend/ml_data/brdb_state.json`.
+
+Suggestion generation is hybrid:
+
+- statistical confidence from observed role-group assignments
+- optional enrichment from `knowledge_base.json` if present
+
+This means the system can serve practical group suggestions without requiring a
+large external model runtime.
+
+### Real but mostly heuristic analytics
+Some analytics exposed as "AI" are deterministic or heuristic rather than
+learned models.
+
+Examples:
+
+- smart anomaly detection based on peer and department rarity thresholds
+- model quality scoring composed from weighted penalties
+- overprivileged and policy-violation detection
+
+These are real operational analytics, but they are not ML training pipelines.
+They are rules and statistical scoring implemented in the backend.
+
+## Machine learning: what is not production ML
+The AI lab module in `backend/app/api/ai_lab_routes.py` mixes useful analysis
+with simulated model comparisons.
+
+Examples of non-production ML behavior:
+
+- A/B model comparison uses `_simulate_quality_for_model()`
+- timeline runs create synthetic training snapshots and metadata
+- synthetic case generation intentionally fabricates test records
+
+This code is still useful for experimentation and demos, but it is not the same
+as the operational ML path used by login, ingestion, role mining, or business
+role suggestion flows.
+
+The role modeling sandbox in `backend/app/server.py` also includes scenario
+simulation and synthetic training data generation for ranking and proposal
+explanation. It is architecture support logic, not a deployed predictive model
+that learns from live tenant data in the same way as the account classifier or
+BRDB learner.
+
+## Frontend to backend feature alignment
+There is an important product behavior gap between implemented backend
+capabilities and visible frontend navigation.
+
+The backend exposes many AI-oriented routes, but
+`frontend/src/featureFlags.js` currently sets:
+
+- `AI_FEATURES_ENABLED = false`
+- `ROLE_MODELING_ENABLED = false`
+
+As a result:
+
+- AI training and AI lab pages exist in code but are mostly hidden from the
+  main navigation
+- system-user permission grouping filters out some AI permissions when the
+  frontend flag is disabled
+- core tenant, role, user, cluster, and reporting flows remain visible
+
+Architecturally, the backend is ahead of the frontend in feature exposure.
+
+## End-to-end logic of the platform
+The implemented product logic can be summarized as a layered pipeline:
+
+1. Resolve the tenant from the login domain.
+2. Authenticate against tenant-local system users.
+3. Bind the tenant context for every request.
+4. Ingest or update tenant identity data into `last_extract`.
+5. Derive clusters, KPIs, and role intelligence from that normalized snapshot.
+6. Persist all tenant outputs back into the same tenant store.
+7. Use global ML artifacts to improve classification and suggestions across
+   runtime sessions.
+
+The most important design choice is that tenant state is isolated, while the ML
+engine artifacts are process-global and file-global. In practice, that means:
+
+- business data is per tenant
+- the learned classifier and BRDB artifacts are shared by the application
+  runtime unless you explicitly separate `ml_data`
+- global ML learning events can aggregate signals across tenants
+
+This is a deliberate trade-off: the application is multi-tenant in state
+storage, but not fully multi-tenant in ML artifact isolation.
+
+## Key files
+This section lists the main files you need to understand when you work on the
+architecture.
+
+- `backend/main.py`: compatibility entrypoint
+- `backend/app/server.py`: primary backend runtime and business logic
+- `backend/app/db/storage.py`: tenant-aware JSON persistence
+- `backend/ml_engine.py`: account classification and BRDB learning
+- `backend/app/api/ai_lab_routes.py`: AI lab analytics and simulated workflows
+- `backend/app/api/pattern_rules_routes.py`: pattern-rule configuration APIs
+- `frontend/src/app.jsx`: router, login, permissions, and admin UI
+- `frontend/src/api.js`: REST client and token handling
+- `frontend/src/featureFlags.js`: frontend exposure gates
+
+## Architectural strengths
+The current design has a few strong qualities despite being monolithic.
+
+- It is easy to run locally with no external database.
+- Tenant separation is explicit and already operational.
+- The system preserves useful state across restarts.
+- The real ML pieces are lightweight, explainable, and cheap to run.
+- The clustering pipeline is directly tied to the tenant snapshot, which keeps
+  the analytical flow understandable.
+
+## Architectural constraints and risks
+The current design also has structural limits that matter for future work.
+
+- `backend/app/server.py` concentrates too many responsibilities.
+- File-based tenant storage is simple but weak for concurrency, auditability,
+  and horizontal scale.
+- ML artifacts are global, so they are not strictly isolated per tenant.
+- Several AI-facing features are simulations or synthetic tooling, which can be
+  mistaken for production ML unless documented clearly.
+- Frontend feature flags hide backend capabilities, which can create product
+  confusion during testing.
+
+## Recommended next steps
+The next architectural steps are now clearer from the codebase.
+
+1. Split `backend/app/server.py` into domain routers and services.
+2. Decide whether `ml_data` must remain shared or become tenant-scoped.
+3. Promote only the AI features that have production semantics to the main
+   frontend navigation.
+4. Move tenant business state from JSON files to a transactional store if
+   concurrent usage becomes important.
+5. Keep this document updated whenever tenant resolution or ML ownership rules
+   change.

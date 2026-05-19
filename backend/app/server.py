@@ -3682,6 +3682,11 @@ class LoginRequest(BaseModel):
     domain: Optional[str] = None
 
 
+class DomainRegistrationRequest(BaseModel):
+    domain: str
+    licenseCode: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -3901,6 +3906,7 @@ DEFAULT_TENANT_DOMAIN = (
     os.getenv("DEFAULT_TENANT_DOMAIN", "example.internal").strip() or "example.internal"
 ).lower()
 TENANT_DOMAIN_MAP_RAW = os.getenv("TENANT_DOMAIN_MAP", "")
+DOMAIN_REGISTRATION_LICENSE_CODE = "Bip2026!"
 _TENANT_DOMAIN_RE = re.compile(r"^[a-z0-9.-]+$")
 BUILTIN_TENANT_DOMAIN_MAP: Dict[str, str] = {
     "example.internal": "example.internal",
@@ -3950,6 +3956,8 @@ def _tenant_domain_map() -> Dict[str, str]:
     mapping = {k: normalize_tenant_id(v) for k, v in BUILTIN_TENANT_DOMAIN_MAP.items()}
     mapping.update(_parse_tenant_domain_map(TENANT_DOMAIN_MAP_RAW))
     mapping.setdefault(DEFAULT_TENANT_DOMAIN, DEFAULT_TENANT_ID)
+    for tenant_id in list_known_tenant_ids():
+        mapping.setdefault(tenant_id, normalize_tenant_id(tenant_id))
     return mapping
 
 
@@ -7212,6 +7220,24 @@ def login(body: LoginRequest):
             tenant_id=tenant_id,
             tenant_domain=tenant_domain,
         )
+
+
+@app.post("/api/auth/register-domain")
+def register_domain(body: DomainRegistrationRequest):
+    if str(body.licenseCode or "") != DOMAIN_REGISTRATION_LICENSE_CODE:
+        raise HTTPException(status_code=401, detail="Codice Licenza non valido")
+
+    domain = _normalize_tenant_domain(body.domain)
+    if not domain:
+        raise HTTPException(status_code=400, detail="Dominio cliente obbligatorio")
+
+    tenant_id = normalize_tenant_id(domain)
+    with tenant_context(tenant_id):
+        init_default_state(tenant_id)
+        _ensure_system_users_state()
+        log("INFO", f"Tenant registrato domain={domain} tenant={tenant_id}")
+
+    return {"ok": True, "tenant_id": tenant_id, "tenant_domain": domain}
 
 
 @app.get("/api/me")

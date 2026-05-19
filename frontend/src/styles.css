@@ -49,6 +49,11 @@ button.primary {
   border-color: rgba(106, 166, 255, 0.35);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .save-loadingbar {
   position: fixed;
   top: 0;
@@ -1678,6 +1683,86 @@ button.danger {
 .main {
   padding: 18px;
   overflow: auto;
+}
+
+.login-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 18px;
+}
+
+.login-panel {
+  width: min(420px, calc(100vw - 36px));
+  padding: 18px;
+  background: rgba(17, 26, 46, 0.72);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22);
+}
+
+.login-logo {
+  width: min(320px, 100%);
+  margin: 0 auto 14px;
+  display: block;
+}
+
+.login-title {
+  margin: 0;
+}
+
+.login-copy {
+  color: var(--muted);
+  margin: 8px 0 14px;
+  line-height: 1.45;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.login-register-link {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  border-color: rgba(106, 166, 255, 0.28);
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce9ff;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.login-register-link:hover {
+  border-color: rgba(106, 166, 255, 0.52);
+  background: rgba(106, 166, 255, 0.10);
+  transform: translateY(-1px);
+}
+
+.license-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(4, 8, 16, 0.62);
+  backdrop-filter: blur(7px);
+}
+
+.license-popup {
+  width: min(360px, calc(100vw - 36px));
+  border: 1px solid rgba(255, 120, 120, 0.42);
+  border-radius: 16px;
+  padding: 18px;
+  background: rgba(17, 26, 46, 0.96);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+  text-align: center;
+}
+
+.license-popup__title {
+  margin-bottom: 14px;
+  color: #ffd3d3;
+  font-weight: 700;
 }
 
 .panel {

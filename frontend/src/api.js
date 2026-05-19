@@ -130,6 +130,8 @@ export const api = {
   health: () => request("/api/health"),
   login: (username, password, domain) =>
     request("/api/auth/login", { method: "POST", body: { username, password, domain } }),
+  registerDomain: (domain, licenseCode) =>
+    request("/api/auth/register-domain", { method: "POST", body: { domain, licenseCode } }),
   me: () => request("/api/me"),
 
   adGroups: () => request("/api/ad/groups"),
