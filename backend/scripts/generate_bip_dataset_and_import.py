@@ -276,7 +276,7 @@ def main() -> None:
     rows = build_rows()
     write_csv(rows, OUTPUT_CSV)
     
-    tenants = [TENANT_ID, "sky"] # Populate both
+    tenants = [TENANT_ID]
     
     for tid in tenants:
         print(f"--- Importing into tenant: {tid} ---")

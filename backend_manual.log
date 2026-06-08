@@ -1,65 +1,46 @@
-INFO:     Started server process [1602]
+INFO:     Started server process [48416]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:50770 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50771 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50803 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:50804 - "GET /api/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:50815 - "POST /api/auth/register-domain HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50819 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50835 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50836 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 400 Bad Request
-INFO:     127.0.0.1:50837 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 400 Bad Request
-INFO:     127.0.0.1:50834 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50844 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 400 Bad Request
-INFO:     127.0.0.1:50841 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50849 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50850 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 400 Bad Request
-INFO:     127.0.0.1:50838 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50855 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:50861 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50867 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50864 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50876 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 400 Bad Request
-INFO:     127.0.0.1:50879 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 400 Bad Request
-INFO:     127.0.0.1:50881 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50882 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50887 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 400 Bad Request
-INFO:     127.0.0.1:50888 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 400 Bad Request
-[AI Detection] users_with_anomaly=28, total_users=200, pct=14.00%
-INFO:     127.0.0.1:50880 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50904 - "GET /api/system-users HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50907 - "GET /api/system-users HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50911 - "GET /api/system-users/admin HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50922 - "PUT /api/system-users/admin HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50925 - "GET /api/system-users HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50928 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:50931 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50943 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50942 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50945 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50954 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50955 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50953 - "GET /api/config/connector HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50946 - "GET /api/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50966 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50969 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50972 - "GET /api/rolemining/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50978 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50975 - "GET /api/rolemining/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50981 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50991 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50993 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50990 - "GET /api/users?q=&limit=500&offset=0 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50992 - "GET /api/rolemining/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50998 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50999 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51002 - "GET /api/businessroles HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51007 - "GET /api/kpi HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51008 - "GET /api/users?q=&limit=500&offset=0 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51014 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51017 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51011 - "GET /api/rolemining/last HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50944 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50962 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61270 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61271 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61292 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61293 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61294 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61295 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61299 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61302 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61315 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61327 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61329 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:61326 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61328 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:61337 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:61334 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61342 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:61343 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61330 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61346 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61349 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61352 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61355 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61358 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61361 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61364 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61367 - "GET /api/users?q=&limit=500&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61370 - "GET /api/users?q=&limit=500&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61383 - "GET /api/users?q=&limit=500&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61384 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61386 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61385 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61387 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:61388 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61391 - "GET /api/users?q=&limit=500&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61394 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61397 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61406 - "GET /api/stats/group-counts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61405 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:61402 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61410 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61413 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61416 - "GET /api/users?q=&limit=50&offset=0 HTTP/1.1" 200 OK

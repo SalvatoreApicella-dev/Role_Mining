@@ -1,9 +1,22 @@
 """
 File-based persistent storage to replace in-memory state dictionary.
-Uses JSON for simplicity and human-readability.
+Uses JSON for simplicity; optionally encrypted at rest via Fernet.
+
+Encryption:
+  Set STORAGE_ENCRYPTION_KEY to a Fernet key (base64 URL-safe 32-byte token).
+  Generate one with:
+    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  If the env var is absent encryption is disabled (plain JSON, backward-compat).
+  Existing plain-text files are migrated transparently on first load and rewritten encrypted.
+
+Tenant isolation:
+  Every domain maps to exactly one tenant, enforced via a global domain_registry.json.
+  A new domain always creates a brand-new, isolated tenant and can never be silently
+  redirected to an existing tenant.
 """
 import json
 import os
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
@@ -13,12 +26,47 @@ from contextvars import ContextVar, Token
 import tempfile
 import re
 
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Optional Fernet encryption helpers
+# ---------------------------------------------------------------------------
+
+def _get_fernet():
+    """Return a Fernet instance if STORAGE_ENCRYPTION_KEY is set, else None."""
+    key_raw = os.getenv("STORAGE_ENCRYPTION_KEY", "").strip()
+    if not key_raw:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+        return Fernet(key_raw.encode() if isinstance(key_raw, str) else key_raw)
+    except Exception as exc:
+        logger.error("STORAGE_ENCRYPTION_KEY is set but invalid; encryption disabled: %s", exc)
+        return None
+
+
+_FERNET_TOKEN_PREFIX = b"gAAAAA"  # Fernet tokens always start with this
+
+
+def _encrypt_bytes(data: bytes, fernet) -> bytes:
+    """Encrypt raw bytes with Fernet; returns ciphertext bytes."""
+    return fernet.encrypt(data)
+
+
+def _decrypt_bytes(data: bytes, fernet) -> bytes:
+    """Decrypt Fernet ciphertext; raises on invalid token."""
+    return fernet.decrypt(data)
+
+
+# ---------------------------------------------------------------------------
+# JsonFileStore
+# ---------------------------------------------------------------------------
 
 class JsonFileStore:
-    """Thread-safe JSON file storage for application state."""
+    """Thread-safe JSON file storage for application state (optionally encrypted)."""
     # Keys that are persisted as lists but restored in-memory as sets.
     _SET_FIELDS = {"business_roles", "businessroles"}
-    
+
     def __init__(self, filepath: str = "data/storage.json"):
         self.filepath = Path(filepath)
         self._lock = threading.RLock()
@@ -47,13 +95,13 @@ class JsonFileStore:
             except UnicodeDecodeError:
                 return key.hex()
         return key if isinstance(key, str) else str(key)
-    
+
     def _ensure_file(self):
         """Create storage file and directory if they don't exist."""
         self.filepath.parent.mkdir(parents=True, exist_ok=True)
         if not self.filepath.exists():
             self.filepath.write_text("{}")
-    
+
     def load(self):
         """Load state from file."""
         with self._lock:
@@ -74,7 +122,7 @@ class JsonFileStore:
                 raise RuntimeError(
                     f"Persistent storage is corrupted and no valid backup was found: {self.filepath}"
                 ) from exc
-    
+
     def save(self):
         """Persist state to file."""
         with self._lock:
@@ -83,26 +131,44 @@ class JsonFileStore:
             self._atomic_write_json(self.filepath, serializable_state)
 
     def _load_json_file(self, path: Path) -> Dict[str, Any]:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        """Load JSON from path, decrypting transparently if needed."""
+        raw = path.read_bytes()
+        fernet = _get_fernet()
+        if fernet is not None and raw.startswith(_FERNET_TOKEN_PREFIX):
+            # Encrypted file – decrypt first.
+            try:
+                raw = _decrypt_bytes(raw, fernet)
+            except Exception as exc:
+                raise json.JSONDecodeError(
+                    f"Fernet decryption failed for {path}: {exc}", "", 0
+                )
+        # raw is now either plaintext bytes or decrypted bytes
+        text = raw.decode("utf-8")
+        data = json.loads(text)
+        # If the file was plaintext but encryption is enabled, rewrite it encrypted now.
+        if fernet is not None and not path.read_bytes().startswith(_FERNET_TOKEN_PREFIX):
+            self._atomic_write_json(path, self._prepare_for_json(data))
+        return data
 
     def _atomic_write_json(self, path: Path, payload: Dict[str, Any]) -> None:
+        """Serialize JSON and write atomically (optionally encrypted)."""
         path.parent.mkdir(parents=True, exist_ok=True)
+        json_bytes = json.dumps(
+            payload,
+            indent=self._json_indent,
+            ensure_ascii=False,
+            separators=(",", ":") if self._json_indent is None else None,
+        ).encode("utf-8")
+        fernet = _get_fernet()
+        write_bytes = _encrypt_bytes(json_bytes, fernet) if fernet is not None else json_bytes
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
+            mode="wb",
             dir=str(path.parent),
             prefix=f"{path.name}.tmp.",
             suffix=".json",
             delete=False,
         ) as tf:
-            json.dump(
-                payload,
-                tf,
-                indent=self._json_indent,
-                ensure_ascii=False,
-                separators=(",", ":") if self._json_indent is None else None,
-            )
+            tf.write(write_bytes)
             tf.flush()
             os.fsync(tf.fileno())
             temp_name = tf.name
@@ -133,7 +199,7 @@ class JsonFileStore:
         except Exception:
             # Never block startup because quarantine failed.
             pass
-    
+
     def _prepare_for_json(self, obj: Any) -> Any:
         """Recursively convert non-JSON-serializable types."""
         if isinstance(obj, (str, int, float, bool)) or obj is None:
@@ -154,7 +220,7 @@ class JsonFileStore:
         elif isinstance(obj, list):
             return [self._prepare_for_json(item) for item in obj]
         return str(obj)
-    
+
     def _restore_from_json(self, obj: Any, key: str = "") -> Any:
         """Restore sets from lists where appropriate."""
         if isinstance(obj, dict):
@@ -164,18 +230,18 @@ class JsonFileStore:
         elif isinstance(obj, list):
             return [self._restore_from_json(item, key) for item in obj]
         return obj
-    
+
     def get(self, key: str, default: Any = None) -> Any:
         """Get value from state."""
         with self._lock:
             return self._state.get(key, default)
-    
+
     def set(self, key: str, value: Any):
         """Set value in state and persist."""
         with self._lock:
             self._state[key] = value
             self._schedule_save_locked()
-    
+
     def setdefault(self, key: str, default: Any) -> Any:
         """Set default value if key doesn't exist."""
         with self._lock:
@@ -183,37 +249,37 @@ class JsonFileStore:
                 self._state[key] = default
                 self._schedule_save_locked()
             return self._state[key]
-    
+
     def update(self, updates: Dict[str, Any]):
         """Update multiple keys at once."""
         with self._lock:
             self._state.update(updates)
             self._schedule_save_locked()
-    
+
     def __getitem__(self, key: str) -> Any:
         """Dict-like access."""
         with self._lock:
             return self._state[key]
-    
+
     def __setitem__(self, key: str, value: Any):
         """Dict-like assignment."""
         self.set(key, value)
-    
+
     def __contains__(self, key: str) -> bool:
         """Check if key exists."""
         with self._lock:
             return key in self._state
-    
+
     def keys(self):
         """Return state keys."""
         with self._lock:
             return self._state.keys()
-    
+
     def items(self):
         """Return state items."""
         with self._lock:
             return self._state.items()
-    
+
     def clear(self):
         """Clear all state."""
         with self._lock:
@@ -237,6 +303,10 @@ class JsonFileStore:
                     self._dirty = False
                     self.save()
 
+
+# ---------------------------------------------------------------------------
+# Tenant context helpers
+# ---------------------------------------------------------------------------
 
 DEFAULT_TENANT_ID = (
     os.getenv("DEFAULT_TENANT_ID", "example.internal").strip().lower() or "example.internal"
@@ -275,6 +345,10 @@ def tenant_context(tenant_id: Optional[str]):
         pop_tenant_context(token)
 
 
+# ---------------------------------------------------------------------------
+# Per-tenant storage paths
+# ---------------------------------------------------------------------------
+
 def _tenant_storage_path(tenant_id: str) -> Path:
     return Path("data") / "tenants" / normalize_tenant_id(tenant_id) / "storage.json"
 
@@ -295,15 +369,17 @@ def _maybe_migrate_legacy_storage(target_path: Path, tenant_id: str) -> None:
     try:
         with legacy.open("r", encoding="utf-8") as rf:
             raw = json.load(rf)
+        fernet = _get_fernet()
+        json_bytes = json.dumps(raw, ensure_ascii=False).encode("utf-8")
+        write_bytes = _encrypt_bytes(json_bytes, fernet) if fernet is not None else json_bytes
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
+            mode="wb",
             dir=str(target_path.parent),
             prefix=f"{target_path.name}.tmp.",
             suffix=".json",
             delete=False,
         ) as tf:
-            json.dump(raw, tf, ensure_ascii=False)
+            tf.write(write_bytes)
             tf.flush()
             os.fsync(tf.fileno())
             temp_name = tf.name
@@ -313,7 +389,116 @@ def _maybe_migrate_legacy_storage(target_path: Path, tenant_id: str) -> None:
         return
 
 
-def _init_default_state_on_store(store: JsonFileStore) -> None:
+# ---------------------------------------------------------------------------
+# Domain registry  (global, not per-tenant)
+# Enforces strict 1:1 domain -> tenant mapping so every new domain always
+# creates a brand-new isolated tenant and can never share one.
+# ---------------------------------------------------------------------------
+
+_DOMAIN_REGISTRY_LOCK = threading.RLock()
+
+
+def _domain_registry_path() -> Path:
+    return Path("data") / "domain_registry.json"
+
+
+def _load_domain_registry() -> Dict[str, str]:
+    """Load domain-to-tenant mapping from global registry file."""
+    path = _domain_registry_path()
+    if not path.exists():
+        return {}
+    try:
+        raw = path.read_bytes()
+        fernet = _get_fernet()
+        if fernet is not None and raw.startswith(_FERNET_TOKEN_PREFIX):
+            raw = _decrypt_bytes(raw, fernet)
+        data = json.loads(raw.decode("utf-8"))
+        if isinstance(data, dict):
+            return {str(k): str(v) for k, v in data.items()}
+    except Exception as exc:
+        logger.error("Failed to load domain_registry.json: %s", exc)
+    return {}
+
+
+def _save_domain_registry(registry: Dict[str, str]) -> None:
+    """Atomically persist domain-to-tenant registry."""
+    path = _domain_registry_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    json_bytes = json.dumps(registry, ensure_ascii=False, indent=2).encode("utf-8")
+    fernet = _get_fernet()
+    write_bytes = _encrypt_bytes(json_bytes, fernet) if fernet is not None else json_bytes
+    with tempfile.NamedTemporaryFile(
+        mode="wb",
+        dir=str(path.parent),
+        prefix=f"{path.name}.tmp.",
+        suffix=".json",
+        delete=False,
+    ) as tf:
+        tf.write(write_bytes)
+        tf.flush()
+        os.fsync(tf.fileno())
+        temp_name = tf.name
+    os.replace(temp_name, path)
+
+
+def lookup_registered_domain(domain: str) -> Optional[str]:
+    """Return the tenant_id for a registered domain, or None if not found."""
+    with _DOMAIN_REGISTRY_LOCK:
+        registry = _load_domain_registry()
+    return registry.get(domain)
+
+
+def register_domain_mapping(domain: str, tenant_id: str) -> str:
+    """
+    Register a strict 1:1 mapping domain -> tenant_id.
+
+    Rules (enforced atomically):
+    - Idempotent: if domain already maps to tenant_id, return existing.
+    - Conflict: if domain already maps to a different tenant, raise ValueError.
+    - Collision: if tenant_id is already owned by a different domain, raise ValueError.
+    - Otherwise: write new entry and return tenant_id.
+    """
+    with _DOMAIN_REGISTRY_LOCK:
+        registry = _load_domain_registry()
+
+        existing_tenant = registry.get(domain)
+        if existing_tenant is not None:
+            if existing_tenant == tenant_id:
+                return tenant_id  # idempotent
+            raise ValueError(
+                f"Domain '{domain}' is already registered to tenant '{existing_tenant}'. "
+                "Delete the existing registration before re-registering."
+            )
+
+        # Check if tenant_id is already claimed by a different domain.
+        for existing_domain, existing_tid in registry.items():
+            if existing_tid == tenant_id and existing_domain != domain:
+                raise ValueError(
+                    f"Tenant '{tenant_id}' is already owned by domain '{existing_domain}'. "
+                    "Each domain must have its own isolated tenant."
+                )
+
+        registry[domain] = tenant_id
+        _save_domain_registry(registry)
+    return tenant_id
+
+
+def list_registered_domains() -> Dict[str, str]:
+    """Return a snapshot of the full domain-to-tenant registry."""
+    with _DOMAIN_REGISTRY_LOCK:
+        return dict(_load_domain_registry())
+
+
+def tenant_storage_exists(tenant_id: str) -> bool:
+    """Return True when a tenant already has a storage file on disk."""
+    return _tenant_storage_path(tenant_id).exists()
+
+
+# ---------------------------------------------------------------------------
+# Default state initializer
+# ---------------------------------------------------------------------------
+
+def _init_default_state_on_store(store: "JsonFileStore") -> None:
     """Initialize default state structure for a specific tenant store."""
     defaults = {
         "connector": {
@@ -447,10 +632,10 @@ def _init_default_state_on_store(store: JsonFileStore) -> None:
         # Seeded by backend auth bootstrap with hashed credentials.
         "system_users": [],
     }
-    
+
     for key, value in defaults.items():
         store.setdefault(key, value)
-    
+
     # Back-compat aliases
     if "role_meta" in store._state:
         store._state["rolemeta"] = store._state["role_meta"]
@@ -459,6 +644,10 @@ def _init_default_state_on_store(store: JsonFileStore) -> None:
     if "user_business_role" in store._state:
         store._state["userbusinessrole"] = store._state["user_business_role"]
 
+
+# ---------------------------------------------------------------------------
+# TenantStoreProxy
+# ---------------------------------------------------------------------------
 
 class TenantStoreProxy:
     """
@@ -543,6 +732,10 @@ class TenantStoreProxy:
             yield self
 
 
+# ---------------------------------------------------------------------------
+# Global singletons
+# ---------------------------------------------------------------------------
+
 # Global tenant-aware store proxy
 _store: Optional[TenantStoreProxy] = None
 
@@ -563,3 +756,11 @@ def init_default_state(tenant_id: Optional[str] = None):
     """Initialize default state structure for a specific tenant."""
     store = get_store().for_tenant(tenant_id or get_current_tenant_id())
     _init_default_state_on_store(store)
+
+
+def reset_tenant_state(tenant_id: Optional[str] = None):
+    """Replace a tenant store with the empty default state."""
+    store = get_store().for_tenant(tenant_id or get_current_tenant_id())
+    store.clear()
+    _init_default_state_on_store(store)
+    store.save()

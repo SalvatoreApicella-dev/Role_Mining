@@ -47,6 +47,10 @@ MOCK_AD = os.getenv("MOCK_AD", "0") == "1"
 LDAP_FETCH_ALL_ATTRIBUTES = os.getenv("LDAP_FETCH_ALL_ATTRIBUTES", "0") == "1"
 LDAP_PAGE_SIZE = max(100, int(os.getenv("LDAP_PAGE_SIZE", "1000")))
 LDAP_SEARCH_TIME_LIMIT = max(10, int(os.getenv("LDAP_SEARCH_TIME_LIMIT", "60")))
+CSV_IMPORT_MAX_BYTES = max(1 * 1024 * 1024, int(os.getenv("CSV_IMPORT_MAX_BYTES", str(250 * 1024 * 1024))))
+CSV_IMPORT_MAX_ROWS = max(1000, int(os.getenv("CSV_IMPORT_MAX_ROWS", "200000")))
+CSV_IMPORT_MAX_REJECTS_STORED = max(100, int(os.getenv("CSV_IMPORT_MAX_REJECTS_STORED", "5000")))
+CSV_IMPORT_DETACHED_POSTPROCESS = os.getenv("CSV_IMPORT_DETACHED_POSTPROCESS", "1") != "0"
 LDAP_EXTRA_ATTRIBUTES = [
     a.strip() for a in os.getenv("LDAP_EXTRA_ATTRIBUTES", "").split(",") if a.strip()
 ]
@@ -601,9 +605,14 @@ from app.db.storage import (
     get_current_tenant_id,
     init_default_state,
     list_known_tenant_ids,
+    list_registered_domains,
+    lookup_registered_domain,
     normalize_tenant_id,
     pop_tenant_context,
     push_tenant_context,
+    register_domain_mapping,
+    reset_tenant_state,
+    tenant_storage_exists,
     tenant_context,
 )
 
@@ -2516,6 +2525,21 @@ def run_post_csv_snapshot_logic_background(
         except Exception as exc:
             log("ERROR", f"CSV post-snapshot logic failed (snapshot_ts={snapshot_ts}, by={actor}): {exc}")
 
+
+def _start_detached_csv_postprocess(
+    snapshot_ts: str,
+    actor: str,
+    touched_depts: List[str],
+    tenant_id: Optional[str],
+) -> None:
+    thread = threading.Thread(
+        target=run_post_csv_snapshot_logic_background,
+        args=(snapshot_ts, actor, touched_depts, tenant_id),
+        daemon=True,
+        name=f"csv-postprocess-{tenant_id or DEFAULT_TENANT_ID}",
+    )
+    thread.start()
+
 def active_users(users: list[dict]) -> list[dict]:
     return [u for u in (users or []) if not u.get("excluded")]
 
@@ -3912,6 +3936,9 @@ BUILTIN_TENANT_DOMAIN_MAP: Dict[str, str] = {
     "example.internal": "example.internal",
     "bip.internal": "bip",
     "bip": "bip",
+    "sky.internal": "sky",
+    "sky.it": "sky",
+    "sky": "sky",
 }
 
 
@@ -3956,9 +3983,27 @@ def _tenant_domain_map() -> Dict[str, str]:
     mapping = {k: normalize_tenant_id(v) for k, v in BUILTIN_TENANT_DOMAIN_MAP.items()}
     mapping.update(_parse_tenant_domain_map(TENANT_DOMAIN_MAP_RAW))
     mapping.setdefault(DEFAULT_TENANT_DOMAIN, DEFAULT_TENANT_ID)
-    for tenant_id in list_known_tenant_ids():
-        mapping.setdefault(tenant_id, normalize_tenant_id(tenant_id))
+    # NOTE: We intentionally do NOT add all known tenant IDs as domain aliases here.
+    # That fallback would allow a new domain whose name coincidentally matches an existing
+    # tenant slug to silently land in that tenant – violating strict isolation.
     return mapping
+
+
+def _new_isolated_tenant_id_for_domain(domain: str) -> str:
+    base_tenant_id = normalize_tenant_id(domain)
+    reserved = set(_tenant_domain_map().values())
+    reserved.update(list_known_tenant_ids())
+    reserved.update(list_registered_domains().values())
+
+    if base_tenant_id not in reserved and not tenant_storage_exists(base_tenant_id):
+        return base_tenant_id
+
+    idx = 2
+    while True:
+        candidate = normalize_tenant_id(f"{base_tenant_id}-{idx}")
+        if candidate not in reserved and not tenant_storage_exists(candidate):
+            return candidate
+        idx += 1
 
 
 def _resolve_tenant_for_login(raw_domain: Optional[str]) -> Tuple[str, str]:
@@ -3966,6 +4011,11 @@ def _resolve_tenant_for_login(raw_domain: Optional[str]) -> Tuple[str, str]:
     domain = _normalize_tenant_domain(raw_domain)
     if not domain:
         raise HTTPException(status_code=400, detail="Dominio cliente obbligatorio")
+
+    # Check domain registry first (dynamically registered domains).
+    registered = lookup_registered_domain(domain)
+    if registered:
+        return normalize_tenant_id(registered), domain
 
     tenant_id = _tenant_domain_map().get(domain)
     if not tenant_id:
@@ -7231,9 +7281,21 @@ def register_domain(body: DomainRegistrationRequest):
     if not domain:
         raise HTTPException(status_code=400, detail="Dominio cliente obbligatorio")
 
-    tenant_id = normalize_tenant_id(domain)
+    existing_registered = lookup_registered_domain(domain)
+    if existing_registered:
+        return {"ok": True, "tenant_id": existing_registered, "tenant_domain": domain}
+
+    if domain in _tenant_domain_map():
+        raise HTTPException(status_code=409, detail="Dominio gia autorizzato")
+
+    tenant_id = _new_isolated_tenant_id_for_domain(domain)
+    try:
+        tenant_id = register_domain_mapping(domain, tenant_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
     with tenant_context(tenant_id):
-        init_default_state(tenant_id)
+        reset_tenant_state(tenant_id)
         _ensure_system_users_state()
         log("INFO", f"Tenant registrato domain={domain} tenant={tenant_id}")
 
@@ -9317,6 +9379,9 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="File vuoto")
+    if len(raw) > CSV_IMPORT_MAX_BYTES:
+        max_mb = CSV_IMPORT_MAX_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"CSV troppo grande: limite {max_mb:.0f} MB")
 
     text = raw.decode("utf-8-sig", errors="replace")
     reader = csv.DictReader(io.StringIO(text), delimiter=";", skipinitialspace=True)
@@ -9440,6 +9505,8 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
 
     for row in reader:
         csv_rows_total += 1
+        if csv_rows_total > CSV_IMPORT_MAX_ROWS:
+            raise HTTPException(status_code=413, detail=f"CSV troppo grande: limite {CSV_IMPORT_MAX_ROWS} righe")
         row_id = f"csv:{csv_rows_total}"
         (
             dnraw,
@@ -9521,11 +9588,6 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             "manager": manager,
             "rawLine": f"{dnraw};{dept};{roles}",
         }
-        last_csv_rows.append(rec)
-        csv_rows_by_dn[dnraw].append(row_id)
-        csv_choice_by_dn.setdefault(dnraw, row_id)
-        csv_candidates.append({"rowId": row_id, "rec": rec, "user": user_payload})
-
         candidate = _mk_candidate(
             source="csv",
             candidate_id=row_id,
@@ -9536,8 +9598,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             department=dept,
             last_login=last_login,
         )
-        ingest_sources["csv"].append(candidate)
-        choice_by_displayname.setdefault(candidate["displayName"], candidate["candidateId"])
+        csv_candidates.append({"rowId": row_id, "rec": rec, "user": user_payload, "candidate": candidate})
 
     profile_rows = []
     for u in existing_users_list:
@@ -9563,9 +9624,11 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             by_dn[dn_key].append(c)
 
     csv_dup_dn_rows = 0
+    duplicate_row_ids: set[str] = set()
     for rows in by_dn.values():
         if len(rows) > 1:
             csv_dup_dn_rows += (len(rows) - 1)
+            duplicate_row_ids.update(str(item.get("rowId") or "") for item in rows)
 
     taken_usernames = {str(u.get("username") or "").strip() for u in existing_users_list if u.get("username")}
     new_users: List[Dict[str, Any]] = []
@@ -9606,6 +9669,16 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         else:
             display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
             choice_by_displayname.setdefault(display_name, winner["rowId"])
+
+    conflict_candidates = [c for c in csv_candidates if str(c.get("rowId") or "") in duplicate_row_ids]
+    for item in conflict_candidates:
+        rec = item["rec"]
+        row_id = str(item["rowId"])
+        dn_raw = str(rec.get("displayNameRaw") or "")
+        last_csv_rows.append(rec)
+        csv_rows_by_dn[dn_raw].append(row_id)
+        csv_choice_by_dn.setdefault(dn_raw, row_id)
+        ingest_sources["csv"].append(item["candidate"])
 
     # Merge with existing users - match ONLY by displayName.
     # Keep all local users; update only same displayName; add others.
@@ -9710,14 +9783,16 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         "duplicate_autoselect": duplicate_autoselect,
         "last_ingest_stats": last_ingest_stats,
         "last_csv_stats": last_csv_stats,
-        "last_rejects": csv_rejects,
+        "last_rejects": csv_rejects[:CSV_IMPORT_MAX_REJECTS_STORED],
         "mining_dirty": True,
     })
     invalidate_hot_caches(users=True, roles=True, kpi=True, mining=True)
     snapshot_ts = str((state.get("last_extract") or {}).get("ts") or "")
     touched_depts_list = sorted([d for d in touched_depts if d])
     tenant_id = get_current_tenant_id()
-    if background_tasks:
+    if CSV_IMPORT_DETACHED_POSTPROCESS:
+        _start_detached_csv_postprocess(snapshot_ts, username, touched_depts_list, tenant_id)
+    elif background_tasks:
         background_tasks.add_task(
             run_post_csv_snapshot_logic_background,
             snapshot_ts,
