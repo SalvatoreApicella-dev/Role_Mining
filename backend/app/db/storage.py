@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
 import threading
+import fcntl
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 import tempfile
@@ -132,7 +133,19 @@ class JsonFileStore:
 
     def _load_json_file(self, path: Path) -> Dict[str, Any]:
         """Load JSON from path, decrypting transparently if needed."""
-        raw = path.read_bytes()
+        # Multi-process safety: acquire shared lock for reading
+        if not path.exists():
+            return {}
+            
+        with path.open("rb") as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_SH)
+                raw = f.read()
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+
+        if not raw:
+            return {}
         fernet = _get_fernet()
         if fernet is not None and raw.startswith(_FERNET_TOKEN_PREFIX):
             # Encrypted file – decrypt first.
@@ -172,7 +185,15 @@ class JsonFileStore:
             tf.flush()
             os.fsync(tf.fileno())
             temp_name = tf.name
-        os.replace(temp_name, path)
+
+        # Multi-process safety: acquire exclusive lock during the actual replace
+        lock_path = path.with_suffix(".lock")
+        with lock_path.open("w") as lf:
+            try:
+                fcntl.flock(lf, fcntl.LOCK_EX)
+                os.replace(temp_name, path)
+            finally:
+                fcntl.flock(lf, fcntl.LOCK_UN)
 
     def _backup_candidates(self) -> List[Path]:
         pattern = f"{self.filepath.name}.backup_*"
