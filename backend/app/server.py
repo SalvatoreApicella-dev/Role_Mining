@@ -5959,13 +5959,14 @@ def extract_from_ldap(ou_dn: str) -> List[Dict[str, Any]]:
 # Role Mining
 # ----------------------------
 def build_matrix(users: List[Dict[str, Any]]) -> Tuple[List[str], List[str], np.ndarray]:
-    usernames = [u["username"] for u in users]
-    all_groups = sorted({g for u in users for g in u["groups"]})
+    valid_users = [u for u in users if u.get("username")]
+    usernames = [u["username"] for u in valid_users]
+    all_groups = sorted({g for u in valid_users for g in (u.get("groups") or [])})
     g_index = {g: i for i, g in enumerate(all_groups)}
 
-    X = np.zeros((len(users), len(all_groups)), dtype=np.int8)
-    for i, u in enumerate(users):
-        for g in u["groups"]:
+    X = np.zeros((len(valid_users), len(all_groups)), dtype=np.int8)
+    for i, u in enumerate(valid_users):
+        for g in (u.get("groups") or []):
             if g in g_index:
                 X[i, g_index[g]] = 1
     return usernames, all_groups, X
@@ -9687,8 +9688,10 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
             choice_by_displayname.setdefault(display_name, winner["rowId"])
 
-    conflict_candidates = [c for c in csv_candidates if str(c.get("rowId") or "") in duplicate_row_ids]
-    for item in conflict_candidates:
+    # Register ALL candidates (unique + duplicates) into ingest tracking structures.
+    # Previously only conflict_candidates were registered, causing unique users to be
+    # invisible to the ingest UI and missing from choice_by_displayname.
+    for item in csv_candidates:
         rec = item["rec"]
         row_id = str(item["rowId"])
         dn_raw = str(rec.get("displayNameRaw") or "")

@@ -16,7 +16,7 @@ kill_port() {
 kill_port 8000
 kill_port 5173
 
-nohup /bin/zsh -lc "cd '$BACK'; '$BACK/.venv/bin/python' -m uvicorn main:app --host 0.0.0.0 --port 8000" >"$BACK_LOG" 2>&1 &
+nohup /bin/zsh -lc "cd '$BACK'; '$BACK/.venv/bin/python' -m uvicorn main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 120 --timeout-graceful-shutdown 30" >"$BACK_LOG" 2>&1 &
 nohup /bin/zsh -lc "export PATH=$NODE_PATH:\$PATH; cd '$FRONT'; node node_modules/vite/bin/vite.js --host 0.0.0.0 --port 5173 --strictPort" >"$FRONT_LOG" 2>&1 &
 
 for _ in {1..30}; do
