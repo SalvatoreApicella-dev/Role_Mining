@@ -1250,16 +1250,17 @@ def _normalize_last_login(v: Any) -> Optional[str]:
         return s
 
 
-def _build_dept_group_profile(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+def _build_dept_group_profile_from_iterables(iterables: list) -> Dict[str, Dict[str, float]]:
     by_dept = defaultdict(lambda: defaultdict(int))
     dept_counts = defaultdict(int)
-    for r in (rows or []):
-        dept = (r.get("department") or "").strip()
-        if not dept:
-            continue
-        dept_counts[dept] += 1
-        for g in set(r.get("groups") or []):
-            by_dept[dept][g] += 1
+    for it in iterables:
+        for r in it:
+            dept = (r.get("department") or "").strip()
+            if not dept:
+                continue
+            dept_counts[dept] += 1
+            for g in set(r.get("groups") or []):
+                by_dept[dept][g] += 1
 
     out: Dict[str, Dict[str, float]] = {}
     for dept, gstats in by_dept.items():
@@ -6080,7 +6081,10 @@ def compute_kpis(
 
     # --- Overprivileged: top 10% per numero gruppi calcolato dalla matrix ---
     row_counts = np.array(
-        [int(sum((row or {}).values())) for row in (matrix or {}).values()],
+        [
+            int(sum(row.values()) if isinstance(row, dict) else len(row))
+            for row in (matrix or {}).values()
+        ],
         dtype=np.int32
     )
     if row_counts.size == 0:
@@ -6113,11 +6117,17 @@ def compute_kpis(
         members = c.get("members") or []
         for uname in members:
             row = matrix.get(uname) or {}
-            denom = int(sum((row or {}).values()))
-            if denom <= 0:
-                cov_vals.append(0.0)
+            if isinstance(row, dict):
+                denom = int(sum((row or {}).values()))
             else:
-                covered = sum(int(row.get(g, 0)) for g in role_groups)
+                denom = len(row or [])
+
+            if denom > 0:
+                if isinstance(row, dict):
+                    covered = sum(int(row.get(g, 0)) for g in role_groups)
+                else:
+                    row_set = set(row or [])
+                    covered = sum(1 for g in role_groups if g in row_set)
                 cov_vals.append(covered / denom)
 
     role_coverage = float((np.mean(cov_vals) if cov_vals else 0.0) * 100.0)
@@ -6815,23 +6825,20 @@ def run_role_mining(
             "size": len(members),
         })
 
-    # matrix for UI (DEVE avere tutte le colonne di all_groups_ui)
-    # mapping per i gruppi presenti in X
-    gindex = {g: j for j, g in enumerate(groups)}
-
-    # Sparse matrix for UI (only store 1s to save O(N*M) time and memory)
-    # The frontend already supports this sparse representation.
-    matrix: Dict[str, Dict[str, int]] = {}
+    # Sparse matrix for UI (list of active groups)
+    # This is O(assignments) and significantly faster + reduces JSON payload.
+    matrix: Dict[str, List[str]] = {}
     for i, uname in enumerate(usernames):
-        matrix[uname] = {groups[j]: 1 for j in np.where(X[i] == 1)[0]}
+        matrix[uname] = [groups[j] for j in np.where(X[i] == 1)[0]]
+
+    # Ensure groups list matches the matrix order for the UI
+    all_groups_ui = groups
 
     kpi = compute_kpis(users, clusters, matrix)
     print(f"[Mining] Done. Clusters: {len(clusters)}, Matrix users: {len(matrix)}, KPI users: {kpi.get('totalUsers')}")
 
     return {
         "clusters": clusters,
-        "matrix": matrix,
-        "kpi": kpi,
         "groups": all_groups_ui,
     }
 
@@ -7965,17 +7972,9 @@ def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(r
     users = active_users((state.get("last_extract") or {}).get("users") or [])
     
     matrix_raw = last.get("matrix") or {}
-    matrix_sparse = {}
-    for u, row in matrix_raw.items():
-        if isinstance(row, list):
-            matrix_sparse[u] = row
-        elif isinstance(row, dict):
-            # Only include groups with value 1 (or truthy)
-            matrix_sparse[u] = [g for g, v in row.items() if v]
-        else:
-            matrix_sparse[u] = []
-    if not matrix_sparse and users:
-        matrix_sparse = {
+    if not matrix_raw and users:
+        # Fallback to current assignments if no mining ran
+        matrix_raw = {
             str(u.get("username") or ""): list(u.get("groups") or [])
             for u in users
             if str(u.get("username") or "")
@@ -7983,7 +7982,7 @@ def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(r
     
     result = {
         **last,
-        "matrix": matrix_sparse,
+        "matrix": matrix_raw,
         "groups": last.get("groups") or ((state.get("last_extract") or {}).get("groups") or []),
         "status": status
     }
@@ -9630,22 +9629,11 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         )
         csv_candidates.append({"rowId": row_id, "rec": rec, "user": user_payload, "candidate": candidate})
 
-    profile_rows = []
-    for u in existing_users_list:
-        profile_rows.append(
-            {
-                "department": (u.get("department") or "").strip(),
-                "groups": list(u.get("groups") or []),
-            }
-        )
-    for c in csv_candidates:
-        profile_rows.append(
-            {
-                "department": (c["user"].get("department") or "").strip(),
-                "groups": list(c["user"].get("groups") or []),
-            }
-        )
-    dept_profile = _build_dept_group_profile(profile_rows)
+    # Memory-efficient profiling: stream from existing users and new candidates
+    dept_profile = _build_dept_group_profile_from_iterables([
+        existing_users_list,
+        (c["user"] for c in csv_candidates)
+    ])
 
     by_dn = defaultdict(list)
     for c in csv_candidates:
@@ -9772,7 +9760,6 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
     extract["groups"] = sorted(computed_groups)
     extract["ou"] = "MERGED"
     extract["ts"] = time.time()
-    state.set("last_extract", extract)
 
     # CRITICAL: Populate state["user_business_role"] with CSV Business Roles BEFORE auto-assignment
     # This ensures the preservation logic in apply_department_mapping has data to preserve
@@ -9782,7 +9769,13 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         br = (u.get("businessRole") or "").strip()
         if uname and br and br != "Unassigned":
             user_br_mapping[uname] = br
-    state.set("user_business_role", user_br_mapping)
+
+    # Batch update to reduce disk I/O for large states
+    state.update({
+        "last_extract": extract,
+        "user_business_role": user_br_mapping,
+        "mining_dirty": True
+    })
 
     touched_depts = {u.get("department") for u in new_users if u.get("department")}
     csv_auto_resolved_duplicates = len(duplicate_autoselect)
