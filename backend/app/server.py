@@ -1833,7 +1833,9 @@ def _merge_users_into_last_extract(new_users: list[dict], *, ou: str):
                 u["displayName"] = nu["displayName"]
             if nu.get("department"):
                 u["department"] = nu["department"]
-            u["groups"] = sorted(set(nu.get("groups") or []))  # REPLACE da connettore
+            existing_groups = set(u.get("groups") or [])
+            incoming_groups = set(nu.get("groups") or [])
+            u["groups"] = sorted(existing_groups | incoming_groups)
 
         else:
             base_users.append(nu)
@@ -9770,22 +9772,25 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
                 existing_by_dn[dn_key] = new_user
             added_users += 1
 
-    merged_users = existing_users_list
-    state["last_extract"]["users"] = merged_users
-    computed_groups = set(recompute_groups_from_users(merged_users))
+    # Update state["last_extract"] explicitly to ensure persistence
+    extract = state.get("last_extract") or {}
+    extract["users"] = existing_users_list
+    computed_groups = set(recompute_groups_from_users(existing_users_list))
     computed_groups.update(csv_orphan_groups_catalog)
-    state["last_extract"]["groups"] = sorted(computed_groups)
-    state["last_extract"]["ou"] = "MERGED"
-    state["last_extract"]["ts"] = time.time()
+    extract["groups"] = sorted(computed_groups)
+    extract["ou"] = "MERGED"
+    extract["ts"] = time.time()
+    state.set("last_extract", extract)
 
     # CRITICAL: Populate state["user_business_role"] with CSV Business Roles BEFORE auto-assignment
     # This ensures the preservation logic in apply_department_mapping has data to preserve
-    state.setdefault("user_business_role", {})
-    for u in merged_users:
+    user_br_mapping = state.get("user_business_role") or {}
+    for u in existing_users_list:
         uname = u.get("username")
         br = (u.get("businessRole") or "").strip()
         if uname and br and br != "Unassigned":
-            state["user_business_role"][uname] = br
+            user_br_mapping[uname] = br
+    state.set("user_business_role", user_br_mapping)
 
     touched_depts = {u.get("department") for u in new_users if u.get("department")}
     csv_auto_resolved_duplicates = len(duplicate_autoselect)
@@ -9794,7 +9799,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         "source": "csv",
         "csvHeadersNorm": csv_headers_norm,
         "rowsTotal": csv_rows_total,
-        "rowsKept": len(merged_users),
+        "rowsKept": len(existing_users_list),
         "duplicateDisplayName": csv_dup_dn_rows,
         "missingDepartment": csv_missing_department,
         "missingBusinessRole": csv_missing_businessrole,
@@ -9850,7 +9855,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         "addedUsers": added_users,
         "updatedUsers": updated_users,
         "updatedByDisplayName": updated_users,
-        "totalUsers": len(merged_users),
+        "totalUsers": len(existing_users_list),
         "rowsTotal": csv_rows_total,
         "csvDuplicateDisplayNameRows": csv_dup_dn_rows,
         "autoResolvedDuplicateUsers": csv_auto_resolved_duplicates,
@@ -9939,7 +9944,8 @@ def applyimportrow(displayname: str, businessrole: str, ruoli: str, department: 
             _ensure_role_registered(businessrole)
             created_role = True
 
-    state["mining_dirty"] = True
+    state.set("last_extract", last_extract)
+    state.set("mining_dirty", True)
     return {
         "ok": True,
         "created_user": created_user,
