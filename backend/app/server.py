@@ -6756,6 +6756,7 @@ def run_role_mining(
     users = [u for u in (users or []) if not u.get("excluded")]
 
     usernames, groups, X = build_matrix(users)
+    print(f"[Mining] Processing {len(usernames)} users and {len(groups)} groups. X shape: {X.shape}")
 
     # Colonne UI = gruppi snapshot (ultima estrazione) → NON dipendono dalle assegnazioni correnti
     snapshot_groups = ((state.get("last_extract") or {}).get("groups") or []).copy()
@@ -6825,6 +6826,7 @@ def run_role_mining(
         matrix[uname] = {groups[j]: 1 for j in np.where(X[i] == 1)[0]}
 
     kpi = compute_kpis(users, clusters, matrix)
+    print(f"[Mining] Done. Clusters: {len(clusters)}, Matrix users: {len(matrix)}, KPI users: {kpi.get('totalUsers')}")
 
     return {
         "clusters": clusters,
@@ -6859,8 +6861,10 @@ def _mining_worker(n_clusters, role_support, tenant_id: Optional[str] = None):
                     "ts": datetime.now(timezone.utc).isoformat(),
                     "status": "ready"
                 },
+                "mining_status": "ready",
                 "mining_dirty": False
             })
+            invalidate_hot_caches(mining=True)
             ok = True
         except Exception as e:
             print(f"[Mining Worker] Error: {e}")
@@ -7960,13 +7964,16 @@ def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(r
     last = state.get("last_mining") or {}
     users = active_users((state.get("last_extract") or {}).get("users") or [])
     
-    # Optimize payload: Convert dense matrix to sparse (list of active groups)
-    # This significantly reduces JSON size for large datasets (e.g. 5000 users)
-    matrix_dense = last.get("matrix") or {}
+    matrix_raw = last.get("matrix") or {}
     matrix_sparse = {}
-    for u, row in matrix_dense.items():
-        # Only include groups with value 1 (or truthy)
-        matrix_sparse[u] = [g for g, v in row.items() if v]
+    for u, row in matrix_raw.items():
+        if isinstance(row, list):
+            matrix_sparse[u] = row
+        elif isinstance(row, dict):
+            # Only include groups with value 1 (or truthy)
+            matrix_sparse[u] = [g for g, v in row.items() if v]
+        else:
+            matrix_sparse[u] = []
     if not matrix_sparse and users:
         matrix_sparse = {
             str(u.get("username") or ""): list(u.get("groups") or [])
