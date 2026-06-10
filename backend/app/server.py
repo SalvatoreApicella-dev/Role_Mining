@@ -5975,20 +5975,7 @@ def build_matrix(users: List[Dict[str, Any]]) -> Tuple[List[str], List[str], np.
     return usernames, all_groups, X
 
 
-def jaccard_distance_matrix(X: np.ndarray) -> np.ndarray:
-    # D[i,j] = 1 - |A∩B|/|A∪B|
-    n = X.shape[0]
-    D = np.zeros((n, n), dtype=np.float32)
-    for i in range(n):
-        Ai = X[i]
-        for j in range(i + 1, n):
-            Aj = X[j]
-            inter = int(np.logical_and(Ai, Aj).sum())
-            union = int(np.logical_or(Ai, Aj).sum())
-            dist = 0.0 if union == 0 else 1.0 - (inter / union)
-            D[i, j] = dist
-            D[j, i] = dist
-    return D
+# Note: jaccard_distance_matrix removed as it was unused and inefficient.
 
 
 def compute_purity(cluster_members_idx: List[int], X: np.ndarray) -> float:
@@ -6831,13 +6818,11 @@ def run_role_mining(
     # mapping per i gruppi presenti in X
     gindex = {g: j for j, g in enumerate(groups)}
 
+    # Sparse matrix for UI (only store 1s to save O(N*M) time and memory)
+    # The frontend already supports this sparse representation.
     matrix: Dict[str, Dict[str, int]] = {}
     for i, uname in enumerate(usernames):
-        row: Dict[str, int] = {}
-        for g in all_groups_ui:
-            j = gindex.get(g)
-            row[g] = int(X[i, j]) if j is not None else 0
-        matrix[uname] = row
+        matrix[uname] = {groups[j]: 1 for j in np.where(X[i] == 1)[0]}
 
     kpi = compute_kpis(users, clusters, matrix)
 
