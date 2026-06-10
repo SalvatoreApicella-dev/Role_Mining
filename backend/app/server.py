@@ -96,6 +96,7 @@ GLOBAL_ML_SIGNALS_LOCK = threading.RLock()
 GLOBAL_ML_SIGNALS_MAX = max(1000, int(os.getenv("GLOBAL_ML_SIGNALS_MAX", "20000")))
 
 REBUILD_LOCK = threading.Lock()
+MINING_START_LOCK = threading.Lock()
 from app.core.cache import (
     CACHE_TTL_KPI,
     CACHE_TTL_MINING,
@@ -6886,57 +6887,53 @@ def ensure_last_mining(background_tasks: BackgroundTasks = None) -> None:
     """
     Ricalcola il clustering in background se dirty.
     """
-    last_extract = state.get("last_extract") or {}
-    last_mining = state.get("last_mining") or {}
+    with MINING_START_LOCK:
+        last_extract = state.get("last_extract") or {}
+        last_mining = state.get("last_mining") or {}
 
-    extract_ts = last_extract.get("ts")
-    mining_ts = last_mining.get("ts")
-    matrix = last_mining.get("matrix") or {}
-    users = active_users(last_extract.get("users") or [])
+        extract_ts = last_extract.get("ts")
+        mining_ts = last_mining.get("ts")
+        matrix = last_mining.get("matrix") or {}
+        users = active_users(last_extract.get("users") or [])
 
-    # No data loaded: do not trigger mining/polling loops.
-    if not users:
-        state["mining_processing"] = False
-        state["mining_status"] = "idle"
-        return
+        if not users:
+            state["mining_processing"] = False
+            state["mining_status"] = "idle"
+            return
 
-    stale = bool(extract_ts and (not mining_ts or str(extract_ts) > str(mining_ts)))
+        stale = bool(extract_ts and (not mining_ts or str(extract_ts) > str(mining_ts)))
 
-    # Recovery for stale persisted lock (e.g. crash/restart while mining_processing=True)
-    if state.get("mining_processing"):
-        started_at = state.get("mining_started_at")
-        lock_stale = False
-        if started_at:
-            try:
-                started_dt = datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
-                if started_dt.tzinfo is None:
-                    started_dt = started_dt.replace(tzinfo=timezone.utc)
-                lock_stale = (datetime.now(timezone.utc) - started_dt).total_seconds() > 300
-            except Exception:
-                # Unknown timestamp format -> treat as stale to unblock system.
-                lock_stale = True
-        else:
-            # No timestamp and no matrix means lock is likely stale
-            lock_stale = not bool(matrix)
+        if state.get("mining_processing"):
+            started_at = state.get("mining_started_at")
+            lock_stale = False
+            if started_at:
+                try:
+                    started_dt = datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
+                    if started_dt.tzinfo is None:
+                        started_dt = started_dt.replace(tzinfo=timezone.utc)
+                    lock_stale = (datetime.now(timezone.utc) - started_dt).total_seconds() > 300
+                except Exception:
+                    lock_stale = True
+            else:
+                lock_stale = not bool(matrix)
 
-        if not lock_stale:
-            return  # Already running
+            if not lock_stale:
+                return
 
-        state["mining_processing"] = False
-        state["mining_status"] = "idle"
+            state["mining_processing"] = False
+            state["mining_status"] = "idle"
 
-    if not state.get("mining_dirty") and matrix and not stale:
-        return
+        if not state.get("mining_dirty") and matrix and not stale:
+            return
 
-    # Trigger background
-    state["mining_processing"] = True
-    state["mining_status"] = "running"
-    state["mining_started_at"] = datetime.now(timezone.utc).isoformat()
-    params = state.get("last_mining_params") or {}
-    n_clusters = params.get("n_clusters", None)
-    role_support = params.get("role_support", 0.6)
-    
-    tenant_id = get_current_tenant_id()
+        state["mining_processing"] = True
+        state["mining_status"] = "running"
+        state["mining_started_at"] = datetime.now(timezone.utc).isoformat()
+        params = state.get("last_mining_params") or {}
+        n_clusters = params.get("n_clusters", None)
+        role_support = params.get("role_support", 0.6)
+        tenant_id = get_current_tenant_id()
+
     if background_tasks:
         background_tasks.add_task(_mining_worker, n_clusters, role_support, tenant_id)
     else:
@@ -7974,6 +7971,7 @@ def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(r
         return cached
     
     last = state.get("last_mining") or {}
+    users = active_users((state.get("last_extract") or {}).get("users") or [])
     
     # Optimize payload: Convert dense matrix to sparse (list of active groups)
     # This significantly reduces JSON size for large datasets (e.g. 5000 users)
@@ -7982,10 +7980,17 @@ def rolemining_last(background_tasks: BackgroundTasks, username: str = Depends(r
     for u, row in matrix_dense.items():
         # Only include groups with value 1 (or truthy)
         matrix_sparse[u] = [g for g, v in row.items() if v]
+    if not matrix_sparse and users:
+        matrix_sparse = {
+            str(u.get("username") or ""): list(u.get("groups") or [])
+            for u in users
+            if str(u.get("username") or "")
+        }
     
     result = {
         **last,
         "matrix": matrix_sparse,
+        "groups": last.get("groups") or ((state.get("last_extract") or {}).get("groups") or []),
         "status": status
     }
     
@@ -8339,25 +8344,38 @@ def kpi(background_tasks: BackgroundTasks, username: str = Depends(require_auth)
         kpi_data["totalAssignments"] = stats.get("totalAssignments", 0)
         kpi_data["usersWithRedundancy"] = stats.get("usersWithAnomaly", 0)
 
+    users_for_fallback = active_users((state.get("last_extract") or {}).get("users") or [])
+    total_assignments_fallback = sum(len(u.get("groups") or []) for u in users_for_fallback)
+    zero_groups_fallback = sum(1 for u in users_for_fallback if not (u.get("groups") or []))
+    fallback_kpis = {
+        "totalUsers": len(users_for_fallback),
+        "modelQuality": (state.get("last_kpis") or {}).get("modelQuality", 0),
+        "orphanRolesCount": 0,
+        "orphanGroupsCount": 0,
+        "overprivilegedCount": 0,
+        "zeroGroupCount": zero_groups_fallback,
+        "staleAccountCount": 0,
+        "clusterQuality": compute_cluster_quality_live() if users_for_fallback else 0,
+        "clusteringQuality": (state.get("last_kpis") or {}).get("clusteringQuality", 0),
+        "aiDetection": 0,
+        "redundantAssignments": 0,
+        "totalAssignments": total_assignments_fallback,
+        "usersWithRedundancy": 0,
+        "roleCoverage": (state.get("last_kpis") or {}).get("roleCoverage", 0),
+    }
+
     if not kpi_data:
-        # Frontend-safe fallback: return empty KPI instead of 400.
-        # This prevents dashboard hard-fail when dataset is not loaded yet.
-        kpi_data = {
-            "totalUsers": 0,
-            "modelQuality": 0,
-            "orphanRolesCount": 0,
-            "orphanGroupsCount": 0,
-            "overprivilegedCount": 0,
-            "zeroGroupCount": 0,
-            "staleAccountCount": 0,
-            "clusterQuality": 0,
-            "clusteringQuality": 0,
-            "aiDetection": 0,
-            "redundantAssignments": 0,
-            "totalAssignments": 0,
-            "usersWithRedundancy": 0,
-            "roleCoverage": 0,
-        }
+        kpi_data = fallback_kpis
+    else:
+        for key, value in fallback_kpis.items():
+            if kpi_data.get(key) is None:
+                kpi_data[key] = value
+        if users_for_fallback and int(kpi_data.get("totalUsers") or 0) == 0:
+            kpi_data["totalUsers"] = len(users_for_fallback)
+        if total_assignments_fallback and int(kpi_data.get("totalAssignments") or 0) == 0:
+            kpi_data["totalAssignments"] = total_assignments_fallback
+        if users_for_fallback and float(kpi_data.get("clusterQuality") or 0) == 0:
+            kpi_data["clusterQuality"] = fallback_kpis["clusterQuality"]
     
     # Cache KPI data
     RESPONSE_CACHE.set(cache_key, kpi_data, CACHE_TTL_KPI)
@@ -9648,7 +9666,6 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             csv_dup_dn_rows += (len(rows) - 1)
             duplicate_row_ids.update(str(item.get("rowId") or "") for item in rows)
 
-    taken_usernames = {str(u.get("username") or "").strip() for u in existing_users_list if u.get("username")}
     new_users: List[Dict[str, Any]] = []
     for _, rows in by_dn.items():
         scored_rows = []
@@ -9660,14 +9677,7 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         winner_user = dict(winner["user"])
 
         preferred_uname = (winner_user.get("preferredUsername") or "").strip()
-        base = _slug_username(preferred_uname or winner_user.get("displayName") or "")
-        uname = base
-        i = 2
-        while uname in taken_usernames:
-            uname = f"{base}{i}"
-            i += 1
-        taken_usernames.add(uname)
-        winner_user["username"] = uname
+        winner_user["username"] = _slug_username(preferred_uname or winner_user.get("displayName") or "")
         new_users.append(winner_user)
 
         if len(scored_rows) > 1:
@@ -9688,10 +9698,9 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
             display_name = winner_user.get("displayName") or winner["rec"].get("displayName") or ""
             choice_by_displayname.setdefault(display_name, winner["rowId"])
 
-    # Register ALL candidates (unique + duplicates) into ingest tracking structures.
-    # Previously only conflict_candidates were registered, causing unique users to be
-    # invisible to the ingest UI and missing from choice_by_displayname.
     for item in csv_candidates:
+        if str(item.get("rowId") or "") not in duplicate_row_ids:
+            continue
         rec = item["rec"]
         row_id = str(item["rowId"])
         dn_raw = str(rec.get("displayNameRaw") or "")
@@ -9700,10 +9709,15 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
         csv_choice_by_dn.setdefault(dn_raw, row_id)
         ingest_sources["csv"].append(item["candidate"])
 
-    # Merge with existing users - match ONLY by displayName.
-    # Keep all local users; update only same displayName; add others.
+    # Merge with existing users additively: match by username first, then displayName.
+    # Keep all local users; enrich matches; add only truly new identities.
     existing_by_dn = {}
+    existing_by_username = {}
     for u in existing_users_list:
+        uname = str(u.get("username") or "").strip()
+        uname_key = uname.lower()
+        if uname_key and uname_key not in existing_by_username:
+            existing_by_username[uname_key] = u
         dn = (u.get("displayName") or "").strip().lower()
         if dn and dn not in existing_by_dn:
             existing_by_dn[dn] = u
@@ -9713,15 +9727,17 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
     created_brs_count = 0
 
     for user in new_users:
-        uname = user["username"]
+        uname = str(user.get("username") or "").strip()
+        uname_key = uname.lower()
         dn_key = (user.get("displayName") or "").strip().lower()
         
-        # Match ONLY by displayName
-        existing_user = existing_by_dn.get(dn_key)
+        existing_user = existing_by_username.get(uname_key) or existing_by_dn.get(dn_key)
         
         if existing_user:
-            # REPLACE groups and other fields with new values from import
-            existing_user["groups"] = user.get("groups") or []
+            previous_snapshot = dict(existing_user)
+            existing_groups = {str(g or "").strip() for g in (existing_user.get("groups") or []) if str(g or "").strip()}
+            incoming_groups = {str(g or "").strip() for g in (user.get("groups") or []) if str(g or "").strip()}
+            existing_user["groups"] = sorted(existing_groups | incoming_groups)
             if user.get("businessRole"):
                 existing_user["businessRole"] = user["businessRole"]
             if user.get("department"):
@@ -9736,16 +9752,20 @@ async def import_csv(file: UploadFile = File(...), background_tasks: BackgroundT
                 if user.get(k) is not None:
                     existing_user[k] = user.get(k)
             existing_user["DataSource"] = datasource_from_source("csv")
-            
-            # Update username if it changed
-            if existing_user.get("username") != uname:
-                existing_user["username"] = uname
-            
-            updated_users += 1
+
+            if previous_snapshot != existing_user:
+                updated_users += 1
         else:
-            # New user - add to indexes
             new_user = user.copy()
+            base_uname = _slug_username(uname or new_user.get("displayName") or "")
+            candidate_uname = base_uname
+            suffix = 2
+            while candidate_uname.lower() in existing_by_username:
+                candidate_uname = f"{base_uname}{suffix}"
+                suffix += 1
+            new_user["username"] = candidate_uname
             existing_users_list.append(new_user)
+            existing_by_username[candidate_uname.lower()] = new_user
             if dn_key:
                 existing_by_dn[dn_key] = new_user
             added_users += 1
