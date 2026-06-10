@@ -717,6 +717,7 @@ def sync_roles_from_users(users: List[Dict[str, Any]]) -> int:
     role_meta = state.setdefault("role_meta", {})
     business_roles = state.setdefault("business_roles", set())
     created = 0
+    groups_by_role: Dict[str, set[str]] = defaultdict(set)
 
     for u in users or []:
         br = (u.get("businessRole") or "").strip()
@@ -726,6 +727,21 @@ def sync_roles_from_users(users: List[Dict[str, Any]]) -> int:
             _ensure_role_registered(br)  # usa role_meta/business_roles
             created += 1
         business_roles.add(br)
+        for group in (u.get("groups") or []):
+            group_name = str(group or "").strip()
+            if group_name:
+                groups_by_role[br].add(group_name)
+
+    for br, groups in groups_by_role.items():
+        meta = role_meta.setdefault(br, {"color": "#ffffff", "groups": []})
+        existing_groups = {
+            str(group or "").strip()
+            for group in (meta.get("groups") or [])
+            if str(group or "").strip()
+        }
+        merged_groups = sorted(existing_groups | groups)
+        if merged_groups != (meta.get("groups") or []):
+            meta["groups"] = merged_groups
 
     return created
 
@@ -8735,6 +8751,7 @@ def businessroles(username: str = Depends(require_auth)):
     users = active_users(state["last_extract"]["users"] or [])
 
     apply_business_roles(users)
+    sync_roles_from_users(users)
     roles = sorted({u.get("businessRole", "Unassigned") for u in users})
     extra = state.get("business_roles", set())
     roles = sorted(set(roles).union(set(extra)))
