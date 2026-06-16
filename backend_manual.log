@@ -86,3 +86,19 @@ INFO:     127.0.0.1:64167 - "GET /api/me HTTP/1.1" 401 Unauthorized
 INFO:     127.0.0.1:64168 - "GET /api/me HTTP/1.1" 401 Unauthorized
 INFO:     127.0.0.1:65267 - "GET /api/role-mining/last HTTP/1.1" 404 Not Found
 INFO:     127.0.0.1:65272 - "GET /api/rolemining/last HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55492 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55493 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55498 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55515 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55512 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55513 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55517 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55520 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55523 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55516 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55514 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55526 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55530 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55533 - "GET /api/rolemining/last HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55536 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55539 - "GET /api/businessroles HTTP/1.1" 200 OK

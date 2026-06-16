@@ -3790,26 +3790,20 @@ function Cluster({ permissions }) {
       const roleColor = roleMetaByRole?.[businessRole]?.color || "#111a2e";
 
       const userMatrix = mining.matrix[u];
-      // Support sparse matrix (List of groups) or legacy dense matrix (Dict)
-      const userGroupsSparse = Array.isArray(userMatrix)
+      // Keep matrix SPARSE — attach the Set directly, never expand to flat keys.
+      // AG Grid valueGetter will do O(1) Set.has() per visible cell (virtualised).
+      const _groups = Array.isArray(userMatrix)
         ? new Set(userMatrix)
-        : new Set(Object.entries(userMatrix || {}).filter(([k, v]) => v).map(([k]) => k));
+        : new Set(Object.entries(userMatrix || {}).filter(([, v]) => v).map(([k]) => k));
 
-      // Construct row object for AG Grid (needs flat properties for columns)
-      const rowObj = {
+      return {
         username: u,
         displayName: usersIndex?.[u] || u,
         clusterId: clusterByUser[u] ?? -1,
         businessRole,
         roleColor,
+        _groups,   // sparse Set — never materialised as thousands of flat keys
       };
-
-      // Fill group columns: 1 if present, 0 otherwise
-      groups.forEach(g => {
-        rowObj[g] = userGroupsSparse.has(g) ? 1 : 0;
-      });
-
-      return rowObj;
     });
 
 
@@ -3880,6 +3874,21 @@ function Cluster({ permissions }) {
     });
 
     groupsSorted.forEach((g) => {
+      // Pre-compute the two possible cellStyle objects once per column definition
+      // (active vs inactive). This avoids calling hexToRgba() on every cell render.
+      const roleForGroup = groupRoleMap?.[g] || "Unassigned";
+      const hex = roleMetaByRole?.[roleForGroup]?.color || "#6aa6ff";
+      const styleOn = {
+        backgroundColor: hexToRgba(hex, 0.92),
+        boxShadow: `inset 0 0 0 1px ${hexToRgba("#ffffff", 0.16)}, inset 0 -12px 24px ${hexToRgba(hex, 0.28)}`,
+        transition: "background-color 140ms ease, box-shadow 140ms ease"
+      };
+      const styleOff = {
+        backgroundColor: hexToRgba(hex, 0.08),
+        boxShadow: `inset 0 0 0 1px ${hexToRgba(hex, 0.18)}`,
+        transition: "background-color 140ms ease, box-shadow 140ms ease"
+      };
+
       cols.push({
         headerName: g,
         field: g,
@@ -3889,27 +3898,17 @@ function Cluster({ permissions }) {
         headerClass: "cluster-group-header",
         cellClass: "cluster-group-cell",
         tooltipValueGetter: (p) => {
-          const isOn = Number(p.value || 0) === 1;
+          const isOn = p.data?._groups?.has(g);
           const who = p.data?.displayName || p.data?.username || "User";
           return `${who} • ${g} • ${isOn ? "Enabled" : "Disabled"}`;
         },
 
-        valueGetter: (p) => Number(p.data?.[g] || 0),
+        // O(1) Set lookup — no flat key expansion needed
+        valueGetter: (p) => p.data?._groups?.has(g) ? 1 : 0,
         valueFormatter: () => "",
 
-        cellStyle: (p) => {
-          const v = Number(p.value || 0);
-          const roleForGroup = groupRoleMap?.[g] || "Unassigned";
-          const hex = roleMetaByRole?.[roleForGroup]?.color || "#6aa6ff";
-          const bg = v ? hexToRgba(hex, 0.92) : hexToRgba(hex, 0.08);
-          return {
-            backgroundColor: bg,
-            boxShadow: v
-              ? `inset 0 0 0 1px ${hexToRgba("#ffffff", 0.16)}, inset 0 -12px 24px ${hexToRgba(hex, 0.28)}`
-              : `inset 0 0 0 1px ${hexToRgba(hex, 0.18)}`,
-            transition: "background-color 140ms ease, box-shadow 140ms ease"
-          };
-        },
+        // Pure O(1) lookup: style objects already computed above
+        cellStyle: (p) => p.value ? styleOn : styleOff,
       });
 
     });
@@ -4126,7 +4125,7 @@ function Cluster({ permissions }) {
                   suppressHeaderMenuButton: true,
                   suppressHeaderFilterButton: true
                 }}
-                animateRows={true}
+                animateRows={false}
                 quickFilterText={quick}
                 rowHeight={matrixDensity.rowHeight}
                 headerHeight={matrixDensity.headerHeight}
