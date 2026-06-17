@@ -139,9 +139,17 @@ def _is_broad(role_name: str) -> bool:
     toks = set(_tokens(role_name))
     return any(m in toks for m in BROAD_MARKERS)
 
+def _parse_matrix_row(row: Any) -> List[str]:
+    if row is None:
+        return []
+    if isinstance(row, list):
+        return [str(g) for g in row if g]
+    if isinstance(row, dict):
+        return [str(g) for g, v in row.items() if int(v) == 1]
+    return []
+
 def _matrix_user_roles(matrix: dict, username: str) -> set[str]:
-    row = (matrix or {}).get(username) or {}
-    return {r for r, v in row.items() if int(v) == 1}
+    return set(_parse_matrix_row((matrix or {}).get(username)))
 
 def build_overprivileged_items(matrix: dict, top_pct: float = 10.0) -> dict:
     users = state.get("last_extract", {}).get("users") or []
@@ -150,7 +158,7 @@ def build_overprivileged_items(matrix: dict, top_pct: float = 10.0) -> dict:
 
     items = []
     for uname, row in (matrix or {}).items():
-        actual = sorted([r for r, v in (row or {}).items() if int(v) == 1])
+        actual = sorted(_parse_matrix_row(row))
 
         br = br_by_user.get(uname, "Unassigned")
         expected = set((role_meta.get(br, {}) or {}).get("groups", []) or [])
@@ -224,7 +232,7 @@ def predict_redundant(broad_role: str, specific_role: str, family: str, user_gro
 def build_ai_detection_items(matrix: dict) -> list[dict]:
     items = []
     for uname, row in (matrix or {}).items():
-        roles = [r for r, v in (row or {}).items() if int(v) == 1]
+        roles = _parse_matrix_row(row)
         user_groups = _matrix_user_roles(matrix, uname)
 
         fam = defaultdict(list)
@@ -410,7 +418,7 @@ def run_smart_ai_detection(users: list, matrix: dict) -> dict:
     users_with_anomaly = 0
 
     for uname, row in (matrix or {}).items():
-        groups = [g for g, v in (row or {}).items() if int(v) == 1]
+        groups = _parse_matrix_row(row)
         groups_set = set(groups)  # fast lookup
         total_assignments += len(groups)
 
@@ -2641,7 +2649,7 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
     if not users and mining_matrix:
         fallback_users = []
         for uname, row in mining_matrix.items():
-            groups = [g for g, v in (row or {}).items() if int(v) == 1]
+            groups = _parse_matrix_row(row)
             fallback_users.append(
                 {
                     "username": uname,
@@ -2677,15 +2685,10 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
     if mining_matrix and (users_with_groups == 0 or total_groups_from_users < max(10, len(users) // 3)):
         group_to_users = defaultdict(set)
         for uname, row in mining_matrix.items():
-            for g, v in (row or {}).items():
-                try:
-                    enabled = int(v) == 1
-                except Exception:
-                    enabled = bool(v)
-                if enabled:
-                    g_norm = str(g or "").strip()
-                    if g_norm:
-                        group_to_users[g_norm].add(str(uname))
+            for g in _parse_matrix_row(row):
+                g_norm = str(g or "").strip()
+                if g_norm:
+                    group_to_users[g_norm].add(str(uname))
 
     role_meta = state.get("role_meta") or {}
     catalog_roles: set[str] = set()
@@ -2964,13 +2967,7 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
     current_assignments_matrix = 0
     if mining_matrix:
         for row in mining_matrix.values():
-            for _, v in (row or {}).items():
-                try:
-                    enabled = int(v) == 1
-                except Exception:
-                    enabled = bool(v)
-                if enabled:
-                    current_assignments_matrix += 1
+            current_assignments_matrix += len(_parse_matrix_row(row))
     current_assignments = max(current_assignments_users, current_assignments_matrix)
     current_avg_groups = float(current_assignments / max(1, len(users)))
     role_covered_users = int(sum(1 for u in users if str(u.get("businessRole") or "").strip() not in ("", "Unassigned")))
@@ -6012,7 +6009,7 @@ def compute_ai_detection(matrix: dict, users: list = None) -> dict:
     redundant_users = []
 
     for uname, row in (matrix or {}).items():
-        roles = [r for r, v in (row or {}).items() if int(v) == 1]
+        roles = _parse_matrix_row(row)
         user_groups = _matrix_user_roles(matrix, uname)
 
         total_assignments += len(roles)
@@ -6624,19 +6621,22 @@ def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[st
     template_coverage_penalty_pct = float(np.mean(miss_template_ratios) * 100.0) if miss_template_ratios else 0.0
     noise_ratio_pct = float(np.mean(noise_ratios) * 100.0) if noise_ratios else 0.0
 
+    brdb_ready = bool(state.get("brdb_ready"))
+
     # 8) Ambiguita assegnazione ruolo (bassa confidence BRDB)
     ambiguous_users = []
-    for u in (users or [])[:20000]:
-        uname = u.get("username")
-        if not uname:
-            continue
-        gs = list(user_groups_map.get(uname) or [])
-        if not gs:
-            continue
-        s = brdb_infer_groupset(gs)
-        conf = float(s.get("confidence") or 0.0)
-        if conf < 0.55:
-            ambiguous_users.append({"username": uname, "displayName": u.get("displayName"), "confidence": round(conf, 3)})
+    if brdb_ready:
+        for u in (users or [])[:20000]:
+            uname = u.get("username")
+            if not uname:
+                continue
+            gs = list(user_groups_map.get(uname) or [])
+            if not gs:
+                continue
+            s = brdb_infer_groupset(gs)
+            conf = float(s.get("confidence") or 0.0)
+            if conf < 0.55:
+                ambiguous_users.append({"username": uname, "displayName": u.get("displayName"), "confidence": round(conf, 3)})
     ambiguity_pct = (len(ambiguous_users) / max(1, total_users)) * 100.0
 
     # 9) Drift temporale (utenti recenti ma bassa compatibilita template)
@@ -6698,13 +6698,14 @@ def compute_model_quality(users: List[Dict[str, Any]], matrix: Dict[str, Dict[st
 
     # 13) Generalization score (BRDB confidence medio)
     confs = []
-    for uname, gs in user_groups_map.items():
-        if not gs:
-            continue
-        s = brdb_infer_groupset(list(gs))
-        confs.append(float(s.get("confidence") or 0.0))
-    avg_conf = float(np.mean(confs)) if confs else 0.0
-    generalization_penalty_pct = (1.0 - avg_conf) * 100.0
+    if brdb_ready:
+        for uname, gs in user_groups_map.items():
+            if not gs:
+                continue
+            s = brdb_infer_groupset(list(gs))
+            confs.append(float(s.get("confidence") or 0.0))
+    avg_conf = float(np.mean(confs)) if confs else (1.0 if not brdb_ready else 0.0)
+    generalization_penalty_pct = 0.0 if not brdb_ready else (1.0 - avg_conf) * 100.0
     weights = get_active_model_weights()
     preset = (state.get("dq_model_preset") or "manufacturing").strip().lower()
 
@@ -6839,6 +6840,8 @@ def run_role_mining(
 
     return {
         "clusters": clusters,
+        "matrix": matrix,
+        "kpi": kpi,
         "groups": all_groups_ui,
     }
 
