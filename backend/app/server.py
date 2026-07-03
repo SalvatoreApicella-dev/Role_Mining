@@ -3956,6 +3956,7 @@ BUILTIN_TENANT_DOMAIN_MAP: Dict[str, str] = {
     "sky.internal": "sky",
     "sky.it": "sky",
     "sky": "sky",
+    "skyarcadia": "skyarcadia",
 }
 
 
