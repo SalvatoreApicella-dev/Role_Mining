@@ -1,4 +1,3 @@
-const OVERPRIVILEGED_GROUP_THRESHOLD = 8;
 const STALE_DAYS_THRESHOLD = 90;
 
 function toIsoDate(value) {
@@ -68,11 +67,37 @@ function buildClusterMembershipRows(mining, assignments = {}, displayNames = {})
     });
 }
 
+function buildOverprivilegedRows(aiDetection) {
+  const items = Array.isArray(aiDetection?.items) ? aiDetection.items : [];
+
+  return items.map((item) => {
+    const anomalies = Array.isArray(item?.anomalies) ? item.anomalies : [];
+    const topAnomaly = anomalies[0] || {};
+    const anomalousGroups = anomalies.map((anomaly) => anomaly?.group || "").filter(Boolean);
+    const topReasons = Array.isArray(topAnomaly?.reasons) ? topAnomaly.reasons : [];
+
+    return {
+      displayName: item?.displayName || "",
+      username: item?.username || "",
+      businessRole: item?.businessRole || "Unassigned",
+      imputedBusinessRole: item?.businessRole || "Unassigned",
+      department: item?.department || "",
+      accountType: item?.accountType || "Internal",
+      anomalyCount: Number(item?.anomalyCount || anomalies.length || 0),
+      anomalousGroups: anomalousGroups.join("; "),
+      topAnomaly: topAnomaly?.group || "",
+      topConfidence: Number(topAnomaly?.confidence || 0),
+      topReasons: topReasons.join("; "),
+    };
+  });
+}
+
 export function buildReportsCatalog(
   {
     users = [],
     businessRoles = { roles: [], assignments: {} },
     mining = {},
+    aiDetection = {},
     kpi = {},
     clusterQuality = {},
     groupCounts = {},
@@ -82,6 +107,7 @@ export function buildReportsCatalog(
   const safeUsers = normalizeUsers(users);
   const roleItems = normalizeRoles(businessRoles?.roles);
   const assignments = normalizeObject(businessRoles?.assignments);
+  const safeAiDetection = normalizeObject(aiDetection);
   const safeKpi = normalizeObject(kpi);
   const safeClusterQuality = normalizeObject(clusterQuality);
   const safeCounts = normalizeObject(groupCounts?.counts);
@@ -89,9 +115,11 @@ export function buildReportsCatalog(
 
   const usersInventory = safeUsers.map(userBaseRow);
   const staleUsers = safeUsers.filter((user) => isStaleUser(user, nowMs)).map(userBaseRow);
-  const overprivilegedUsers = safeUsers
-    .filter((user) => (Array.isArray(user?.groups) ? user.groups.length : 0) > OVERPRIVILEGED_GROUP_THRESHOLD)
-    .map(userBaseRow);
+  const overprivilegedUsers = buildOverprivilegedRows(safeAiDetection);
+  const overprivilegedUsersWithRoles = overprivilegedUsers.map((row) => ({
+    ...row,
+    roleSource: "ai-detection",
+  }));
   const zeroGroupUsers = safeUsers
     .filter((user) => (Array.isArray(user?.groups) ? user.groups.length : 0) === 0)
     .map(userBaseRow);
@@ -204,10 +232,18 @@ export function buildReportsCatalog(
     {
       id: "overprivileged_users",
       title: "Overprivileged Users",
-      description: "Utenti con piu di 8 gruppi assegnati.",
+      description: "Utenti con anomalie rilevate da AI Detection.",
       audience: "Risk",
       filename: "report_overprivileged_users.csv",
       rows: overprivilegedUsers,
+    },
+    {
+      id: "overprivileged_users_with_roles",
+      title: "Overprivileged Users + Imputed Roles",
+      description: "Utenti con anomalie, ruolo imputato e dettaglio del gruppo anomalo principale.",
+      audience: "Risk",
+      filename: "report_overprivileged_users_with_roles.csv",
+      rows: overprivilegedUsersWithRoles,
     },
     {
       id: "zero_group_users",
@@ -275,5 +311,5 @@ export function buildReportsCatalog(
     },
   ];
 
-  return reports.slice(0, 10);
+  return reports.slice(0, 11);
 }

@@ -109,6 +109,12 @@ function Sidebar({ onLogout, permissions }) {
               <span className="nav-item__text">Users</span>
             </NavLink>
           )}
+          {isRoleModelingRouteEnabled() && can("can_view_cluster") && (
+            <NavLink to="/role-modeling" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+              <span className="nav-item__dot" />
+              <span className="nav-item__text">Role Modeling</span>
+            </NavLink>
+          )}
         </div>
 
         <div className="menu-block nav-section">

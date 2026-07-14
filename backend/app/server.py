@@ -4,6 +4,7 @@ import json
 import hashlib
 import hmac
 import tempfile
+from io import BytesIO
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
@@ -85,7 +86,8 @@ SYSTEM_USER_HASH_ITERATIONS = 150_000
 
 
 
-from openpyxl import load_workbook
+from openpyxl import load_workbook, Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 from collections import defaultdict, Counter
 
 # ML Engine import
@@ -2642,6 +2644,7 @@ def _build_role_templates(users: List[Dict[str, Any]], min_group_support: float)
 
 
 def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str, Any]:
+    from collections import Counter
     users = active_users((state.get("last_extract") or {}).get("users") or [])
     last_mining = state.get("last_mining") or {}
     mining_matrix = last_mining.get("matrix") or {}
@@ -2718,6 +2721,25 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
     catalog_role_names = sorted(catalog_roles)
     orphan_roles = sorted([r for r in catalog_role_names if len(by_role.get(r) or []) == 0])
 
+    # Calculate SoD conflict pairs early
+    sod_conflict_pairs = set()
+    sensitive_markers = ["admin", "finance", "payroll", "security", "approve", "vendor", "hr", "sap"]
+    candidate_groups_sod = [g for g, u_set in group_to_users.items() if len(u_set) >= 3]
+    for i in range(len(candidate_groups_sod)):
+        for j in range(i + 1, len(candidate_groups_sod)):
+            ga = candidate_groups_sod[i]
+            gb = candidate_groups_sod[j]
+            ua = group_to_users.get(ga) or set()
+            ub = group_to_users.get(gb) or set()
+            conflict_users = len(ua & ub)
+            if conflict_users <= 0:
+                continue
+            min_size = min(len(ua), len(ub))
+            overlap_ratio = conflict_users / min_size
+            if overlap_ratio <= 0.20:
+                sod_conflict_pairs.add((ga, gb))
+                sod_conflict_pairs.add((gb, ga))
+
     proposals: List[Dict[str, Any]] = []
 
     # 1) Role merge opportunities (similar templates + assigned users).
@@ -2756,15 +2778,18 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
 
     # 2) Group consolidation opportunities.
     current_group_overlap_pairs = 0
-    sorted_groups = sorted(group_to_users.items(), key=lambda x: len(x[1]), reverse=True)[:80]
-    for i in range(len(sorted_groups)):
-        ga, ua = sorted_groups[i]
-        if len(ua) < 2:
-            continue
-        for j in range(i + 1, len(sorted_groups)):
-            gb, ub = sorted_groups[j]
-            if len(ub) < 2:
+    candidate_merge_groups = [g for g, u_set in group_to_users.items() if len(u_set) >= 2]
+    for i in range(len(candidate_merge_groups)):
+        ga = candidate_merge_groups[i]
+        ua = group_to_users.get(ga) or set()
+        for j in range(i + 1, len(candidate_merge_groups)):
+            gb = candidate_merge_groups[j]
+            ub = group_to_users.get(gb) or set()
+            
+            # Skip if they have a SoD conflict
+            if (ga, gb) in sod_conflict_pairs:
                 continue
+                
             overlap = len(ua & ub) / max(1, min(len(ua), len(ub)))
             if overlap < req.redundancy_threshold:
                 continue
@@ -2772,7 +2797,20 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
             affected = len(ua | ub)
             base_conf = 0.50 + 0.50 * overlap
             conf = max(0.05, min(0.99, base_conf + _role_modeling_ml_boost("group_merge", req.ml_weight)))
-            priority = round((affected * 0.75 + len(ua & ub) * 0.25) * conf, 2)
+            
+            # Apply a risk boost if it touches sensitive markers
+            ga_lower = str(ga).lower()
+            gb_lower = str(gb).lower()
+            is_sensitive_a = any(m in ga_lower for m in sensitive_markers)
+            is_sensitive_b = any(m in gb_lower for m in sensitive_markers)
+            
+            boost = 1.0
+            if is_sensitive_a or is_sensitive_b:
+                boost *= 1.3
+            if is_sensitive_a and is_sensitive_b:
+                boost *= 1.2
+                
+            priority = round((affected * 0.75 + len(ua & ub) * 0.25) * conf * boost, 2)
             proposals.append(
                 {
                     "id": f"group-merge::{ga}::{gb}",
@@ -2782,7 +2820,7 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
                     "confidence": round(conf, 3),
                     "priorityScore": priority,
                     "affectedUsers": affected,
-                    "rationale": f"Overlap membership elevato ({round(overlap * 100)}%).",
+                    "rationale": f"Overlap membership elevato ({round(overlap * 100)}%)." + (" (Gruppo sensibile)" if (is_sensitive_a or is_sensitive_b) else ""),
                 }
             )
 
@@ -2792,6 +2830,13 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
         template = templates.get(role_name) or set()
         if len(members) < 3 or not template:
             continue
+            
+        # Group members by department for peer profiling
+        dept_members = defaultdict(list)
+        for m in members:
+            d = str(m.get("department") or "").strip()
+            dept_members[d].append(m)
+            
         for u in members:
             current = set([str(g or "").strip() for g in (u.get("groups") or []) if str(g or "").strip()])
             missing = sorted(template - current)
@@ -2804,20 +2849,57 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
             current_drifted_users.add(str(u.get("username") or ""))
             base_conf = 0.45 + min(0.45, drift)
             conf = max(0.05, min(0.99, base_conf + _role_modeling_ml_boost("assignment_update", req.ml_weight)))
+            
+            # Analyze peers in the same department
+            u_dept = str(u.get("department") or "").strip()
+            peers = dept_members.get(u_dept) or []
+            
+            # For each extra group, determine if it is shared by peers
+            peer_shared_extras = []
+            individual_outliers = []
+            
+            if len(peers) >= 3:
+                for g_extra in extra:
+                    peer_count = sum(1 for p in peers if g_extra in [str(g or "").strip() for g in (p.get("groups") or [])])
+                    ratio = peer_count / len(peers)
+                    if ratio >= 0.60:
+                        peer_shared_extras.append((g_extra, ratio))
+                    else:
+                        individual_outliers.append(g_extra)
+            else:
+                individual_outliers = extra
+                
             priority = round((len(missing) * 0.7 + len(extra) * 0.5 + 1.0) * conf, 2)
             uname = str(u.get("username") or "")
+            
+            # Build context-aware title and rationale
+            if peer_shared_extras:
+                # If there are groups widely shared among peers, suggest updating the role template
+                shared_str = ", ".join([f"{g} ({int(r*100)}%)" for g, r in peer_shared_extras])
+                title = f"Consigliato aggiornamento template {role_name}"
+                rationale = f"Il gruppo extra {shared_str} è comune ai colleghi in {u_dept or 'N/D'}."
+                # Boost priority for template update suggestion
+                priority = round(priority * 1.25, 2)
+            else:
+                # Individual anomaly
+                title = f"Normalizza assegnazioni utente {uname}"
+                if u_dept and len(peers) >= 3:
+                    rationale = f"Anomalia individuale: i gruppi extra non sono usati dai colleghi in {u_dept}."
+                else:
+                    rationale = f"Scostamento dal template di {role_name}: +{len(missing)} / -{len(extra)}."
+                    
             proposals.append(
                 {
                     "id": f"assignment::{uname}::{role_name}",
                     "proposalType": "assignment_update",
-                    "title": f"Normalizza assegnazioni utente {uname}",
+                    "title": title,
                     "shortLabel": uname,
                     "confidence": round(conf, 3),
                     "priorityScore": priority,
                     "affectedUsers": 1,
                     "missingCount": len(missing),
                     "extraCount": len(extra),
-                    "rationale": f"Scostamento dal template di {role_name}: +{len(missing)} / -{len(extra)}.",
+                    "rationale": rationale,
                 }
             )
 
@@ -3078,7 +3160,7 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
     }
     rollout_plan = [
         {
-            "phase": "Phase 1 - Quick Wins",
+            "phase": "Phase 1",
             "window": "Week 1-2",
             "items": [p.get("title") for p in (top_role_retire[:1] + top_group_merges[:1] + top_assignment_updates[:1]) if p.get("title")],
         },
@@ -3102,31 +3184,104 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
     discovery_models: List[Dict[str, Any]] = []
 
     sensitive_markers = ["admin", "finance", "payroll", "security", "approve", "vendor", "hr", "sap"]
-    sensitive_groups = [
-        g for g, _ in group_freq[:60]
-        if any(m in str(g).lower() for m in sensitive_markers)
-    ][:18]
-    sod_items: List[Dict[str, Any]] = []
-    for i in range(len(sensitive_groups)):
-        for j in range(i + 1, len(sensitive_groups)):
-            ga = sensitive_groups[i]
-            gb = sensitive_groups[j]
+    
+    # 1. Build a map of users by username to retrieve department/role
+    user_map = {str(u.get("username") or "").strip(): u for u in users if u.get("username")}
+    
+    # 2. Identify candidate groups with at least 3 users
+    candidate_groups = [g for g, u_set in group_to_users.items() if len(u_set) >= 3]
+    
+    # 3. Find pairs of groups with low Jaccard overlap ratio
+    import math
+
+    sod_candidates = []
+    for i in range(len(candidate_groups)):
+        for j in range(i + 1, len(candidate_groups)):
+            ga = candidate_groups[i]
+            gb = candidate_groups[j]
             ua = group_to_users.get(ga) or set()
             ub = group_to_users.get(gb) or set()
             conflict_users = len(ua & ub)
+            
+            # We want groups with at least 1 user in common so that we can show them in the alerts.
             if conflict_users <= 0:
                 continue
-            severity = "high" if conflict_users >= 10 else "medium" if conflict_users >= 4 else "low"
-            sod_items.append(
-                {
-                    "groupA": ga,
-                    "groupB": gb,
-                    "users": int(conflict_users),
-                    "severity": severity,
-                    "recommendation": "Verifica separazione compiti e riduci assegnazioni incrociate.",
-                }
-            )
-    sod_items.sort(key=lambda x: int(x.get("users") or 0), reverse=True)
+                
+            min_size = min(len(ua), len(ub))
+            overlap_ratio = conflict_users / min_size
+            
+            # If the overlap ratio is <= 0.20 (mutually exclusive)
+            if overlap_ratio <= 0.20:
+                # Math score for Mutual Exclusion
+                score = (1.0 - overlap_ratio) * math.log2(1 + min_size)
+                
+                # Check for sensitive names to apply boost
+                ga_lower = str(ga).lower()
+                gb_lower = str(gb).lower()
+                is_sensitive_a = any(m in ga_lower for m in sensitive_markers)
+                is_sensitive_b = any(m in gb_lower for m in sensitive_markers)
+                
+                boost = 1.0
+                if is_sensitive_a or is_sensitive_b:
+                    boost *= 1.5
+                if is_sensitive_a and is_sensitive_b:
+                    boost *= 1.2
+                    
+                score *= boost
+                sod_candidates.append((score, ga, gb, conflict_users, is_sensitive_a, is_sensitive_b, len(ua), len(ub)))
+
+    # Sort candidates by score descending
+    sod_candidates.sort(key=lambda x: x[0], reverse=True)
+    
+    # Take top candidate pairs and construct sod_items
+    sod_items: List[Dict[str, Any]] = []
+    
+    def _most_common_attr(usernames, attr_name):
+        vals = []
+        for uname in usernames:
+            usr = user_map.get(uname)
+            if usr:
+                val = str(usr.get(attr_name) or "").strip()
+                val_lower = val.lower()
+                if val and val_lower not in ("unknown", "unassigned", "n/d", "null", "none"):
+                    vals.append(val)
+        if not vals:
+            return ""
+        return Counter(vals).most_common(1)[0][0]
+
+    for score, ga, gb, conflict_users, is_sens_a, is_sens_b, size_a, size_b in sod_candidates[:24]:
+        ua = group_to_users.get(ga) or set()
+        ub = group_to_users.get(gb) or set()
+        
+        # Profile demographics
+        dept_a = _most_common_attr(ua, "department")
+        dept_b = _most_common_attr(ub, "department")
+        role_a = _most_common_attr(ua, "businessRole")
+        role_b = _most_common_attr(ub, "businessRole")
+        
+        # Build description & recommendation
+        if dept_a and dept_b and dept_a != dept_b:
+            desc = f"Il gruppo {ga} è prevalentemente usato in {dept_a} ({role_a or 'Ruolo N/D'}), mentre {gb} in {dept_b} ({role_b or 'Ruolo N/D'})."
+            rec = f"Consigliato separare per evitare conflitti di mansione tra {dept_a} e {dept_b}."
+        elif role_a and role_b and role_a != role_b:
+            desc = f"Il gruppo {ga} fa capo a {role_a}, mentre {gb} fa capo a {role_b}."
+            rec = f"Verifica la separazione dei compiti tra i ruoli {role_a} e {role_b}."
+        else:
+            percent_separated = round((1.0 - (conflict_users / min(size_a, size_b))) * 100, 1)
+            desc = f"Elevata mutua esclusione tra i gruppi ({percent_separated}% degli utenti li hanno separati)."
+            rec = f"Verifica abilitazioni incrociate per {conflict_users} utenti per ridurre il rischio di accumulo privilegi."
+            
+        severity = "high" if (conflict_users >= 10 or (is_sens_a and is_sens_b)) else "medium" if conflict_users >= 4 else "low"
+        
+        sod_items.append(
+            {
+                "groupA": ga,
+                "groupB": gb,
+                "users": int(conflict_users),
+                "severity": severity,
+                "recommendation": f"{desc} {rec}",
+            }
+        )
     sod_items = sod_items[:12]
 
     high_sod_count = len([x for x in sod_items if str(x.get("severity") or "").lower() == "high"])
@@ -3571,7 +3726,7 @@ def _build_role_modeling_sandbox(req: "RoleModelingSandboxRequest") -> Dict[str,
     trend_points = [
         {"label": "Current", "score": round(current_model_score, 2)},
         {
-            "label": "Quick Wins",
+            "label": "Phase 1",
             "score": round(
                 min(
                     100.0,
@@ -3937,6 +4092,12 @@ class RoleModelingApplyRequest(BaseModel):
     actions: List[Dict[str, Any]] = Field(default_factory=list)
     applied_model_id: str = ""
     target_model_score: Optional[float] = None
+
+
+class RoleModelingXlsxExportRequest(BaseModel):
+    filename: str = "role_modeling_proposed_model.xlsx"
+    sheet_name: str = "Proposed Model"
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 security = HTTPBearer(auto_error=False)
@@ -8024,6 +8185,24 @@ def role_modeling_sandbox_feedback(req: RoleModelingFeedbackRequest, username: s
     return {"ok": True, "items": len(state.get("role_modeling_feedback") or [])}
 
 
+@app.post("/api/role-modeling/export/xlsx")
+def role_modeling_export_xlsx(req: RoleModelingXlsxExportRequest, username: str = Depends(require_auth)):
+    rows = list(req.rows or [])
+    if not rows:
+        raise HTTPException(status_code=400, detail="Nessuna struttura disponibile per l'export XLSX.")
+
+    workbook_buffer = _build_role_modeling_xlsx(rows, req.sheet_name)
+    filename = _safe_xlsx_filename(req.filename)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    }
+    return StreamingResponse(
+        workbook_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
 def _replace_group_everywhere(users: List[Dict[str, Any]],
                               role_meta: Dict[str, Any],
                               matrix: Dict[str, Any],
@@ -8088,6 +8267,71 @@ def _replace_group_everywhere(users: List[Dict[str, Any]],
         matrix[uname] = row
 
     return changed_users
+
+
+def _safe_xlsx_filename(raw_name: str) -> str:
+    name = str(raw_name or "").strip()
+    if not name.lower().endswith(".xlsx"):
+        name = f"{name}.xlsx" if name else "role_modeling_proposed_model.xlsx"
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._")
+    return name or "role_modeling_proposed_model.xlsx"
+
+
+def _build_role_modeling_xlsx(rows: List[Dict[str, Any]], sheet_name: str = "Proposed Model") -> BytesIO:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = str(sheet_name or "Proposed Model")[:31]
+    sheet.freeze_panes = "A2"
+    sheet.sheet_view.showGridLines = True
+    sheet.auto_filter.ref = "A1:B1"
+
+    default_font = Font(name="Arial", size=10, color="000000")
+    header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    removed_font = Font(name="Arial", size=10, color="9C0006")
+    header_fill = PatternFill("solid", fgColor="1F4E78")
+    removed_fill = PatternFill("solid", fgColor="FDE9E7")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    cell_alignment = Alignment(vertical="center")
+
+    headers = ["business role", "ruolo"]
+    sheet.append(headers)
+    for idx, cell in enumerate(sheet[1], start=1):
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+
+    for row_index, row in enumerate(rows or [], start=2):
+        business_role = str((row or {}).get("business_role") or "").strip()
+        role = str((row or {}).get("role") or "").strip()
+        status = str((row or {}).get("status") or "").strip().lower()
+        highlight = str((row or {}).get("highlight") or "").strip().lower()
+        sheet.append([business_role, role])
+        for column_index in range(1, 3):
+            cell = sheet.cell(row=row_index, column=column_index)
+            cell.font = default_font
+            cell.alignment = cell_alignment
+        if status == "removed" or highlight == "red":
+            for column_index in range(1, 3):
+                cell = sheet.cell(row=row_index, column=column_index)
+                cell.font = removed_font
+                cell.fill = removed_fill
+                cell.alignment = cell_alignment
+
+    widths = {
+        "A": 34,
+        "B": 34,
+    }
+    for column, width in widths.items():
+        sheet.column_dimensions[column].width = width
+
+    last_row = max(1, sheet.max_row)
+    sheet.auto_filter.ref = f"A1:B{last_row}"
+    sheet.row_dimensions[1].height = 20
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 
 def _apply_role_modeling_actions(req: RoleModelingApplyRequest, username: str) -> Dict[str, Any]:

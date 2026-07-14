@@ -39,8 +39,8 @@ test("AI suggestions are hidden in business role detail sections", () => {
   });
 });
 
-test("Role Modeling is disabled in visible analytics actions and route exposure", () => {
-  assert.equal(ROLE_MODELING_ENABLED, false);
+test("Role Modeling is enabled in visible analytics actions and route exposure", () => {
+  assert.equal(ROLE_MODELING_ENABLED, true);
 
   const actions = getAnalyticsFocusActions("/model-quality");
   assert.deepEqual(actions, [
@@ -48,9 +48,13 @@ test("Role Modeling is disabled in visible analytics actions and route exposure"
       label: "Apri analisi prioritaria",
       route: "/model-quality",
     },
+    {
+      label: "Role Modeling",
+      route: "/role-modeling",
+    },
   ]);
 
-  assert.equal(isRoleModelingRouteEnabled(), false);
+  assert.equal(isRoleModelingRouteEnabled(), true);
 });
 
 test("Business Roles view model computes summary KPIs and filtered rows", () => {
@@ -169,6 +173,36 @@ test("Reports catalog stays within the configured limit and exposes audit rows",
         clusters: [{ clusterId: 2, members: ["mrossi"] }],
         displayNames: { mrossi: "Mario Rossi", svc_payroll: "svc_payroll" },
       },
+      aiDetection: {
+        status: "ready",
+        ts: "2026-03-22T00:00:00Z",
+        stats: {
+          aiDetection: 50,
+          totalAnomalies: 1,
+          totalAssignments: 2,
+          usersWithAnomaly: 1,
+          totalUsersScanned: 2,
+        },
+        items: [
+          {
+            username: "mrossi",
+            displayName: "Mario Rossi",
+            businessRole: "Controller",
+            department: "Finance",
+            accountType: "Internal",
+            anomalyCount: 1,
+            anomalies: [
+              {
+                group: "POWERBI_READ",
+                confidence: 0.91,
+                peerFreq: 0.05,
+                deptFreq: 0.1,
+                reasons: ["Peer: only 5% of 'Controller' have this"],
+              },
+            ],
+          },
+        ],
+      },
       kpi: {
         totalUsers: 2,
         clusterQuality: 91,
@@ -192,9 +226,27 @@ test("Reports catalog stays within the configured limit and exposes audit rows",
     "2026-03-22T00:00:00Z",
   );
 
-  assert.equal(reports.length, 10);
+  assert.equal(reports.length, 11);
   assert.equal(reports.some((report) => report.id === "users_inventory"), true);
   assert.equal(reports.some((report) => report.id === "stale_users"), true);
+  assert.equal(reports.some((report) => report.id === "overprivileged_users_with_roles"), true);
+
+  const overprivileged = reports.find((report) => report.id === "overprivileged_users");
+  assert.deepEqual(overprivileged.rows, [
+    {
+      displayName: "Mario Rossi",
+      username: "mrossi",
+      businessRole: "Controller",
+      imputedBusinessRole: "Controller",
+      department: "Finance",
+      accountType: "Internal",
+      anomalyCount: 1,
+      anomalousGroups: "POWERBI_READ",
+      topAnomaly: "POWERBI_READ",
+      topConfidence: 0.91,
+      topReasons: "Peer: only 5% of 'Controller' have this",
+    },
+  ]);
 
   const stale = reports.find((report) => report.id === "stale_users");
   assert.deepEqual(stale.rows.map((row) => row.username), ["mrossi"]);

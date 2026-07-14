@@ -1,7 +1,7 @@
 // Central toggle for AI-related frontend surfaces.
 // Set to true to restore the UI without reverting code paths.
 export const AI_FEATURES_ENABLED = false;
-export const ROLE_MODELING_ENABLED = false;
+export const ROLE_MODELING_ENABLED = true;
 export const ANALYTICS_AUTOMATIC_DETECTION_ENABLED = true;
 
 const ANALYTICS_KPI_ITEMS = [

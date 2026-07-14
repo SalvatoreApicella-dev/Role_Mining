@@ -88,6 +88,7 @@ export default function ReportsPage() {
     users: [],
     businessRoles: { roles: [], assignments: {} },
     mining: {},
+    aiDetection: {},
     kpi: {},
     clusterQuality: {},
     groupCounts: {},
@@ -98,10 +99,11 @@ export default function ReportsPage() {
       setLoading(true);
       setErr("");
 
-      const [users, businessRoles, mining, kpi, clusterQuality, groupCounts] = await Promise.all([
+      const [users, businessRoles, mining, aiDetection, kpi, clusterQuality, groupCounts] = await Promise.all([
         loadAllUsers(),
         api.businessRoles(),
         api.roleMiningLast(),
+        api.aiDetectionLast().catch(() => ({})),
         api.kpi(),
         api.kpiDrilldown("cluster-quality").catch(() => ({ summaryCards: [] })),
         api.groupCounts(),
@@ -111,6 +113,7 @@ export default function ReportsPage() {
         users,
         businessRoles,
         mining,
+        aiDetection,
         kpi,
         clusterQuality,
         groupCounts,

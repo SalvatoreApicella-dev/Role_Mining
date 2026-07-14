@@ -66,6 +66,29 @@ export async function exportLastAdExtractCsv() {
   return { blob, filename };
 }
 
+export async function exportRoleModelingXlsx(payload) {
+  const headers = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/role-modeling/export/xlsx`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const m = cd.match(/filename=\"?([^\";]+)\"?/i);
+  const filename = (m && m[1]) ? m[1] : "role_modeling_proposed_model.xlsx";
+  return { blob, filename };
+}
+
 export async function aiLabAbCompareUpload(fileA, fileB) {
   const form = new FormData();
   form.append("file_a", fileA);

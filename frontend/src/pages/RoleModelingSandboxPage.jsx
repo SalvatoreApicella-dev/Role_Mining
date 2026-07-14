@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api.js";
+import { api, exportRoleModelingXlsx } from "../api.js";
+import {
+  buildRoleModelingFinalStructure,
+  buildRoleModelingReviewNarrative,
+  buildRoleModelingSelectionSummary,
+} from "../roleModelingUtils.js";
 
 const DEFAULT_FORM = {
   max_suggestions: 24,
@@ -95,6 +100,7 @@ export default function RoleModelingSandboxPage() {
   const [result, setResult] = useState(null);
   const [fallbackKpi, setFallbackKpi] = useState({});
   const [fallbackMining, setFallbackMining] = useState({});
+  const [businessRolesSnapshot, setBusinessRolesSnapshot] = useState(null);
   const [appliedDiscoveryModelId, setAppliedDiscoveryModelId] = useState("");
   const [activeLane, setActiveLane] = useState("discovery");
   const [actionDecisions, setActionDecisions] = useState({});
@@ -116,14 +122,20 @@ export default function RoleModelingSandboxPage() {
     setLoading(true);
     setErr("");
     try {
-      const res = await api.roleModelingSandbox({
-        max_suggestions: numberOr(form.max_suggestions, DEFAULT_FORM.max_suggestions),
-        min_group_support: numberOr(form.min_group_support, DEFAULT_FORM.min_group_support),
-        redundancy_threshold: numberOr(form.redundancy_threshold, DEFAULT_FORM.redundancy_threshold),
-        ml_weight: numberOr(form.ml_weight, DEFAULT_FORM.ml_weight),
-      });
+      const [res, rolesRes] = await Promise.all([
+        api.roleModelingSandbox({
+          max_suggestions: numberOr(form.max_suggestions, DEFAULT_FORM.max_suggestions),
+          min_group_support: numberOr(form.min_group_support, DEFAULT_FORM.min_group_support),
+          redundancy_threshold: numberOr(form.redundancy_threshold, DEFAULT_FORM.redundancy_threshold),
+          ml_weight: numberOr(form.ml_weight, DEFAULT_FORM.ml_weight),
+        }),
+        api.businessRoles().catch(() => null),
+      ]);
       if (requestSeq !== requestSeqRef.current) return;
       setResult(res || null);
+      if (rolesRes && typeof rolesRes === "object") {
+        setBusinessRolesSnapshot(rolesRes);
+      }
       const hasUsers = numberOr(res?.summary?.users, 0) > 0;
       const hasCurrentScore = Number.isFinite(Number(res?.comparison?.current?.modelScore));
       if (!hasUsers || !hasCurrentScore) {
@@ -337,17 +349,21 @@ export default function RoleModelingSandboxPage() {
     Number(current.modelScore || 0) ||
     Number(normalizedFallbackKpi?.modelQuality || 0);
   const executionScoreDisplay =
+    Number(selectedDiscoveryModel?.estimatedModelScore || 0) ||
     Number(proposed.executionModelScore || 0) ||
     Number(proposed.modelScore || 0);
   const proposedScoreDisplay =
+    Number(selectedDiscoveryModel?.estimatedModelScore || 0) ||
     Number(proposed.modelScore || 0) ||
     (executionScoreDisplay > 0 ? Math.min(100, executionScoreDisplay) : (currentScoreDisplay > 0 ? Math.min(100, currentScoreDisplay + 5) : 0));
   const improvementScoreDisplay =
-    Number(improvement.modelScoreDelta || 0) ||
-    (executionScoreDisplay > 0 && currentScoreDisplay > 0 ? Number((executionScoreDisplay - currentScoreDisplay).toFixed(2)) : 0);
+    (proposedScoreDisplay > 0 && currentScoreDisplay > 0)
+      ? Number((proposedScoreDisplay - currentScoreDisplay).toFixed(2))
+      : (Number(improvement.modelScoreDelta || 0) || 0);
   const targetDeltaDisplay =
-    Number(improvement.targetModelScoreDelta || 0) ||
-    (proposedScoreDisplay > 0 && currentScoreDisplay > 0 ? Number((proposedScoreDisplay - currentScoreDisplay).toFixed(2)) : 0);
+    currentScoreDisplay > 0
+      ? Number((100 - currentScoreDisplay).toFixed(2))
+      : (Number(improvement.targetModelScoreDelta || 0) || 0);
 
   const maxTrend = Math.max(1, ...trend.map((t) => Number(t.score) || 0));
   const extractTsLabel = freshness?.extractTs ? new Date(freshness.extractTs).toLocaleString() : "n/d";
@@ -480,6 +496,36 @@ export default function RoleModelingSandboxPage() {
     };
   }, [conflictMetrics, conflictTimeline, allActionsReviewed]);
 
+  const selectionSummary = useMemo(
+    () => buildRoleModelingSelectionSummary({
+      discoveryModels,
+      selectedModel: selectedDiscoveryModel,
+    }),
+    [discoveryModels, selectedDiscoveryModel],
+  );
+
+  const reviewNarrative = useMemo(
+    () => buildRoleModelingReviewNarrative({
+      selectedModel: selectedDiscoveryModel,
+      selectionSummary,
+      reviewStats,
+      conflictMetrics,
+      executedActions,
+      rejectedActions,
+      current,
+      proposed,
+    }),
+    [selectedDiscoveryModel, selectionSummary, reviewStats, conflictMetrics, executedActions, rejectedActions, current, proposed],
+  );
+
+  const proposedModelStructure = useMemo(
+    () => buildRoleModelingFinalStructure(
+      businessRolesSnapshot,
+      executedActions,
+    ),
+    [businessRolesSnapshot, executedActions],
+  );
+
   function applyDiscoveryModel(model) {
     const modelId = model?.id || model?.name;
     if (!modelId) return;
@@ -550,6 +596,23 @@ export default function RoleModelingSandboxPage() {
     }
   }
 
+  async function handleDownloadProposedModelXlsx() {
+    if (!proposedModelStructure.rows.length) return;
+    const { blob, filename } = await exportRoleModelingXlsx({
+      filename: `role_modeling_${String(selectedDiscoveryModel?.id || selectedDiscoveryModel?.name || "proposed_model").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}.xlsx`,
+      sheet_name: selectedDiscoveryModel?.name || "Proposed Model",
+      rows: proposedModelStructure.rows,
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="main role-modeling-modern">
       <section className="panel rm-hero">
@@ -615,11 +678,11 @@ export default function RoleModelingSandboxPage() {
 
       <section className="rm-kpis">
         <div className="panel rm-kpi-card"><span>Model Score attuale</span><strong>{toPercentOne(currentScoreDisplay)}</strong></div>
-        <div className="panel rm-kpi-card"><span>Model Score proposto</span><strong>{toPercentOne(proposedScoreDisplay)}</strong></div>
+        <div className="panel rm-kpi-card"><span>Model Score proposto</span><strong>{selectedDiscoveryModel ? toPercentOne(proposedScoreDisplay) : "--"}</strong></div>
         <div className="panel rm-kpi-card">
           <span>Miglioramento atteso</span>
-          <strong>{deltaLabel(improvementScoreDisplay)}%</strong>
-          <small>Delta verso target 100: {deltaLabel(targetDeltaDisplay)}%</small>
+          <strong>{selectedDiscoveryModel ? `${deltaLabel(improvementScoreDisplay)}%` : "--"}</strong>
+          <small>Delta verso target 100: {selectedDiscoveryModel ? `${deltaLabel(targetDeltaDisplay)}%` : "--"}</small>
         </div>
         <div className="panel rm-kpi-card"><span>Utenti analizzati</span><strong>{usersDisplay || 0}</strong></div>
       </section>
@@ -771,7 +834,42 @@ export default function RoleModelingSandboxPage() {
                       Modifiche applicate in sandbox, merge effettuati e ruoli residui.
                     </div>
                   </div>
-                  <button type="button" onClick={() => setActiveLane("optimization")}>Torna a optimization</button>
+                  <div className="row" style={{ gap: 8 }}>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={handleDownloadProposedModelXlsx}
+                      disabled={!proposedModelStructure.rows.length}
+                    >
+                      Scarica XLSX nuovo modello
+                    </button>
+                    <button type="button" onClick={() => setActiveLane("optimization")}>Torna a optimization</button>
+                  </div>
+                </div>
+
+                <div className="panel" style={{ marginBottom: 16, background: "rgba(255,255,255,0.03)" }}>
+                  <div className="rm-section-head" style={{ marginBottom: 10 }}>
+                    <h3 style={{ margin: 0 }}>{reviewNarrative.title}</h3>
+                    <span>Descrizione generata automaticamente</span>
+                  </div>
+                  <div className="rm-workflow-detail" style={{ marginBottom: 8 }}>
+                    Qualità ranking: <strong>{selectionSummary.qualityLabel}</strong>
+                    {selectionSummary.runnerUpName ? ` • Alternativa principale: ${selectionSummary.runnerUpName}` : ""}
+                    {selectionSummary.scoreGap ? ` • Gap score: ${selectionSummary.scoreGap.toFixed(1)}` : ""}
+                  </div>
+                  {selectionSummary.caution ? (
+                    <div className="rm-empty" style={{ marginBottom: 10 }}>
+                      {selectionSummary.caution}
+                    </div>
+                  ) : null}
+                  <p style={{ marginTop: 0, color: "var(--text)", lineHeight: 1.6 }}>
+                    {reviewNarrative.description}
+                  </p>
+                  <div className="rm-toast-details">
+                    {reviewNarrative.bullets.map((bullet) => (
+                      <span key={bullet}>{bullet}</span>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="rm-review-grid">
