@@ -1335,11 +1335,71 @@ button.danger {
   background: #8b9fc4;
 }
 
+.rm-sod-row.sev-high {
+  background: rgba(255, 77, 77, 0.08) !important;
+}
+
+.rm-sod-row.sev-medium {
+  background: rgba(255, 148, 77, 0.07) !important;
+}
+
+.rm-sod-row.sev-low {
+  background: rgba(255, 209, 26, 0.06) !important;
+}
+
+.rm-sod-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.rm-sod-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 .rm-pill {
   border-radius: 999px;
   padding: 4px 9px;
   font-size: 11px;
   border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.rm-pill--with-tooltip {
+  position: relative;
+  cursor: help;
+}
+
+.rm-pill--with-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  width: min(360px, 72vw);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(11, 18, 32, 0.96);
+  color: #eef4ff;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: normal;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  z-index: 30;
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+}
+
+.rm-pill--with-tooltip:hover::after,
+.rm-pill--with-tooltip:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
 }
 
 .rm-pill.ok {
@@ -1349,18 +1409,24 @@ button.danger {
 
 .rm-pill.warn,
 .rm-pill.medium {
-  background: rgba(255, 213, 111, 0.16);
-  border-color: rgba(255, 213, 111, 0.45);
+  background: rgba(255, 148, 77, 0.24);
+  border-color: rgba(255, 148, 77, 0.60);
+  color: #ffc299;
+  font-weight: 600;
 }
 
 .rm-pill.high {
-  background: rgba(255, 106, 106, 0.16);
-  border-color: rgba(255, 106, 106, 0.45);
+  background: rgba(255, 77, 77, 0.24);
+  border-color: rgba(255, 77, 77, 0.60);
+  color: #ff9999;
+  font-weight: 600;
 }
 
 .rm-pill.low {
-  background: rgba(139, 159, 196, 0.2);
-  border-color: rgba(139, 159, 196, 0.42);
+  background: rgba(255, 209, 26, 0.22);
+  border-color: rgba(255, 209, 26, 0.60);
+  color: #ffe680;
+  font-weight: 600;
 }
 
 .rm-trend {
@@ -1421,7 +1487,7 @@ button.danger {
 
 .rm-trend-horizontal-row {
   display: grid;
-  grid-template-columns: 110px 1fr 58px;
+  grid-template-columns: 260px 1fr 60px;
   gap: 10px;
   align-items: center;
 }
@@ -1429,6 +1495,18 @@ button.danger {
 .rm-trend-horizontal-label {
   color: var(--muted);
   font-size: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rm-trend-horizontal-label strong {
+  color: #e2eeff;
+  font-weight: 600;
+}
+
+.rm-trend-sublabel {
+  font-size: 10.5px;
+  color: #72e4c8;
 }
 
 .rm-trend-horizontal-track {
@@ -1838,6 +1916,29 @@ hr.sep {
 .table th {
   color: var(--muted);
   font-weight: 500;
+}
+
+.rm-sort-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rm-sort-header-btn:hover,
+.rm-sort-header-btn:focus-visible {
+  color: var(--text);
+}
+
+.rm-sort-header-btn span {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.78;
 }
 
 .ag-theme-quartz-dark {

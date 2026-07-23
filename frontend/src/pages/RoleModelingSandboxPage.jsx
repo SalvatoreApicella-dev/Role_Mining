@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { api, exportRoleModelingXlsx } from "../api.js";
+import { api, exportRoleModelingXlsx, exportSodMatrixXlsx, importSodMatrixXlsx } from "../api.js";
 import {
   buildRoleModelingFinalStructure,
   buildRoleModelingReviewNarrative,
@@ -59,6 +59,39 @@ function severityLabel(v) {
   return "Bassa";
 }
 
+function severityTooltip(v) {
+  const s = String(v || "").toLowerCase();
+  if (s === "high") {
+    return "Coppia con denial ricorrenti, ruolo privilegiato, molti utenti impattati, commenti di rimozione.";
+  }
+  if (s === "medium") {
+    return "Coppia frequente con qualche denial o ruolo semanticamente sensibile.";
+  }
+  return "Coppia frequente ma senza denial, utile per review ma non ancora conflitto SoD confermato.";
+}
+
+function ExportFileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M14 3v6h6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 17h8M12 10v6m0 0-2.5-2.5M12 16l2.5-2.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M7.5 20.5h9" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function ImportFileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M14 3v6h6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 17h8M12 16v-6m0 0-2.5 2.5M12 10l2.5 2.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M7.5 20.5h9" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 function actionPriorityOrderForModel(modelId) {
   const id = String(modelId || "").toLowerCase();
   if (id.includes("aggressive") || id.includes("business-role")) {
@@ -113,6 +146,9 @@ export default function RoleModelingSandboxPage() {
   const hasMountedRef = useRef(false);
   const requestSeqRef = useRef(0);
   const completedWaveKeyRef = useRef("");
+  const sodImportInputRef = useRef(null);
+  const [sodImporting, setSodImporting] = useState(false);
+  const [severitySortDirection, setSeveritySortDirection] = useState("desc");
 
   async function run(options = {}) {
     const resetFlow = Boolean(options.resetFlow ?? true);
@@ -278,6 +314,17 @@ export default function RoleModelingSandboxPage() {
   }, [executedActions, selectedDiscoveryModel, summary.businessRoles]);
   const lmSelection = result?.lmSelection || {};
   const sodMatrix = useMemo(() => result?.sodMatrix || [], [result]);
+  const sortedSodMatrix = useMemo(() => {
+    const severityRank = { high: 3, medium: 2, low: 1 };
+    const direction = severitySortDirection === "asc" ? 1 : -1;
+    return [...(sodMatrix || [])].sort((left, right) => {
+      const leftSeverity = String(left?.severity || "").toLowerCase();
+      const rightSeverity = String(right?.severity || "").toLowerCase();
+      const bySeverity = (severityRank[leftSeverity] || 0) - (severityRank[rightSeverity] || 0);
+      if (bySeverity !== 0) return bySeverity * direction;
+      return Number(right?.users || 0) - Number(left?.users || 0);
+    });
+  }, [sodMatrix, severitySortDirection]);
   const workflow = useMemo(() => result?.workflow || [], [result]);
   const workflowDisplay = useMemo(
     () => (workflow || []).map((w) => {
@@ -339,7 +386,6 @@ export default function RoleModelingSandboxPage() {
     }),
     [workflow, appliedDiscoveryModelId, allActionsReviewed, reviewedCount, optimizationActionIds.length, optimizationActions.length, executedActions.length, rejectedActions.length, activeLane],
   );
-  const trend = useMemo(() => result?.trend || [], [result]);
   const miningMatrixUsers = Object.keys(fallbackMining?.matrix || {}).length;
   const usersDisplay =
     Number(summary.users || 0) ||
@@ -364,6 +410,35 @@ export default function RoleModelingSandboxPage() {
     currentScoreDisplay > 0
       ? Number((100 - currentScoreDisplay).toFixed(2))
       : (Number(improvement.targetModelScoreDelta || 0) || 0);
+
+  const trend = useMemo(() => {
+    if (!selectedDiscoveryModel) {
+      return [
+        { label: "Current", title: "Stato iniziale", score: null, deltaText: "--" },
+        { label: "Phase 1", title: "Rimozione ruoli overprivileged", score: null, deltaText: "--" },
+        { label: "Phase 2", title: "Bonifica utenti duplicati & DQ", score: null, deltaText: "--" },
+        { label: "Proposed", title: "Applicazione modello proposto", score: null, deltaText: "--" },
+      ];
+    }
+    const targetScore = Number(proposedScoreDisplay) || 0;
+    const currScore = Number(currentScoreDisplay) || 0;
+    const totalDelta = Math.max(0, targetScore - currScore);
+
+    const p1Score = Number((currScore + totalDelta * 0.45).toFixed(2));
+    const p2Score = Number((currScore + totalDelta * 0.80).toFixed(2));
+    const propScore = Number(targetScore.toFixed(2));
+
+    const p1Step = Number((p1Score - currScore).toFixed(1));
+    const p2Step = Number((p2Score - p1Score).toFixed(1));
+    const propStep = Number((propScore - p2Score).toFixed(1));
+
+    return [
+      { label: "Current", title: "Stato iniziale", score: currScore, deltaText: "Baseline" },
+      { label: "Phase 1", title: "Rimozione ruoli overprivileged", score: p1Score, deltaText: `+${p1Step}%` },
+      { label: "Phase 2", title: "Bonifica utenti duplicati & DQ", score: p2Score, deltaText: `+${p2Step}%` },
+      { label: "Proposed", title: "Applicazione modello proposto", score: propScore, deltaText: `+${propStep}%` },
+    ];
+  }, [selectedDiscoveryModel, proposedScoreDisplay, currentScoreDisplay]);
 
   const maxTrend = Math.max(1, ...trend.map((t) => Number(t.score) || 0));
   const extractTsLabel = freshness?.extractTs ? new Date(freshness.extractTs).toLocaleString() : "n/d";
@@ -418,7 +493,13 @@ export default function RoleModelingSandboxPage() {
       + coverageRatio * 0.20,
     );
 
-    const afterTotal = Math.max(0, Math.round(beforeTotal * (1 - structuralReduction)));
+    const modelReductionRatio = selectedDiscoveryModel
+      ? (Number(selectedDiscoveryModel.roleReductionPct || 0) / 100) * 0.5
+      : 0;
+
+    const totalReduction = Math.min(0.85, structuralReduction + modelReductionRatio);
+
+    const afterTotal = Math.max(0, Math.round(beforeTotal * (1 - totalReduction)));
     const deltaUsers = Math.max(0, beforeTotal - afterTotal);
     const deltaPct = beforeTotal > 0 ? (deltaUsers / beforeTotal) * 100 : 0;
 
@@ -428,7 +509,7 @@ export default function RoleModelingSandboxPage() {
       deltaUsers,
       deltaPct,
     };
-  }, [current.redundantRolePairs, current.redundantGroupPairs, current.driftedUsers, summary.orphanBusinessRoles, normalizedFallbackKpi.overprivilegedUsers, sodMatrix.length, reviewStats, executedActions.length, optimizationActionIds.length]);
+  }, [current.redundantRolePairs, current.redundantGroupPairs, current.driftedUsers, summary.orphanBusinessRoles, normalizedFallbackKpi.overprivilegedUsers, sodMatrix.length, reviewStats, executedActions.length, optimizationActionIds.length, selectedDiscoveryModel]);
 
   useEffect(() => {
     if (!allActionsReviewed || !appliedDiscoveryModelId) return;
@@ -613,6 +694,43 @@ export default function RoleModelingSandboxPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function handleDownloadSodXlsx() {
+    if (!sodMatrix || !sodMatrix.length) {
+      alert("Nessun conflitto SoD presente da scaricare.");
+      return;
+    }
+    try {
+      const { blob, filename } = await exportSodMatrixXlsx(sodMatrix);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "sod_matrix_alerts.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      console.error("Errore durante l'esportazione Excel SoD:", err);
+      alert("Impossibile generare il file Excel: " + (err.message || err));
+    }
+  }
+
+  async function handleImportSodXlsx(file) {
+    if (!file || sodImporting) return;
+    setSodImporting(true);
+    try {
+      const imported = await importSodMatrixXlsx(file);
+      const importedRows = Array.isArray(imported?.rows) ? imported.rows : [];
+      setResult((prev) => ({ ...(prev || {}), sodMatrix: importedRows }));
+    } catch (err) {
+      console.error("Errore durante l'import attestation SoD:", err);
+      alert("Impossibile importare l'attestation: " + (err.message || err));
+    } finally {
+      setSodImporting(false);
+      if (sodImportInputRef.current) sodImportInputRef.current.value = "";
+    }
+  }
+
   return (
     <div className="main role-modeling-modern">
       <section className="panel rm-hero">
@@ -688,17 +806,28 @@ export default function RoleModelingSandboxPage() {
       </section>
 
       <section className="panel rm-trend-horizontal-card">
-        <div className="rm-section-head"><h3>Model Score Trend</h3><span>Current → Target</span></div>
+        <div className="rm-section-head">
+          <h3>Model Score Trend</h3>
+          <span>Current → Phase 1 → Phase 2 → Proposed</span>
+        </div>
         <div className="rm-trend-horizontal">
           {trend.map((p) => {
-            const width = Math.max(6, Math.round(((Number(p.score) || 0) / maxTrend) * 100));
+            const hasScore = selectedDiscoveryModel && p.score != null;
+            const width = (hasScore && maxTrend > 0)
+              ? Math.max(6, Math.round(((Number(p.score) || 0) / maxTrend) * 100))
+              : 0;
             return (
               <div key={`h-${p.label}`} className="rm-trend-horizontal-row">
-                <div className="rm-trend-horizontal-label">{p.label}</div>
+                <div className="rm-trend-horizontal-label">
+                  <strong>{p.label} <small style={{ fontWeight: 400, opacity: 0.72, fontSize: "10px" }}>({p.title})</small></strong>
+                  {p.deltaText ? <small className="rm-trend-sublabel">{p.deltaText}</small> : null}
+                </div>
                 <div className="rm-trend-horizontal-track">
                   <div className="rm-trend-horizontal-fill" style={{ width: `${width}%` }} />
                 </div>
-                <div className="rm-trend-horizontal-score">{toPercentOne(p.score)}</div>
+                <div className="rm-trend-horizontal-score">
+                  {hasScore ? toPercentOne(p.score) : "--"}
+                </div>
               </div>
             );
           })}
@@ -1003,25 +1132,80 @@ export default function RoleModelingSandboxPage() {
       </section>
 
       <section className="panel">
-        <div className="rm-section-head"><h3>SoD Matrix Alerts</h3><span>{sodMatrix.length} alert</span></div>
+        <div className="rm-section-head">
+          <h3>SoD Matrix Alerts</h3>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+            <span>{sodMatrix.length} alert</span>
+            <input
+              ref={sodImportInputRef}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              style={{ display: "none" }}
+              onChange={(event) => handleImportSodXlsx(event.target.files?.[0] || null)}
+            />
+            <button
+              type="button"
+              className="reports-card__icon-btn reports-card__icon-btn--csv rm-sod-icon-btn"
+              onClick={() => sodImportInputRef.current?.click()}
+              disabled={sodImporting}
+              title="Import Attestation"
+              aria-label="Import Attestation"
+            >
+              <ImportFileIcon />
+            </button>
+            {sodMatrix.length > 0 && (
+              <button
+                type="button"
+                className="reports-card__icon-btn reports-card__icon-btn--csv rm-sod-icon-btn"
+                onClick={handleDownloadSodXlsx}
+                title="Download XLSX"
+                aria-label="Download SoD Matrix XLSX"
+              >
+                <ExportFileIcon />
+              </button>
+            )}
+          </div>
+        </div>
         <table className="table">
           <thead>
             <tr>
-              <th>Conflitto</th>
+              <th>Ruolo</th>
+              <th>Ruolo in Conflitto</th>
               <th>Utenti</th>
-              <th>Severita</th>
-              <th>Azione</th>
+              <th aria-sort={severitySortDirection === "desc" ? "descending" : "ascending"}>
+                <button
+                  type="button"
+                  className="rm-sort-header-btn"
+                  onClick={() => setSeveritySortDirection((current) => (current === "desc" ? "asc" : "desc"))}
+                  title="Ordina per severità"
+                >
+                  Severità <span aria-hidden="true">{severitySortDirection === "desc" ? "▼" : "▲"}</span>
+                </button>
+              </th>
+              <th>Raccomandazione</th>
             </tr>
           </thead>
           <tbody>
-            {sodMatrix.map((s, idx) => (
-              <tr key={`${s.groupA}-${s.groupB}-${idx}`}>
-                <td>{s.groupA} × {s.groupB}</td>
-                <td>{s.users}</td>
-                <td><span className={`rm-pill ${String(s.severity).toLowerCase()}`}>{severityLabel(s.severity)}</span></td>
-                <td>{s.recommendation}</td>
-              </tr>
-            ))}
+            {sortedSodMatrix.map((s, idx) => {
+              const sev = String(s.severity || "").toLowerCase();
+              return (
+                <tr key={`${s.groupA}-${s.groupB}-${idx}`} className={`rm-sod-row sev-${sev}`}>
+                  <td><strong>{s.groupA}</strong></td>
+                  <td><strong>{s.groupB}</strong></td>
+                  <td>{s.users}</td>
+                  <td>
+                    <span
+                      className={`rm-pill rm-pill--with-tooltip ${sev}`}
+                      title={severityTooltip(s.severity)}
+                      data-tooltip={severityTooltip(s.severity)}
+                    >
+                      {severityLabel(s.severity)}
+                    </span>
+                  </td>
+                  <td>{s.recommendation}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {!loading && sodMatrix.length === 0 && <div className="rm-empty">Nessun conflitto SoD rilevato.</div>}

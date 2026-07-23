@@ -89,6 +89,57 @@ export async function exportRoleModelingXlsx(payload) {
   return { blob, filename };
 }
 
+export async function exportSodMatrixXlsx(rows) {
+  const headers = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/sod-matrix/export/xlsx`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ filename: "sod_matrix_alerts.xlsx", rows }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const m = cd.match(/filename=\"?([^\";]+)\"?/i);
+  const filename = (m && m[1]) ? m[1] : "sod_matrix_alerts.xlsx";
+  return { blob, filename };
+}
+
+export async function importSodMatrixXlsx(file) {
+  const form = new FormData();
+  form.append("file", file);
+
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/sod-matrix/import/xlsx`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      msg = data?.detail || msg;
+    } catch {
+      msg = await res.text();
+    }
+    throw new Error(msg);
+  }
+
+  return res.json();
+}
+
 export async function aiLabAbCompareUpload(fileA, fileB) {
   const form = new FormData();
   form.append("file_a", fileA);

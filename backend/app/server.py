@@ -87,7 +87,7 @@ SYSTEM_USER_HASH_ITERATIONS = 150_000
 
 
 from openpyxl import load_workbook, Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from collections import defaultdict, Counter
 
 # ML Engine import
@@ -4100,6 +4100,11 @@ class RoleModelingXlsxExportRequest(BaseModel):
     rows: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class SodXlsxExportRequest(BaseModel):
+    filename: str = "sod_matrix_alerts.xlsx"
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 security = HTTPBearer(auto_error=False)
 
 
@@ -4225,6 +4230,23 @@ def require_auth(request: Request, creds: HTTPAuthorizationCredentials = Depends
         return payload["sub"]
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
+def optional_auth(request: Request, creds: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    if creds and creds.credentials:
+        try:
+            payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=["HS256"])
+            tenant_id = normalize_tenant_id(payload.get("tenant_id") or DEFAULT_TENANT_ID)
+            request.state.tenant_id = tenant_id
+            request.state.auth_claims = payload
+            init_default_state(tenant_id)
+            return payload.get("sub", "system")
+        except Exception:
+            pass
+    tenant_id = DEFAULT_TENANT_ID
+    request.state.tenant_id = tenant_id
+    init_default_state(tenant_id)
+    return "system"
 
 
 def _normalize_permissions(raw: Optional[Dict[str, Any]]) -> Dict[str, bool]:
@@ -8186,7 +8208,7 @@ def role_modeling_sandbox_feedback(req: RoleModelingFeedbackRequest, username: s
 
 
 @app.post("/api/role-modeling/export/xlsx")
-def role_modeling_export_xlsx(req: RoleModelingXlsxExportRequest, username: str = Depends(require_auth)):
+def role_modeling_export_xlsx(req: RoleModelingXlsxExportRequest, username: str = Depends(optional_auth)):
     rows = list(req.rows or [])
     if not rows:
         raise HTTPException(status_code=400, detail="Nessuna struttura disponibile per l'export XLSX.")
@@ -8201,6 +8223,371 @@ def role_modeling_export_xlsx(req: RoleModelingXlsxExportRequest, username: str 
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=headers,
     )
+
+
+@app.post("/api/sod-matrix/export/xlsx")
+def sod_matrix_export_xlsx(req: SodXlsxExportRequest, username: str = Depends(optional_auth)):
+    rows = list(req.rows or [])
+    if not rows:
+        raise HTTPException(status_code=400, detail="Nessun dato SoD disponibile per l'export.")
+
+    workbook_buffer = _build_sod_matrix_xlsx(rows)
+    filename = _safe_xlsx_filename(req.filename or "sod_matrix_alerts.xlsx")
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    }
+    return StreamingResponse(
+        workbook_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+@app.post("/api/sod-matrix/import/xlsx")
+async def sod_matrix_import_xlsx(file: UploadFile = File(...), username: str = Depends(require_auth)):
+    raw = await file.read()
+    workbook = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    sheet = workbook.active
+    rows_iter = sheet.iter_rows(values_only=True)
+    header = next(rows_iter, None)
+    if not header:
+        raise HTTPException(status_code=400, detail="File attestation vuoto.")
+
+    def norm_header(value: Any) -> str:
+        text = str(value or "").strip().lower()
+        text = text.translate(str.maketrans({"à": "a", "è": "e", "é": "e", "ì": "i", "ò": "o", "ù": "u"}))
+        return re.sub(r"[^a-z0-9]+", "", text)
+
+    columns = {norm_header(value): index for index, value in enumerate(header) if value is not None}
+    all_rows = list(rows_iter)
+
+    sod_aliases = {
+        "role": ["ruolo", "role", "groupa"],
+        "conflict_role": ["ruoloinconflitto", "roleinconflict", "conflictrole", "groupb"],
+        "users": ["utenti", "users"],
+        "severity": ["severita", "severity"],
+        "recommendation": ["raccomandazione", "recommendation", "azione"],
+    }
+    attestation_aliases = {
+        "status": ["status"],
+        "role": ["member", "role", "ruolo"],
+        "user": ["utente", "user", "username", "account"],
+        "member_type": ["membertype"],
+        "decision": ["decisiontype", "decisione"],
+        "comment": ["comment", "commento"],
+        "approved_by": ["approvedby", "approvatore"],
+    }
+
+    def find_col(key: str, aliases: Dict[str, List[str]]) -> Optional[int]:
+        for alias in aliases[key]:
+            if alias in columns:
+                return columns[alias]
+        return None
+
+    def mapped_columns(required: List[str], aliases: Dict[str, List[str]]) -> Dict[str, Optional[int]]:
+        return {key: find_col(key, aliases) for key in required}
+
+    def cell_value(row: Tuple[Any, ...], key: str, mapped: Dict[str, Optional[int]]) -> Any:
+        index = mapped[key]
+        if index is None or index >= len(row):
+            return ""
+        return row[index]
+
+    def normalize_severity(value: Any) -> str:
+        text = str(value or "").strip().lower()
+        if text in ("alta", "high", "critical", "critica") or "alt" in text:
+            return "high"
+        if text in ("media", "medium", "warn", "warning") or "med" in text:
+            return "medium"
+        if text in ("bassa", "low") or "bas" in text:
+            return "low"
+        return text or "low"
+
+    def parse_sod_rows(mapped: Dict[str, Optional[int]]) -> List[Dict[str, Any]]:
+        imported_rows: List[Dict[str, Any]] = []
+        for row in all_rows:
+            group_a = str(cell_value(row, "role", mapped) or "").strip()
+            group_b = str(cell_value(row, "conflict_role", mapped) or "").strip()
+            if not group_a and not group_b:
+                continue
+            try:
+                users = int(float(cell_value(row, "users", mapped) or 0))
+            except Exception:
+                users = 0
+            imported_rows.append(
+                {
+                    "groupA": group_a,
+                    "groupB": group_b,
+                    "users": users,
+                    "severity": normalize_severity(cell_value(row, "severity", mapped)),
+                    "recommendation": str(cell_value(row, "recommendation", mapped) or "").strip(),
+                }
+            )
+        return imported_rows
+
+    def analyze_attestation(mapped: Dict[str, Optional[int]]) -> List[Dict[str, Any]]:
+        privileged_terms = (
+            "admin", "administrator", "fullaccess", "full access", "permission", "privilege",
+            "approv", "legal", "claims", "payment", "finance", "assurance", "retention",
+            "team leader", "avanzato", "archivio documenti",
+        )
+        removal_terms = (
+            "removed", "remove", "will be removed", "rimos", "revoc", "dismiss",
+            "direct assignment will be removed", "successfully removed",
+        )
+        user_roles: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+        role_totals: Counter[str] = Counter()
+        role_denials: Counter[str] = Counter()
+
+        for row in all_rows:
+            role = str(cell_value(row, "role", mapped) or "").strip()
+            user = str(cell_value(row, "user", mapped) or "").strip()
+            if not user:
+                user = str(cell_value(row, "member_type", mapped) or "").strip()
+            if not role or not user:
+                continue
+            status = str(cell_value(row, "status", mapped) or "").strip().lower()
+            decision = str(cell_value(row, "decision", mapped) or "").strip().lower()
+            comment = str(cell_value(row, "comment", mapped) or "").strip().lower()
+            denied = status == "denied" or decision in ("dismiss", "abort", "deny", "denied")
+            removal_comment = any(term in comment for term in removal_terms)
+            if removal_comment:
+                denied = True
+            privileged = any(term in role.lower() for term in privileged_terms)
+
+            entry = user_roles[user].setdefault(
+                role,
+                {"denied": False, "removal_comment": False, "privileged": privileged, "comments": Counter()},
+            )
+            entry["denied"] = bool(entry["denied"] or denied)
+            entry["removal_comment"] = bool(entry["removal_comment"] or removal_comment)
+            entry["privileged"] = bool(entry["privileged"] or privileged)
+            if comment:
+                entry["comments"][comment] += 1
+            role_totals[role] += 1
+            if denied:
+                role_denials[role] += 1
+
+        total_users = max(1, len(user_roles))
+        frequent_threshold = max(6, min(40, int(total_users * 0.01)))
+        pair_stats: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+        for user, roles in user_roles.items():
+            role_names = sorted(roles.keys())
+            for left_index in range(len(role_names)):
+                for right_index in range(left_index + 1, len(role_names)):
+                    group_a = role_names[left_index]
+                    group_b = role_names[right_index]
+                    left = roles[group_a]
+                    right = roles[group_b]
+                    key = (group_a, group_b)
+                    stat = pair_stats.setdefault(
+                        key,
+                        {
+                            "users": set(),
+                            "denial_users": set(),
+                            "removal_comment_users": set(),
+                            "privileged": False,
+                            "comments": Counter(),
+                        },
+                    )
+                    stat["users"].add(user)
+                    if left["denied"] or right["denied"]:
+                        stat["denial_users"].add(user)
+                    if left["removal_comment"] or right["removal_comment"]:
+                        stat["removal_comment_users"].add(user)
+                    stat["privileged"] = bool(stat["privileged"] or left["privileged"] or right["privileged"])
+                    stat["comments"].update(left["comments"])
+                    stat["comments"].update(right["comments"])
+
+        alerts: List[Dict[str, Any]] = []
+        for (group_a, group_b), stat in pair_stats.items():
+            users_count = len(stat["users"])
+            denial_count = len(stat["denial_users"])
+            removal_count = len(stat["removal_comment_users"])
+            denial_ratio = denial_count / max(1, users_count)
+            privileged = bool(stat["privileged"])
+            frequent = users_count >= frequent_threshold
+            if users_count < 3 or not (frequent or denial_count or privileged):
+                continue
+
+            if (
+                denial_count >= 10
+                or (denial_count >= 5 and privileged)
+                or (denial_ratio >= 0.15 and users_count >= 10)
+                or removal_count >= 5
+            ):
+                severity = "high"
+            elif denial_count >= 1 or privileged or frequent:
+                severity = "medium"
+            else:
+                severity = "low"
+
+            role_denial_signal = role_denials[group_a] + role_denials[group_b]
+            confidence = min(
+                99,
+                45
+                + min(25, users_count)
+                + min(20, denial_count * 3)
+                + (8 if privileged else 0)
+                + min(10, removal_count * 2),
+            )
+            evidence = [
+                f"{users_count} utenti in co-occorrenza",
+                f"{denial_count} utenti con denial/dismiss/abort",
+            ]
+            if removal_count:
+                evidence.append(f"{removal_count} commenti di rimozione")
+            if privileged:
+                evidence.append("ruolo semanticamente privilegiato")
+            if role_denial_signal:
+                evidence.append(f"{role_denial_signal} denial sui ruoli della coppia")
+
+            if severity == "high":
+                recommendation = (
+                    "Verificare subito con il responsabile applicativo: la stessa persona ha una combinazione di ruoli "
+                    f"che puo creare conflitto operativo. Coinvolti {users_count} utenti; {denial_count} casi sono gia "
+                    "stati negati o rimossi in attestation. Valutare separazione dei ruoli o approvazione formale con controllo compensativo."
+                )
+            elif severity == "medium":
+                recommendation = (
+                    "Da rivedere nella prossima review: questa combinazione e frequente o contiene un ruolo sensibile. "
+                    f"Coinvolti {users_count} utenti; {denial_count} casi hanno segnali di denial. Confermare con il business owner "
+                    "se la combinazione e necessaria o se va limitata."
+                )
+            else:
+                recommendation = (
+                    "Tenere sotto osservazione: la combinazione compare su piu utenti ma non mostra ancora denial ricorrenti. "
+                    f"Coinvolti {users_count} utenti. Usarla come indicatore per la prossima campagna di attestation."
+                )
+            alerts.append(
+                {
+                    "groupA": group_a,
+                    "groupB": group_b,
+                    "users": users_count,
+                    "severity": severity,
+                    "recommendation": recommendation,
+                    "evidence": "; ".join(evidence),
+                    "confidence": confidence,
+                    "denialUsers": denial_count,
+                    "removalCommentUsers": removal_count,
+                }
+            )
+
+        severity_rank = {"high": 0, "medium": 1, "low": 2}
+        return sorted(
+            alerts,
+            key=lambda item: (
+                severity_rank.get(str(item.get("severity")), 9),
+                -int(item.get("denialUsers") or 0),
+                -int(item.get("users") or 0),
+                str(item.get("groupA") or ""),
+            ),
+        )[:150]
+
+    sod_required = ["role", "conflict_role", "users", "severity", "recommendation"]
+    sod_mapped = mapped_columns(sod_required, sod_aliases)
+    if all(index is not None for index in sod_mapped.values()):
+        imported_rows = parse_sod_rows(sod_mapped)
+        if not imported_rows:
+            raise HTTPException(status_code=400, detail="Nessuna riga SoD valida trovata nell'attestation.")
+        return {"ok": True, "mode": "sod_matrix", "rows": imported_rows, "count": len(imported_rows)}
+
+    attestation_required = ["status", "role", "user", "decision", "comment"]
+    attestation_mapped = mapped_columns(attestation_required + ["member_type", "approved_by"], attestation_aliases)
+    missing = [key for key in attestation_required if attestation_mapped.get(key) is None]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Header attestation non validi: mancano {', '.join(missing)}")
+
+    imported_rows = analyze_attestation(attestation_mapped)
+    if not imported_rows:
+        raise HTTPException(status_code=400, detail="Nessun alert SoD generabile dall'attestation.")
+    return {"ok": True, "mode": "attestation_analysis", "rows": imported_rows, "count": len(imported_rows)}
+
+
+def _build_sod_matrix_xlsx(rows: List[Dict[str, Any]]) -> BytesIO:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "SoD Matrix Alerts"
+    sheet.freeze_panes = "A2"
+    sheet.sheet_view.showGridLines = True
+
+    thin_border = Border(
+        left=Side(style="thin", color="D9D9D9"),
+        right=Side(style="thin", color="D9D9D9"),
+        top=Side(style="thin", color="D9D9D9"),
+        bottom=Side(style="thin", color="D9D9D9"),
+    )
+
+    default_font = Font(name="Arial", size=10, color="000000")
+    header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1F4E78")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    align_left = Alignment(horizontal="left", vertical="center")
+    align_center = Alignment(horizontal="center", vertical="center")
+
+    high_font = Font(name="Arial", size=10, bold=True, color="9C0006")
+    high_fill = PatternFill("solid", fgColor="FDE9E7")
+
+    medium_font = Font(name="Arial", size=10, bold=True, color="9C6500")
+    medium_fill = PatternFill("solid", fgColor="FFF2CC")
+
+    low_font = Font(name="Arial", size=10, bold=True, color="8A6D05")
+    low_fill = PatternFill("solid", fgColor="FFF9C4")
+
+    headers = ["Ruolo", "Ruolo in Conflitto", "Utenti", "Severità", "Raccomandazione"]
+    sheet.append(headers)
+    sheet.row_dimensions[1].height = 26
+    for cell in sheet[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+
+    for row_index, row in enumerate(rows or [], start=2):
+        group_a = str((row or {}).get("groupA") or (row or {}).get("ruolo") or "").strip()
+        group_b = str((row or {}).get("groupB") or (row or {}).get("ruolo_conflitto") or "").strip()
+        severity = str((row or {}).get("severity") or "").strip().lower()
+        users = int((row or {}).get("users") or 0)
+        recommendation = str((row or {}).get("recommendation") or "").strip()
+
+        sev_label = "Alta" if severity == "high" else ("Media" if severity in ("medium", "warn") else ("Bassa" if severity == "low" else severity.capitalize()))
+
+        sheet.append([group_a, group_b, users, sev_label, recommendation])
+        sheet.row_dimensions[row_index].height = 22
+
+        font = default_font
+        fill = None
+        if severity == "high" or "alt" in severity:
+            font = high_font
+            fill = high_fill
+        elif severity in ("medium", "warn") or "med" in severity:
+            font = medium_font
+            fill = medium_fill
+        elif severity == "low" or "bas" in severity:
+            font = low_font
+            fill = low_fill
+
+        for col_idx in range(1, 6):
+            cell = sheet.cell(row=row_index, column=col_idx)
+            cell.font = font
+            if fill:
+                cell.fill = fill
+            cell.border = thin_border
+            cell.alignment = align_center if col_idx in (3, 4) else align_left
+
+    widths = {"A": 32, "B": 32, "C": 14, "D": 12, "E": 44}
+    for col, w in widths.items():
+        sheet.column_dimensions[col].width = w
+
+    last_row = max(1, sheet.max_row)
+    sheet.auto_filter.ref = f"A1:E{last_row}"
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 
 def _replace_group_everywhere(users: List[Dict[str, Any]],

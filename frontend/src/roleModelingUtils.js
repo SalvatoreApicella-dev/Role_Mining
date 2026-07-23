@@ -272,7 +272,7 @@ export function buildRoleModelingReviewNarrative({
   const assignmentCount = numberOr(byType.assignment_update, 0);
   const retireCount = numberOr(byType.role_retire, 0);
   const currentScore = numberOr(current?.modelScore, 0);
-  const proposedScore = numberOr(proposed?.modelScore || proposed?.executionModelScore, currentScore);
+  const proposedScore = numberOr(selectedModel?.estimatedModelScore, numberOr(proposed?.modelScore || proposed?.executionModelScore, currentScore));
   const beforeConflicts = numberOr(conflictMetrics?.beforeTotal, 0);
   const afterConflicts = numberOr(conflictMetrics?.afterTotal, beforeConflicts);
   const impactedUsers = numberOr(reviewStats?.impactedUsers, 0);
