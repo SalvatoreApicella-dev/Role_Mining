@@ -4,7 +4,25 @@
 
 Re-optimizing dependencies because lockfile has changed
 
+<<<<<<< HEAD
   VITE v5.4.21  ready in 372 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.25:5173/
+=======
+  VITE v5.4.21  ready in 304 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.1.25:5173/
+15:59:30 [vite] http proxy error: /api/me
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+15:59:30 [vite] http proxy error: /api/me
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+16:01:46 [vite] hmr update /src/pages/RoleModelingSandboxPage.jsx
+16:01:58 [vite] hmr update /src/styles.css
+16:03:38 [vite] hmr update /src/pages/RoleModelingSandboxPage.jsx
+16:05:22 [vite] hmr update /src/pages/RoleModelingSandboxPage.jsx
+16:05:29 [vite] hmr update /src/styles.css
+>>>>>>> e3646efd (Sod MAtrix attestation based e fix numeriche)

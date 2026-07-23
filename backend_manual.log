@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 INFO:     Started server process [56692]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
@@ -45,3 +46,45 @@ INFO:     127.0.0.1:54524 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
 INFO:     127.0.0.1:54529 - "GET /api/me HTTP/1.1" 200 OK
 INFO:     127.0.0.1:54535 - "GET /api/businessroles HTTP/1.1" 200 OK
 INFO:     127.0.0.1:54534 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+=======
+INFO:     Started server process [65494]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:55341 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55342 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55349 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55350 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55354 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55365 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55369 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55367 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55366 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55378 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55377 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55381 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55382 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55370 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55390 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55394 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55389 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55391 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55400 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55399 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55404 - "POST /api/sod-matrix/export/xlsx HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55408 - "POST /api/sod-matrix/import/xlsx HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55432 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55431 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55438 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55437 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55458 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55457 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55464 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55463 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55535 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55539 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55534 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55536 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55545 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55544 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+>>>>>>> e3646efd (Sod MAtrix attestation based e fix numeriche)
