@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 INFO:     Started server process [56692]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
@@ -88,3 +89,52 @@ INFO:     127.0.0.1:55536 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
 INFO:     127.0.0.1:55545 - "GET /api/businessroles HTTP/1.1" 200 OK
 INFO:     127.0.0.1:55544 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
 >>>>>>> e3646efd (Sod MAtrix attestation based e fix numeriche)
+=======
+INFO:     Started server process [56692]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54276 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54277 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54298 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54299 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54301 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54302 - "GET /api/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54305 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54322 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54319 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54321 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54320 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54328 - "GET /api/kpi/drilldown?metric=cluster-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54332 - "GET /api/kpi HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54334 - "GET /api/kpi/drilldown?metric=model-quality HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54333 - "GET /api/config/connector HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54323 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54350 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54353 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54351 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54355 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54352 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54354 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54363 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54358 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54381 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54384 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54382 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54386 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54385 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54398 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54389 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54397 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54520 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54523 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54521 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54522 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54525 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54524 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54529 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54535 - "GET /api/businessroles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54534 - "POST /api/role-modeling/sandbox HTTP/1.1" 200 OK
+>>>>>>> dc81d87f (2.0)

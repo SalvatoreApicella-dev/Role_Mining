@@ -5,6 +5,7 @@
 Re-optimizing dependencies because lockfile has changed
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   VITE v5.4.21  ready in 372 ms
 
   ➜  Local:   http://localhost:5173/
@@ -26,3 +27,9 @@ Error: connect ECONNREFUSED 127.0.0.1:8000
 16:05:22 [vite] hmr update /src/pages/RoleModelingSandboxPage.jsx
 16:05:29 [vite] hmr update /src/styles.css
 >>>>>>> e3646efd (Sod MAtrix attestation based e fix numeriche)
+=======
+  VITE v5.4.21  ready in 372 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.1.25:5173/
+>>>>>>> dc81d87f (2.0)
