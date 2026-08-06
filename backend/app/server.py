@@ -1094,24 +1094,6 @@ def brdb_infer_groupset(groups: List[str]) -> Dict[str, Any]:
         "evidence": {"weights": dict(weights), "details": details[:25]},
     }
 
-def brdb_learn_assignment(br: str, groups: List[str], weight: int = 5) -> None:
-    """
-    Aggiorna incrementale il DB interno quando hai una assegnazione 'vera' (CSV con BR o assegnazione manuale).
-    """
-    brdb_ensure_ready()
-
-    br = (br or "").strip()
-    if not br:
-        return
-    for g in (groups or []):
-        g0 = brdb_norm_group(g)
-        brdb_inc_stat(state["brdb_group_stats"], g0, br, weight)
-        for t in brdb_tokens(g0):
-            brdb_inc_stat(state["brdb_token_stats"], t, br, max(1, weight // 2))
-
-    # invalida cache
-    state["brdb_cache"] = {}
-
 
 def _mk_candidate(
     *,
